@@ -15,6 +15,7 @@ export default defineConfig({
   preview: {
     host: true,
     port: Number(process.env.PORT) || 4173,
-    strictPort: true
+    strictPort: true,
+    allowedHosts: true
   }
 });
