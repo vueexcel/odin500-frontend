@@ -8,8 +8,10 @@ function orderSelected(selectedSet) {
       if (selectedSet.has(s)) ordered.push(s);
     });
   });
-  if (selectedSet.has('N') && !ordered.includes('N')) ordered.unshift('N');
-  return ordered;
+  const neutralKeys = ['N', 'N1', 'N2'];
+  const neutralPick = neutralKeys.filter((s) => selectedSet.has(s));
+  const rest = ordered.filter((s) => !neutralKeys.includes(s));
+  return [...neutralPick, ...rest];
 }
 
 export function MultiSignalSelect({ label, value, onChange }) {
