@@ -826,7 +826,7 @@ export default function TickersPage() {
             <h2>New Chart</h2>
           </div>
           <div className="table-card">
-            <div className="justify-between items-center flex-col sm:flex-row">
+            <div className="justify-between items-center flex flex-col sm:flex-row">
               <DonutChart
                 centerText=""
                 segments={bucketStats.map((b) => ({ label: b.label, value: b.total, color: b.color }))}

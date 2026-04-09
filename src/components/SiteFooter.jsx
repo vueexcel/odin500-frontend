@@ -30,7 +30,7 @@ const linkClass =
 export function SiteFooter() {
   return (
     <footer className="w-full bg-[#0a1628] text-white border-t border-white/5">
-      <div className="mx-auto max-w-7xl px-5 py-12 sm:px-6 lg:px-10 lg:py-14">
+      <div className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-6 lg:py-8">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-12">
           {/* Column 1 — Company & apps */}
           <div className="space-y-5">
