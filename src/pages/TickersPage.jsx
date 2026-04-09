@@ -66,6 +66,137 @@ function saveCsv(rows, fileName) {
   URL.revokeObjectURL(url);
 }
 
+/** Figma-style percentage with comma decimals (e.g. 2,5%). */
+function formatPctEu(value) {
+  if (value == null || !Number.isFinite(value)) return '—';
+  const n = Math.round(value * 10) / 10;
+  return n.toFixed(1).replace('.', ',') + '%';
+}
+
+function formatAsOfFromOhlc(rows) {
+  const fallback = () =>
+    new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric'
+    }).format(new Date());
+  if (!rows?.length) return fallback();
+  const iso = rowDateToTimeKey(rows[rows.length - 1]);
+  if (!iso) return fallback();
+  const d = new Date(iso.includes('T') ? iso : iso + 'T12:00:00');
+  if (Number.isNaN(d.getTime())) return fallback();
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric'
+  }).format(d);
+}
+
+function pickDynamicReturn(dynamicPeriods, name) {
+  if (!Array.isArray(dynamicPeriods)) return null;
+  const row = dynamicPeriods.find((r) => r.period === name);
+  if (!row || row.totalReturn == null) return null;
+  const v = Number(row.totalReturn);
+  return Number.isFinite(v) ? v : null;
+}
+
+const ODIN_LADDER_STEPS = [
+  { key: 'L1', label: 'L1', bg: '#166534', arrow: null },
+  { key: 'L2', label: 'L2', bg: '#15803d', arrow: null },
+  { key: 'L3', label: 'L3', bg: '#4ade80', active: true, arrow: 'up' },
+  { key: 'S1', label: 'S1', bg: '#c2410c', arrow: 'down' },
+  { key: 'S2', label: 'S2', bg: '#f97316', arrow: null },
+  { key: 'S3', label: 'S3', bg: '#facc15', arrow: null },
+  { key: 'N', label: 'N', bg: '#9ca3af', arrow: null }
+];
+
+function IconInfoSmall() {
+  return (
+    <svg className="signal-card__info-icon" width="14" height="14" viewBox="0 0 24 24" aria-hidden>
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.75" />
+      <path
+        fill="currentColor"
+        d="M11 10h2v7h-2v-7zm1-3.25a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"
+      />
+    </svg>
+  );
+}
+
+function IconOdinTarget() {
+  return (
+    <svg className="signal-card__brand-icon signal-card__brand-icon--target" width="22" height="22" viewBox="0 0 24 24" aria-hidden>
+      <circle cx="12" cy="12" r="10" fill="none" stroke="#ea580c" strokeWidth="1.75" />
+      <circle cx="12" cy="12" r="6.5" fill="none" stroke="#ea580c" strokeWidth="1.5" />
+      <circle cx="12" cy="12" r="3" fill="#ea580c" />
+    </svg>
+  );
+}
+
+function IconReturnsChart() {
+  return (
+    <svg className="signal-card__brand-icon signal-card__brand-icon--returns" width="22" height="22" viewBox="0 0 24 24" aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="#16a34a" strokeWidth="1.5" />
+      <path
+        fill="none"
+        stroke="#16a34a"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M6.5 15.5l3-4 3 2.5 5-7"
+      />
+    </svg>
+  );
+}
+
+function IconOdinSun() {
+  const rays = [0, 45, 90, 135, 180, 225, 270, 315];
+  return (
+    <svg className="signal-card__brand-icon signal-card__brand-icon--sun" width="22" height="22" viewBox="0 0 24 24" aria-hidden>
+      <circle cx="12" cy="12" r="4.5" fill="#eab308" />
+      {rays.map((deg) => (
+        <line
+          key={deg}
+          x1="12"
+          y1="2.5"
+          x2="12"
+          y2="5.2"
+          stroke="#ca8a04"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          transform={'rotate(' + deg + ' 12 12)'}
+        />
+      ))}
+    </svg>
+  );
+}
+
+function ArrowTrend({ tone }) {
+  const green = tone === 'green';
+  return (
+    <svg className={'odin-ladder__arrow odin-ladder__arrow--' + (green ? 'up' : 'down')} width="14" height="10" viewBox="0 0 14 10" aria-hidden>
+      {green ? (
+        <path
+          fill="none"
+          stroke="#16a34a"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M1 8l3-3 3 2 4-5"
+        />
+      ) : (
+        <path
+          fill="none"
+          stroke="#ef4444"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M1 2l3 3 3-2 4 5"
+        />
+      )}
+    </svg>
+  );
+}
+
 function OhlcChart({ rows }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
@@ -452,7 +583,8 @@ export default function TickersPage() {
   const [returnsData, setReturnsData] = useState({
     annualReturns: [],
     monthlyReturns: [],
-    quarterlyReturns: []
+    quarterlyReturns: [],
+    dynamicPeriods: []
   });
   const [topTickers, setTopTickers] = useState([]);
 
@@ -532,12 +664,18 @@ export default function TickersPage() {
           setReturnsData({
             annualReturns: Array.isArray(perf.annualReturns) ? perf.annualReturns : [],
             monthlyReturns: Array.isArray(perf.monthlyReturns) ? perf.monthlyReturns : [],
-            quarterlyReturns: Array.isArray(perf.quarterlyReturns) ? perf.quarterlyReturns : []
+            quarterlyReturns: Array.isArray(perf.quarterlyReturns) ? perf.quarterlyReturns : [],
+            dynamicPeriods: Array.isArray(perf.dynamicPeriods) ? perf.dynamicPeriods : []
           });
         }
       } catch {
         if (!cancelled) {
-          setReturnsData({ annualReturns: [], monthlyReturns: [], quarterlyReturns: [] });
+          setReturnsData({
+            annualReturns: [],
+            monthlyReturns: [],
+            quarterlyReturns: [],
+            dynamicPeriods: []
+          });
         }
       }
     }
@@ -599,34 +737,102 @@ export default function TickersPage() {
     };
   });
 
+  const dyn = returnsData.dynamicPeriods;
+  const summaryY1 = pickDynamicReturn(dyn, 'Last 1 year');
+  const summaryY3 = pickDynamicReturn(dyn, 'Last 3 years');
+  const summaryY10 = pickDynamicReturn(dyn, 'Last 10 years');
+  const ret1 = summaryY1 ?? 5;
+  const ret3 = summaryY3 ?? 2.5;
+  const ret10 = summaryY10 ?? 4.2;
+  const signalAsOf = formatAsOfFromOhlc(ohlcRows);
+  const signalDateIso =
+    ohlcRows?.length > 0 ? rowDateToTimeKey(ohlcRows[ohlcRows.length - 1]) : '';
+
   return (
     <div className="tickers-page-wrap">
       <div className="tickers-page">
         <h1 className="ticker-name">{symbol}</h1>
 
         <div className="signal-cards">
-          <div className="signal-card">
-            <div className="signal-title">Odin Signal</div>
-            <div className="signal-tags">
-              <span className="tag green">4%</span>
-              <span className="tag amber">2.5%</span>
-              <span className="tag orange">4.2%</span>
+          <div className="signal-card signal-card--odin">
+            <div className="signal-card__head">
+              <div className="signal-card__head-left">
+                <IconOdinTarget />
+                <span className="signal-card__title">Odin Signal</span>
+                <button type="button" className="signal-card__info-btn" aria-label="About Odin Signal">
+                  <IconInfoSmall />
+                </button>
+              </div>
+              <time className="signal-card__date" dateTime={signalDateIso || undefined}>
+                {signalAsOf}
+              </time>
+            </div>
+            <div className="odin-ladder" role="list">
+              {ODIN_LADDER_STEPS.map((step) => (
+                <div key={step.key} className="odin-ladder__col" role="listitem">
+                  <div
+                    className={
+                      'odin-ladder__cell' + (step.active ? ' odin-ladder__cell--active' : '')
+                    }
+                    style={{ background: step.bg }}
+                  >
+                    {step.label}
+                  </div>
+                  <div className="odin-ladder__arrow-slot">
+                    {step.arrow === 'up' ? <ArrowTrend tone="green" /> : null}
+                    {step.arrow === 'down' ? <ArrowTrend tone="down" /> : null}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="signal-card">
-            <div className="signal-title">Returns</div>
-            <div className="signal-stats">
-              <span>5%</span>
-              <span>2.5%</span>
-              <span>4.2%</span>
+
+          <div className="signal-card signal-card--metrics">
+            <div className="signal-card__head signal-card__head--simple">
+              <div className="signal-card__head-left">
+                <IconReturnsChart />
+                <span className="signal-card__title">Returns</span>
+              </div>
+            </div>
+            <div className="signal-metrics">
+              <div className="signal-metric">
+                <span className="signal-metric__label">Last year</span>
+                <span className="signal-metric__value">{formatPctEu(ret1)}</span>
+              </div>
+              <div className="signal-metric">
+                <span className="signal-metric__label">3 years</span>
+                <span className="signal-metric__value">{formatPctEu(ret3)}</span>
+              </div>
+              <div className="signal-metric">
+                <span className="signal-metric__label">10 years</span>
+                <span className="signal-metric__value">{formatPctEu(ret10)}</span>
+              </div>
             </div>
           </div>
-          <div className="signal-card">
-            <div className="signal-title">Odin Index</div>
-            <div className="signal-stats">
-              <span>5%</span>
-              <span>2.5%</span>
-              <span>4.2%</span>
+
+          <div className="signal-card signal-card--metrics">
+            <div className="signal-card__head signal-card__head--simple">
+              <div className="signal-card__head-left">
+                <IconOdinSun />
+                <span className="signal-card__title">Odin Index</span>
+                <button type="button" className="signal-card__info-btn" aria-label="About Odin Index">
+                  <IconInfoSmall />
+                </button>
+              </div>
+            </div>
+            <div className="signal-metrics">
+              <div className="signal-metric">
+                <span className="signal-metric__label">1 year</span>
+                <span className="signal-metric__value">{formatPctEu(ret1)}</span>
+              </div>
+              <div className="signal-metric">
+                <span className="signal-metric__label">3 years</span>
+                <span className="signal-metric__value">{formatPctEu(ret3)}</span>
+              </div>
+              <div className="signal-metric">
+                <span className="signal-metric__label">10 years</span>
+                <span className="signal-metric__value">{formatPctEu(ret10)}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -635,6 +841,9 @@ export default function TickersPage() {
           <h3>What is Odin Signal</h3>
           <p>
             Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+            incididunt ut labore et dolore magna aliqua. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+            incididunt ut labore et dolore magna aliqua. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+            incididunt ut labore et dolore magna aliqua.Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
             incididunt ut labore et dolore magna aliqua.
           </p>
         </div>
