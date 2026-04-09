@@ -1,6 +1,5 @@
 import { TickerSearch } from './TickerSearch.jsx';
 import { MultiSignalSelect } from './MultiSignalSelect.jsx';
-import { AuthSection } from './AuthSection.jsx';
 import { computeDefaultApiOrigin } from '../utils/apiOrigin.js';
 
 export function ControlPanel({
@@ -22,15 +21,6 @@ export function ControlPanel({
   onExitLongChange,
   onEntryShortChange,
   onExitShortChange,
-  email,
-  password,
-  onEmailChange,
-  onPasswordChange,
-  onLogin,
-  onLogout,
-  authStatus,
-  session,
-  loginDisabled,
   statusMessage,
   statusType,
   onInvalidateOdin,
@@ -126,20 +116,8 @@ export function ControlPanel({
         />
       </div>
 
-      <AuthSection
-        email={email}
-        password={password}
-        onEmailChange={onEmailChange}
-        onPasswordChange={onPasswordChange}
-        onLogin={onLogin}
-        onLogout={onLogout}
-        authStatus={authStatus}
-        session={session}
-        loginDisabled={loginDisabled}
-      />
-
       <div className="hint">
-        Auth: Supabase session (persisted, auto-refresh). API base:{' '}
+        Auth: backend token from /api/auth/login. API base:{' '}
         <code>{computeDefaultApiOrigin() || window.location.origin}</code>
         {' — '}
         chart markers come from <code>POST /api/analytics/odin-index</code> trades

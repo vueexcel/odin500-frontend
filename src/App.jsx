@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ControlPanel } from './components/ControlPanel.jsx';
 import { ChartPanel } from './components/ChartPanel.jsx';
-import { useSupabaseAuth } from './hooks/useSupabaseAuth.js';
 import { useTickerList } from './hooks/useTickerList.js';
 import { apiUrl } from './utils/apiOrigin.js';
+import { fetchWithAuth, getAuthToken } from './store/apiStore.js';
 import { stableStringify, toDateInput } from './utils/misc.js';
 import {
   mapRowsToCandles,
@@ -36,20 +36,21 @@ export default function App() {
   const [exitLong, setExitLong] = useState(['N', 'S11', 'S12', 'S21', 'S22', 'S31', 'S32']);
   const [entryShort, setEntryShort] = useState(['S11']);
   const [exitShort, setExitShort] = useState([]);
-  const [email, setEmail] = useState(() => {
-    try {
-      return localStorage.getItem('market_api_email') || '';
-    } catch {
-      return '';
-    }
-  });
-  const [password, setPassword] = useState('');
   const [status, setStatus] = useState({ message: '', type: '' });
-  const [loginBusy, setLoginBusy] = useState(false);
   const [chartLoadBusy, setChartLoadBusy] = useState(false);
+  const [authVersion, setAuthVersion] = useState(0);
 
-  const { supabase, session, login, logout, authStatus, initError } = useSupabaseAuth();
-  const allTickers = useTickerList(session?.access_token);
+  useEffect(() => {
+    const onAuth = () => setAuthVersion((v) => v + 1);
+    window.addEventListener('odin-auth-updated', onAuth);
+    return () => window.removeEventListener('odin-auth-updated', onAuth);
+  }, []);
+
+  const authToken = getAuthToken();
+  const isLoggedIn = Boolean(authToken);
+  void authVersion;
+
+  const allTickers = useTickerList();
 
   const chartRef = useRef(null);
   const odinPayloadKeyRef = useRef('');
@@ -62,10 +63,6 @@ export default function App() {
   const setStatusMsg = useCallback((message, type = '') => {
     setStatus({ message, type });
   }, []);
-
-  useEffect(() => {
-    if (initError) setStatusMsg(initError, 'error');
-  }, [initError, setStatusMsg]);
 
   const invalidateCachedOdinPayload = useCallback(() => {
     odinPayloadKeyRef.current = '';
@@ -90,12 +87,11 @@ export default function App() {
   }, [ticker, startDate, endDate, entryLong, exitLong, entryShort, exitShort, executionMode]);
 
   const fetchAndRenderOhlc = useCallback(
-    async (sym, start_date, end_date, token, signal) => {
-      const response = await fetch(apiUrl('/api/market/ohlc-signals-indicator'), {
+    async (sym, start_date, end_date, signal) => {
+      const response = await fetchWithAuth(apiUrl('/api/market/ohlc-signals-indicator'), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + token
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ ticker: sym, start_date, end_date }),
         signal
@@ -154,16 +150,10 @@ export default function App() {
       setStatusMsg('Provide one ticker in Ticker input.', 'error');
       return;
     }
-    if (!supabase) {
-      setStatusMsg('Auth not ready yet.', 'error');
-      return;
-    }
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError || !sessionData.session) {
+    if (!getAuthToken()) {
       setStatusMsg('Sign in to load the chart.', 'error');
       return;
     }
-    const token = sessionData.session.access_token;
     const selectedTicker = String(odinPayload.tickers[0] || '').toUpperCase();
     try {
       localStorage.setItem('market_api_ticker', selectedTicker);
@@ -186,11 +176,10 @@ export default function App() {
         odinPayloadKeyRef.current !== payloadKey ||
         odinTradeMarkersRef.current.size === 0
       ) {
-        const odinResponse = await fetch(apiUrl('/api/analytics/odin-index'), {
+        const odinResponse = await fetchWithAuth(apiUrl('/api/analytics/odin-index'), {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer ' + token
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify(odinPayload),
           signal: acSignal
@@ -210,7 +199,7 @@ export default function App() {
         odinPayloadKeyRef.current = payloadKey;
       }
 
-      await fetchAndRenderOhlc(selectedTicker, s, e, token, acSignal);
+      await fetchAndRenderOhlc(selectedTicker, s, e, acSignal);
     } catch (err) {
       if (err.name === 'AbortError') return;
       if (lastGoodCandlesRef.current?.length > 0) {
@@ -221,51 +210,14 @@ export default function App() {
     } finally {
       setChartLoadBusy(false);
     }
-  }, [
-    supabase,
-    startDate,
-    endDate,
-    buildOdinPayload,
-    fetchAndRenderOhlc,
-    setStatusMsg
-  ]);
-
-  const handleLogin = useCallback(async () => {
-    const em = email.trim();
-    if (!em || !password) {
-      setStatusMsg('Enter email and password.', 'error');
-      return;
-    }
-    setLoginBusy(true);
-    try {
-      const { error } = await login(em, password);
-      if (error) {
-        setStatusMsg(error.message, 'error');
-        return;
-      }
-      try {
-        localStorage.setItem('market_api_email', em);
-      } catch {
-        /* ignore */
-      }
-      setPassword('');
-      setStatusMsg('Signed in.', 'ok');
-    } finally {
-      setLoginBusy(false);
-    }
-  }, [email, password, login, setStatusMsg]);
-
-  const handleLogout = useCallback(async () => {
-    await logout();
-    setStatusMsg('Signed out.', 'ok');
-  }, [logout, setStatusMsg]);
+  }, [startDate, endDate, buildOdinPayload, fetchAndRenderOhlc, setStatusMsg]);
 
   loadDataRef.current = loadData;
 
   useEffect(() => {
-    if (!supabase || !session) return;
+    if (!isLoggedIn) return;
     loadDataRef.current();
-  }, [supabase, session?.access_token]);
+  }, [isLoggedIn]);
 
   const onStartDateChange = (v) => {
     setStartDate(v);
@@ -293,7 +245,7 @@ export default function App() {
         executionMode={executionMode}
         onExecutionModeChange={setExecutionMode}
         onLoad={loadData}
-        loadDisabled={!supabase || chartLoadBusy}
+        loadDisabled={!isLoggedIn || chartLoadBusy}
         entryLong={entryLong}
         exitLong={exitLong}
         entryShort={entryShort}
@@ -302,15 +254,6 @@ export default function App() {
         onExitLongChange={setExitLong}
         onEntryShortChange={setEntryShort}
         onExitShortChange={setExitShort}
-        email={email}
-        password={password}
-        onEmailChange={setEmail}
-        onPasswordChange={setPassword}
-        onLogin={handleLogin}
-        onLogout={handleLogout}
-        authStatus={authStatus}
-        session={session}
-        loginDisabled={loginBusy}
         statusMessage={status.message}
         statusType={status.type}
         onInvalidateOdin={invalidateCachedOdinPayload}
