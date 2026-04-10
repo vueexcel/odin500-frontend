@@ -6,6 +6,8 @@ import { ProtectedLayout } from './components/ProtectedLayout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import SimplePage from './pages/SimplePage.jsx';
 import SignupPage from './pages/SignupPage.jsx';
+import MarketHeatmapPage from './pages/MarketHeatmapPage.jsx';
+import OdinSignalsPage from './pages/OdinSignalsPage.jsx';
 import TickersPage from './pages/TickersPage.jsx';
 import './index.css';
 import { initAuthSessionOnLoad } from './store/apiStore.js';
@@ -32,7 +34,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         >
           <Route path="/market" element={<App />} />
           <Route path="/tickers" element={<TickersPage />} />
-          <Route path="/odin-signals" element={<SimplePage title="Odin Signals" />} />
+          <Route path="/heatmap" element={<MarketHeatmapPage />} />
+          <Route path="/odin-signals" element={<OdinSignalsPage />} />
           <Route path="/accounts" element={<SimplePage title="Accounts" />} />
           <Route path="/premium" element={<SimplePage title="Premium" />} />
           <Route path="/about" element={<SimplePage title="About" />} />

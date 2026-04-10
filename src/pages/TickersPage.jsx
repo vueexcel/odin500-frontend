@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createChart } from 'lightweight-charts';
+import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { mapRowsToCandles, rowDateToTimeKey } from '../utils/chartData.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import {
+  DEFAULT_TICKERS_PAGE_SYMBOL,
+  resolveTickersPageSymbol,
+  sanitizeTickerPageInput
+} from '../utils/tickerUrlSync.js';
 
 function toCsv(rows) {
   if (!rows.length) return '';
@@ -55,206 +61,6 @@ function parsePeriodDate(period) {
   return null;
 }
 
-const DEFAULT_TICKERS_PAGE_SYMBOL = 'NVDA';
-
-function sanitizeTickerPageInput(raw) {
-  return String(raw || '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9.-]/g, '')
-    .slice(0, 20);
-}
-
-/** URL ?ticker=… (or legacy ?symbol=…); falls back to default when missing/invalid. */
-function resolveTickersPageSymbol(searchParams) {
-  const raw =
-    searchParams.get('ticker') ||
-    searchParams.get('symbol') ||
-    '';
-  const s = sanitizeTickerPageInput(raw);
-  return s || DEFAULT_TICKERS_PAGE_SYMBOL;
-}
-
-function TickerSymbolCombobox({ symbol, onSymbolChange }) {
-  const [input, setInput] = useState(symbol);
-  const [open, setOpen] = useState(false);
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [highlight, setHighlight] = useState(-1);
-  const wrapRef = useRef(null);
-  const listId = useRef('ticker-search-listbox-' + Math.random().toString(36).slice(2)).current;
-
-  useEffect(() => {
-    setInput(symbol);
-  }, [symbol]);
-
-  useEffect(() => {
-    setHighlight((h) => (items.length === 0 ? -1 : h >= 0 && h < items.length ? h : 0));
-  }, [items]);
-
-  useEffect(() => {
-    if (!open) return;
-    const q = sanitizeTickerPageInput(input);
-    if (!q) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const { data } = await fetchJsonCached({
-          path: '/api/tickers/search?q=' + encodeURIComponent(q),
-          method: 'GET',
-          ttlMs: 2 * 60 * 1000
-        });
-        if (cancelled) return;
-        setItems(Array.isArray(data) ? data : []);
-      } catch {
-        if (!cancelled) setItems([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }, 200);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [input, open]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocMouseDown(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setOpen(false);
-        setHighlight(-1);
-        setInput(symbol);
-      }
-    }
-    document.addEventListener('mousedown', onDocMouseDown);
-    return () => document.removeEventListener('mousedown', onDocMouseDown);
-  }, [open, symbol]);
-
-  function pick(row) {
-    const sym = String(row.symbol || '')
-      .toUpperCase()
-      .trim();
-    if (!sym) return;
-    onSymbolChange(sym);
-    setInput(sym);
-    setOpen(false);
-    setHighlight(-1);
-    setItems([]);
-  }
-
-  function onKeyDown(e) {
-    if (!open) {
-      if (e.key === 'ArrowDown') {
-        const q = sanitizeTickerPageInput(input);
-        if (q) setOpen(true);
-      }
-      return;
-    }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      setOpen(false);
-      setInput(symbol);
-      setHighlight(-1);
-      return;
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (items.length === 0) return;
-      setHighlight((h) => (h < 0 ? 0 : Math.min(items.length - 1, h + 1)));
-      return;
-    }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (items.length === 0) return;
-      setHighlight((h) => Math.max(0, (h < 0 ? 0 : h) - 1));
-      return;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (highlight >= 0 && items[highlight]) {
-        pick(items[highlight]);
-        return;
-      }
-      const q = sanitizeTickerPageInput(input);
-      if (!q) return;
-      const exact = items.find((it) => String(it.symbol || '').toUpperCase() === q);
-      if (exact) pick(exact);
-      else if (items.length === 1) pick(items[0]);
-      else {
-        onSymbolChange(q);
-        setInput(q);
-        setOpen(false);
-        setHighlight(-1);
-      }
-    }
-  }
-
-  const qActive = sanitizeTickerPageInput(input);
-
-  return (
-    <div className="ticker-symbol-search" ref={wrapRef}>
-      <input
-        id="ticker-page-symbol-input"
-        className="ticker-symbol-search__input"
-        type="text"
-        autoComplete="off"
-        spellCheck={false}
-        aria-label="Ticker symbol"
-        aria-autocomplete="list"
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        value={input}
-        onChange={(e) => {
-          setInput(sanitizeTickerPageInput(e.target.value));
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        placeholder="Search ticker (e.g. NVDA)"
-      />
-      {open && qActive ? (
-        <div
-          id={listId}
-          className="ticker-symbol-search__dropdown"
-          role="listbox"
-          aria-label="Ticker matches"
-        >
-          {loading ? (
-            <div className="ticker-symbol-search__status">Searching…</div>
-          ) : items.length === 0 ? (
-            <div className="ticker-symbol-search__status">No matches</div>
-          ) : (
-            items.map((row, idx) => (
-              <button
-                key={row.id != null ? String(row.id) : String(row.symbol || '') + '-' + idx}
-                type="button"
-                role="option"
-                aria-selected={idx === highlight}
-                className={
-                  'ticker-symbol-search__item' +
-                  (idx === highlight ? ' ticker-symbol-search__item--active' : '')
-                }
-                onMouseEnter={() => setHighlight(idx)}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(row)}
-              >
-                <span className="ticker-symbol-search__sym">{String(row.symbol || '').toUpperCase()}</span>
-                <span className="ticker-symbol-search__co">{row.company_name || '—'}</span>
-              </button>
-            ))
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function saveCsv(rows, fileName) {
   if (!rows.length) return;
   const csv = toCsv(rows);
@@ -302,72 +108,47 @@ function pickDynamicReturn(dynamicPeriods, name) {
 }
 
 const ODIN_LADDER_STEPS = [
-  { key: 'L1', label: 'L1', bg: '#166534', arrow: null },
-  { key: 'L2', label: 'L2', bg: '#15803d', arrow: null },
-  { key: 'L3', label: 'L3', bg: '#4ade80', active: true, arrow: 'up' },
-  { key: 'S1', label: 'S1', bg: '#c2410c', arrow: 'down' },
-  { key: 'S2', label: 'S2', bg: '#f97316', arrow: null },
-  { key: 'S3', label: 'S3', bg: '#facc15', arrow: null },
-  { key: 'N', label: 'N', bg: '#9ca3af', arrow: null }
+  { key: 'L1', label: 'L1', bg: '#348548', arrow: null },
+  { key: 'L2', label: 'L2', bg: '#2DB14E', arrow: null },
+  { key: 'L3', label: 'L3', bg: '#4CDA6F', active: true, arrow: 'up' },
+  { key: 'S1', label: 'S1', bg: '#F78014', arrow: 'down' },
+  { key: 'S2', label: 'S2', bg: '#FBA937', arrow: null },
+  { key: 'S3', label: 'S3', bg: '#FCCE00', arrow: null },
+  { key: 'N', label: 'N', bg: '#A5B4C6', arrow: null }
 ];
 
 function IconInfoSmall() {
   return (
-    <svg className="signal-card__info-icon" width="14" height="14" viewBox="0 0 24 24" aria-hidden>
-      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.75" />
-      <path
-        fill="currentColor"
-        d="M11 10h2v7h-2v-7zm1-3.25a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"
-      />
-    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 15 15" fill="none">
+<path d="M7.29167 9.95833V7.29167M7.29167 4.625H7.29833M13.9583 7.29167C13.9583 10.9736 10.9736 13.9583 7.29167 13.9583C3.60977 13.9583 0.625 10.9736 0.625 7.29167C0.625 3.60977 3.60977 0.625 7.29167 0.625C10.9736 0.625 13.9583 3.60977 13.9583 7.29167Z" stroke="#A5B4C6" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
   );
 }
 
 function IconOdinTarget() {
   return (
-    <svg className="signal-card__brand-icon signal-card__brand-icon--target" width="22" height="22" viewBox="0 0 24 24" aria-hidden>
-      <circle cx="12" cy="12" r="10" fill="none" stroke="#ea580c" strokeWidth="1.75" />
-      <circle cx="12" cy="12" r="6.5" fill="none" stroke="#ea580c" strokeWidth="1.5" />
-      <circle cx="12" cy="12" r="3" fill="#ea580c" />
-    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+<path d="M7.99992 14.6663C11.6818 14.6663 14.6666 11.6816 14.6666 7.99967C14.6666 4.31778 11.6818 1.33301 7.99992 1.33301C4.31802 1.33301 1.33325 4.31778 1.33325 7.99967C1.33325 11.6816 4.31802 14.6663 7.99992 14.6663Z" stroke="#F78014" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.99992 11.9997C10.2091 11.9997 11.9999 10.2088 11.9999 7.99967C11.9999 5.79054 10.2091 3.99967 7.99992 3.99967C5.79078 3.99967 3.99992 5.79054 3.99992 7.99967C3.99992 10.2088 5.79078 11.9997 7.99992 11.9997Z" stroke="#F78014" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.99992 9.33301C8.7363 9.33301 9.33325 8.73605 9.33325 7.99967C9.33325 7.26329 8.7363 6.66634 7.99992 6.66634C7.26354 6.66634 6.66658 7.26329 6.66658 7.99967C6.66658 8.73605 7.26354 9.33301 7.99992 9.33301Z" stroke="#F78014" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
   );
 }
 
 function IconReturnsChart() {
   return (
-    <svg className="signal-card__brand-icon signal-card__brand-icon--returns" width="22" height="22" viewBox="0 0 24 24" aria-hidden>
-      <rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="#16a34a" strokeWidth="1.5" />
-      <path
-        fill="none"
-        stroke="#16a34a"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M6.5 15.5l3-4 3 2.5 5-7"
-      />
-    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+<path d="M11.3333 6L7.71046 9.62288C7.57845 9.75488 7.51245 9.82088 7.43634 9.84561C7.36939 9.86737 7.29728 9.86737 7.23033 9.84561C7.15422 9.82088 7.08822 9.75488 6.95621 9.62288L5.71046 8.37712C5.57845 8.24512 5.51245 8.17912 5.43634 8.15439C5.36939 8.13263 5.29728 8.13263 5.23033 8.15439C5.15422 8.17912 5.08822 8.24512 4.95621 8.37712L2 11.3333M11.3333 6H8.66667M11.3333 6V8.66667M5.2 14H10.8C11.9201 14 12.4802 14 12.908 13.782C13.2843 13.5903 13.5903 13.2843 13.782 12.908C14 12.4802 14 11.9201 14 10.8V5.2C14 4.0799 14 3.51984 13.782 3.09202C13.5903 2.71569 13.2843 2.40973 12.908 2.21799C12.4802 2 11.9201 2 10.8 2H5.2C4.0799 2 3.51984 2 3.09202 2.21799C2.71569 2.40973 2.40973 2.71569 2.21799 3.09202C2 3.51984 2 4.0799 2 5.2V10.8C2 11.9201 2 12.4802 2.21799 12.908C2.40973 13.2843 2.71569 13.5903 3.09202 13.782C3.51984 14 4.0799 14 5.2 14Z" stroke="#4CDA6F" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
   );
 }
 
 function IconOdinSun() {
   const rays = [0, 45, 90, 135, 180, 225, 270, 315];
   return (
-    <svg className="signal-card__brand-icon signal-card__brand-icon--sun" width="22" height="22" viewBox="0 0 24 24" aria-hidden>
-      <circle cx="12" cy="12" r="4.5" fill="#eab308" />
-      {rays.map((deg) => (
-        <line
-          key={deg}
-          x1="12"
-          y1="2.5"
-          x2="12"
-          y2="5.2"
-          stroke="#ca8a04"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          transform={'rotate(' + deg + ' 12 12)'}
-        />
-      ))}
-    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+<path d="M7.99984 2.66699V13.3337M11.9998 4.00033L3.99984 12.0003M13.3332 8.00033H2.6665M11.9998 12.0003L3.99984 4.00033" stroke="#FED02C" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
   );
 }
 
