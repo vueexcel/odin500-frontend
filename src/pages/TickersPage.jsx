@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createChart } from 'lightweight-charts';
 import { mapRowsToCandles, rowDateToTimeKey } from '../utils/chartData.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
@@ -52,6 +53,206 @@ function parsePeriodDate(period) {
   if (/^\d{4}-\d{2}$/.test(p)) return p + '-01';
   if (/^\d{4}-\d{2}-\d{2}$/.test(p)) return p;
   return null;
+}
+
+const DEFAULT_TICKERS_PAGE_SYMBOL = 'NVDA';
+
+function sanitizeTickerPageInput(raw) {
+  return String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9.-]/g, '')
+    .slice(0, 20);
+}
+
+/** URL ?ticker=… (or legacy ?symbol=…); falls back to default when missing/invalid. */
+function resolveTickersPageSymbol(searchParams) {
+  const raw =
+    searchParams.get('ticker') ||
+    searchParams.get('symbol') ||
+    '';
+  const s = sanitizeTickerPageInput(raw);
+  return s || DEFAULT_TICKERS_PAGE_SYMBOL;
+}
+
+function TickerSymbolCombobox({ symbol, onSymbolChange }) {
+  const [input, setInput] = useState(symbol);
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const wrapRef = useRef(null);
+  const listId = useRef('ticker-search-listbox-' + Math.random().toString(36).slice(2)).current;
+
+  useEffect(() => {
+    setInput(symbol);
+  }, [symbol]);
+
+  useEffect(() => {
+    setHighlight((h) => (items.length === 0 ? -1 : h >= 0 && h < items.length ? h : 0));
+  }, [items]);
+
+  useEffect(() => {
+    if (!open) return;
+    const q = sanitizeTickerPageInput(input);
+    if (!q) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const { data } = await fetchJsonCached({
+          path: '/api/tickers/search?q=' + encodeURIComponent(q),
+          method: 'GET',
+          ttlMs: 2 * 60 * 1000
+        });
+        if (cancelled) return;
+        setItems(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) setItems([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [input, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false);
+        setHighlight(-1);
+        setInput(symbol);
+      }
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [open, symbol]);
+
+  function pick(row) {
+    const sym = String(row.symbol || '')
+      .toUpperCase()
+      .trim();
+    if (!sym) return;
+    onSymbolChange(sym);
+    setInput(sym);
+    setOpen(false);
+    setHighlight(-1);
+    setItems([]);
+  }
+
+  function onKeyDown(e) {
+    if (!open) {
+      if (e.key === 'ArrowDown') {
+        const q = sanitizeTickerPageInput(input);
+        if (q) setOpen(true);
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false);
+      setInput(symbol);
+      setHighlight(-1);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (items.length === 0) return;
+      setHighlight((h) => (h < 0 ? 0 : Math.min(items.length - 1, h + 1)));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (items.length === 0) return;
+      setHighlight((h) => Math.max(0, (h < 0 ? 0 : h) - 1));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlight >= 0 && items[highlight]) {
+        pick(items[highlight]);
+        return;
+      }
+      const q = sanitizeTickerPageInput(input);
+      if (!q) return;
+      const exact = items.find((it) => String(it.symbol || '').toUpperCase() === q);
+      if (exact) pick(exact);
+      else if (items.length === 1) pick(items[0]);
+      else {
+        onSymbolChange(q);
+        setInput(q);
+        setOpen(false);
+        setHighlight(-1);
+      }
+    }
+  }
+
+  const qActive = sanitizeTickerPageInput(input);
+
+  return (
+    <div className="ticker-symbol-search" ref={wrapRef}>
+      <input
+        id="ticker-page-symbol-input"
+        className="ticker-symbol-search__input"
+        type="text"
+        autoComplete="off"
+        spellCheck={false}
+        aria-label="Ticker symbol"
+        aria-autocomplete="list"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        value={input}
+        onChange={(e) => {
+          setInput(sanitizeTickerPageInput(e.target.value));
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+        placeholder="Search ticker (e.g. NVDA)"
+      />
+      {open && qActive ? (
+        <div
+          id={listId}
+          className="ticker-symbol-search__dropdown"
+          role="listbox"
+          aria-label="Ticker matches"
+        >
+          {loading ? (
+            <div className="ticker-symbol-search__status">Searching…</div>
+          ) : items.length === 0 ? (
+            <div className="ticker-symbol-search__status">No matches</div>
+          ) : (
+            items.map((row, idx) => (
+              <button
+                key={row.id != null ? String(row.id) : String(row.symbol || '') + '-' + idx}
+                type="button"
+                role="option"
+                aria-selected={idx === highlight}
+                className={
+                  'ticker-symbol-search__item' +
+                  (idx === highlight ? ' ticker-symbol-search__item--active' : '')
+                }
+                onMouseEnter={() => setHighlight(idx)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(row)}
+              >
+                <span className="ticker-symbol-search__sym">{String(row.symbol || '').toUpperCase()}</span>
+                <span className="ticker-symbol-search__co">{row.company_name || '—'}</span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function saveCsv(rows, fileName) {
@@ -172,27 +373,36 @@ function IconOdinSun() {
 
 function ArrowTrend({ tone }) {
   const green = tone === 'green';
+  if (green) {
+    return (
+      <svg
+        className="odin-ladder__arrow odin-ladder__arrow--up"
+        xmlns="http://www.w3.org/2000/svg"
+        width="19"
+        height="10"
+        viewBox="0 0 19 10"
+        fill="none"
+        aria-hidden
+      >
+        <path
+          d="M17.4167 0.75L10.8595 7.30719C10.5295 7.63721 10.3645 7.80221 10.1742 7.86404C10.0068 7.91842 9.82652 7.91842 9.65915 7.86404C9.46888 7.80221 9.30387 7.6372 8.97386 7.30719L6.69281 5.02614C6.36279 4.69613 6.19779 4.53112 6.00751 4.4693C5.84014 4.41492 5.65986 4.41492 5.49249 4.4693C5.30221 4.53112 5.1372 4.69613 4.80719 5.02614L0.75 9.08333M17.4167 0.75H11.5833M17.4167 0.75V6.58333"
+          stroke="#38C35B"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
   return (
-    <svg className={'odin-ladder__arrow odin-ladder__arrow--' + (green ? 'up' : 'down')} width="14" height="10" viewBox="0 0 14 10" aria-hidden>
-      {green ? (
-        <path
-          fill="none"
-          stroke="#16a34a"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M1 8l3-3 3 2 4-5"
-        />
-      ) : (
-        <path
-          fill="none"
-          stroke="#ef4444"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M1 2l3 3 3-2 4 5"
-        />
-      )}
+    <svg className="odin-ladder__arrow odin-ladder__arrow--down" xmlns="http://www.w3.org/2000/svg" width="19" height="10" viewBox="0 0 19 10" fill="none">
+    <path
+      d="M17.4167 9.08333L10.8595 2.52614C10.5295 2.19613 10.3645 2.03112 10.1742 1.9693C10.0068 1.91492 9.82652 1.91492 9.65915 1.9693C9.46888 2.03112 9.30387 2.19613 8.97386 2.52614L6.69281 4.80719C6.36279 5.13721 6.19779 5.30221 6.00751 5.36404C5.84014 5.41842 5.65986 5.41842 5.49249 5.36404C5.30221 5.30221 5.1372 5.1372 4.80719 4.80719L0.75 0.75M17.4167 9.08333H11.5833M17.4167 9.08333V3.25"
+      stroke="#FA4C60"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
     </svg>
   );
 }
@@ -572,7 +782,26 @@ function MiniChartCard({ title }) {
 }
 
 export default function TickersPage() {
-  const [symbol] = useState('NVDA');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const symbol = useMemo(() => resolveTickersPageSymbol(searchParams), [searchParams]);
+
+  const setSymbolInUrl = useCallback(
+    (sym) => {
+      const clean =
+        sanitizeTickerPageInput(sym) || DEFAULT_TICKERS_PAGE_SYMBOL;
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('ticker', clean);
+          next.delete('symbol');
+          return next;
+        },
+        { replace: false }
+      );
+    },
+    [setSearchParams]
+  );
+
   const [ohlcRows, setOhlcRows] = useState([]);
   const [showTable, setShowTable] = useState(false);
   const [showReturnsTable, setShowReturnsTable] = useState(false);
@@ -751,7 +980,7 @@ export default function TickersPage() {
   return (
     <div className="tickers-page-wrap">
       <div className="tickers-page">
-        <h1 className="ticker-name">{symbol}</h1>
+        <TickerSymbolCombobox symbol={symbol} onSymbolChange={setSymbolInUrl} />
 
         <div className="signal-cards">
           <div className="signal-card signal-card--odin">
