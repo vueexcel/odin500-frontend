@@ -90,21 +90,36 @@ function peersForSector(rows, featured) {
     .sort((a, b) => b.weight - a.weight);
 }
 
-/** Gap between cursor and tooltip (top-left of card), in px */
+/** Gap between cursor and tooltip (nearest edge of card), in px */
 const TOOLTIP_CURSOR_GAP_X = 56;
 const TOOLTIP_CURSOR_GAP_Y = 54;
+const TOOLTIP_VIEW_MARGIN = 8;
 
 function tooltipPosition(clientX, clientY) {
-  const w = 340;
-  const h = 420;
-  let left = clientX + TOOLTIP_CURSOR_GAP_X;
-  let top = clientY + TOOLTIP_CURSOR_GAP_Y;
-  if (typeof window !== 'undefined') {
-    if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
-    if (top + h > window.innerHeight - 8) top = window.innerHeight - h - 8;
-    left = Math.max(8, left);
-    top = Math.max(8, top);
+  if (typeof window === 'undefined') {
+    return { left: clientX + TOOLTIP_CURSOR_GAP_X, top: clientY + TOOLTIP_CURSOR_GAP_Y };
   }
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const m = TOOLTIP_VIEW_MARGIN;
+  const gapX = TOOLTIP_CURSOR_GAP_X;
+  const gapY = TOOLTIP_CURSOR_GAP_Y;
+  const w = Math.min(340, vw - 24);
+  const h = Math.min(420, vh - 24);
+
+  let left = clientX + gapX;
+  if (left + w > vw - m) {
+    left = clientX - w - gapX;
+  }
+  left = Math.max(m, Math.min(left, vw - w - m));
+
+  let top = clientY + gapY;
+  if (top + h > vh - m) {
+    top = clientY - h - gapY;
+  }
+  top = Math.max(m, Math.min(top, vh - h - m));
+
   return { left, top };
 }
 
