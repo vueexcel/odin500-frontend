@@ -1111,7 +1111,7 @@ export default function TickerPage() {
                 </DataInfoTip>
               </div>
               <div className="ticker-page__custom-range">
-                <span className="ticker-page__label ticker-page__label--inline">From</span>
+                <span className="ticker-page__label ticker-page__label--inline">Start date</span>
                 <input
                   type="date"
                   className="ticker-page__date-inp"
@@ -1119,7 +1119,7 @@ export default function TickerPage() {
                   onChange={(e) => setDraftChartStart(e.target.value)}
                   max={draftChartEnd || asOfDate}
                 />
-                <span className="ticker-page__label ticker-page__label--inline">to</span>
+                <span className="ticker-page__label ticker-page__label--inline">End date</span>
                 <input
                   type="date"
                   className="ticker-page__date-inp"
@@ -1129,7 +1129,7 @@ export default function TickerPage() {
                   max={asOfDate}
                 />
                 <button type="button" className="ticker-outline-btn ticker-outline-btn--sm" onClick={applyCustomChartRange}>
-                  Apply
+                  Submit
                 </button>
                 <button type="button" className="ticker-outline-btn ticker-outline-btn--sm" onClick={resetCustomChartRange}>
                   Use timeframe
@@ -1144,7 +1144,7 @@ export default function TickerPage() {
                     &gt; end they are swapped. The span is clipped to the backend maximum ({MAX_SIGNAL_RANGE_DAYS} days).
                   </p>
                   <p className="ticker-data-tip__p">
-                    <strong>Apply</strong> locks this window; <strong>Use timeframe</strong> clears the lock and returns to the pill mapping.
+                    <strong>Submit</strong> locks this window; <strong>Use timeframe</strong> clears the lock and returns to the pill mapping.
                   </p>
                 </DataInfoTip>
               </div>

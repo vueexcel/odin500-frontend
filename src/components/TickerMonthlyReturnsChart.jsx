@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
+import { filterReturnsRows } from '../utils/returnsDateRange.js';
 
 const COL_BAR = '#2563eb';
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
@@ -28,6 +30,8 @@ function yForValue(v, innerTop, innerH, yMin, yMax) {
  * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string }} props
  */
 export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate }) {
+  const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
+
   const rows = useMemo(() => {
     if (!Array.isArray(monthlyReturns)) return [];
     const out = [];
@@ -49,10 +53,15 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate }) 
     return out;
   }, [monthlyReturns]);
 
+  const filteredRows = useMemo(
+    () => filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
+    [rows, rangeApplied.start, rangeApplied.end]
+  );
+
   const availableYears = useMemo(() => {
-    const ys = [...new Set(rows.map((r) => r.year))].sort((a, b) => b - a);
+    const ys = [...new Set(filteredRows.map((r) => r.year))].sort((a, b) => b - a);
     return ys;
-  }, [rows]);
+  }, [filteredRows]);
 
   const [selectedYear, setSelectedYear] = useState(DEFAULT_YEAR);
 
@@ -64,11 +73,11 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate }) 
 
   const monthValues = useMemo(() => {
     const arr = Array.from({ length: 12 }, () => null);
-    for (const r of rows) {
+    for (const r of filteredRows) {
       if (r.year === selectedYear) arr[r.month - 1] = r.totalReturn;
     }
     return arr;
-  }, [rows, selectedYear]);
+  }, [filteredRows, selectedYear]);
 
   const { yMin, yMax } = useMemo(() => {
     const vals = monthValues.filter((v) => v != null && Number.isFinite(v));
@@ -189,6 +198,11 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate }) 
               ))}
             </select>
           </div>
+          <ChartDateApplyRow
+            idPrefix="monthly-returns-empty"
+            maxDate={asOfDate}
+            onApply={({ start, end }) => setRangeApplied({ start, end })}
+          />
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">
               No <code className="ticker-annual-figma__code">monthlyReturns</code> in the returns payload for {symU}.
@@ -252,8 +266,21 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate }) 
             </select>
           </div>
         </div>
+        <ChartDateApplyRow
+          idPrefix="monthly-returns"
+          maxDate={asOfDate}
+          onApply={({ start, end }) => setRangeApplied({ start, end })}
+        />
 
-        <div className="ticker-annual-figma__chart-card">{chart}</div>
+        <div className="ticker-annual-figma__chart-card">
+          {rows.length > 0 && !filteredRows.length ? (
+            <p className="ticker-annual-figma__empty" style={{ padding: '1.25rem' }}>
+              No monthly rows overlap the selected date range.
+            </p>
+          ) : (
+            chart
+          )}
+        </div>
 
         <div className="ticker-annual-figma__legend ticker-monthly__legend">
           <span className="ticker-annual-figma__legend-item">

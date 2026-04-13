@@ -1,5 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
+import { filterReturnsRows } from '../utils/returnsDateRange.js';
 
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
 const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
@@ -54,27 +56,33 @@ function buildRows(quarterlyReturns) {
  */
 export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate }) {
   const rows = useMemo(() => buildRows(quarterlyReturns), [quarterlyReturns]);
+  const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
+
+  const filteredRows = useMemo(
+    () => filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
+    [rows, rangeApplied.start, rangeApplied.end]
+  );
 
   const { years, byYear, byQuarter, yMin, yMax } = useMemo(() => {
-    if (!rows.length) {
-      return { years: [], byYear: new Map(), byQuarter: [null, {}, {}, {}, {}], yMin: -30, yMax: 50 };
+    if (!filteredRows.length) {
+      return { years: [], byYear: new Map(), byQuarter: [{}, {}, {}, {}], yMin: -30, yMax: 50 };
     }
     const byYear = new Map();
     const byQuarter = [{}, {}, {}, {}];
     const vals = [];
-    for (const r of rows) {
+    for (const r of filteredRows) {
       vals.push(r.totalReturn);
       if (!byYear.has(r.year)) byYear.set(r.year, {});
       byYear.get(r.year)[r.q] = r.totalReturn;
       byQuarter[r.q - 1][r.year] = r.totalReturn;
     }
-    const years = [...new Set(rows.map((x) => x.year))].sort((a, b) => a - b);
+    const years = [...new Set(filteredRows.map((x) => x.year))].sort((a, b) => a - b);
     const minR = Math.min(...vals);
     const maxR = Math.max(...vals);
     const yMin = Math.min(-30, Math.floor(minR / 10) * 10);
     const yMax = Math.max(50, Math.ceil(maxR / 10) * 10);
     return { years, byYear, byQuarter, yMin, yMax };
-  }, [rows]);
+  }, [filteredRows]);
 
   const yearColors = useMemo(() => {
     const m = new Map();
@@ -273,8 +281,18 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
         <div className="ticker-annual-figma__toolbar">
           <span className="ticker-annual-figma__badge">Quarterly returns</span>
         </div>
+        <ChartDateApplyRow
+          idPrefix="quarterly-returns"
+          maxDate={asOfDate}
+          onApply={({ start, end }) => setRangeApplied({ start, end })}
+        />
 
-        <div className="ticker-quarterly__split">
+        {rows.length > 0 && !filteredRows.length ? (
+          <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
+            <p className="ticker-annual-figma__empty">No quarterly rows overlap the selected date range.</p>
+          </div>
+        ) : (
+          <div className="ticker-quarterly__split">
           <div className="ticker-quarterly__panel ticker-annual-figma__chart-card">
             <div className="ticker-quarterly__panel-head">
               <span className="ticker-quarterly__panel-spacer" aria-hidden />
@@ -358,6 +376,7 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

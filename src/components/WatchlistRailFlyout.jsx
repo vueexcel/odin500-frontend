@@ -1,11 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchJsonCached } from '../store/apiStore.js';
+import { fetchJsonCached, fetchWithAuth } from '../store/apiStore.js';
+import { apiUrl } from '../utils/apiOrigin.js';
+import { WatchlistTickerMultiselect } from './WatchlistTickerMultiselect.jsx';
 
 /**
- * @typedef {{ symbol: string, companyName: string, last: number | null, pctFraction: number | null }} WatchlistTickerRow
- * @typedef {{ key: string, name: string, kind: 'user' | 'default', tickers: WatchlistTickerRow[] }} WatchlistOption
+ * @typedef {{ symbol: string, companyName: string, last: number | null, pctFraction: number | null, tickerId?: string }} WatchlistTickerRow
+ * @typedef {{ key: string, name: string, kind: 'user' | 'default', watchlistId?: string, tickers: WatchlistTickerRow[] }} WatchlistOption
  */
+
+/** @param {string} path @param {{ method?: string, body?: unknown }} [opts] */
+async function apiJsonAuth(path, opts = {}) {
+  const { method = 'GET', body } = opts;
+  const res = await fetchWithAuth(apiUrl(path), {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload?.error || payload?.message || 'Request failed');
+  }
+  return payload;
+}
 
 function IcoUserWatchlistSmall({ className }) {
   return (
@@ -72,6 +89,20 @@ function IcoClose({ className }) {
   );
 }
 
+function IcoTrash({ className }) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+        stroke="currentColor"
+        strokeWidth="1.65"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function mapDefaultItems(items) {
   const arr = Array.isArray(items) ? items : [];
   return arr.map((r) => ({
@@ -87,6 +118,7 @@ function mapDefaultItems(items) {
 function mapUserTickers(tickers) {
   const arr = Array.isArray(tickers) ? tickers : [];
   return arr.map((t) => ({
+    tickerId: t.id != null ? String(t.id) : '',
     symbol: String(t.symbol || '')
       .trim()
       .toUpperCase(),
@@ -129,8 +161,33 @@ export function WatchlistRailFlyout({ open, onClose }) {
   const [sortDesc, setSortDesc] = useState(true);
   const [ddOpen, setDdOpen] = useState(false);
   const ddRef = useRef(null);
+  const settingsRef = useRef(null);
 
-  const load = useCallback(async () => {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [managePanel, setManagePanel] = useState(/** @type {null | 'create' | 'delete' | 'update-pick' | 'update-edit'} */ (null));
+  const [createName, setCreateName] = useState('');
+  const [createTickers, setCreateTickers] = useState(/** @type {{ id: string, symbol: string, company_name?: string }[]} */ ([]));
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createErr, setCreateErr] = useState('');
+  const [updateEditId, setUpdateEditId] = useState('');
+  const [updateEditName, setUpdateEditName] = useState('');
+  const [updateEditTickers, setUpdateEditTickers] = useState([]);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateErr, setUpdateErr] = useState('');
+  const [deleteBusyId, setDeleteBusyId] = useState('');
+
+  const closeManageUi = useCallback(() => {
+    setManagePanel(null);
+    setSettingsOpen(false);
+    setCreateErr('');
+    setUpdateErr('');
+    setCreateBusy(false);
+    setUpdateBusy(false);
+    setDeleteBusyId('');
+  }, []);
+
+  const load = useCallback(async (opts = {}) => {
+    const forceMine = opts.forceMine === true;
     setLoading(true);
     setError('');
     const built = /** @type {WatchlistOption[]} */ ([]);
@@ -154,29 +211,35 @@ export function WatchlistRailFlyout({ open, onClose }) {
       setError(e?.message || 'Could not load default watchlists');
     }
 
+    /** @type {WatchlistOption[]} */
+    let merged = built;
     try {
       const { data: mineRaw } = await fetchJsonCached({
         path: '/api/watchlists',
         auth: true,
-        ttlMs: 2 * 60 * 1000
+        ttlMs: 2 * 60 * 1000,
+        force: forceMine
       });
       const mine = Array.isArray(mineRaw) ? mineRaw : [];
       const userOpts = mine.map((wl) => ({
         key: 'usr:' + wl.id,
+        watchlistId: String(wl.id),
         name: String(wl.name || 'Untitled').trim() || 'Untitled',
         kind: /** @type {'user'} */ ('user'),
         tickers: mapUserTickers(wl.tickers)
       }));
-      setOptions([...userOpts, ...built]);
+      merged = [...userOpts, ...built];
+      setOptions(merged);
       if (userOpts.length + built.length > 0) setError('');
       setSelectedKey((prev) => {
-        if (prev && [...userOpts, ...built].some((o) => o.key === prev)) return prev;
+        if (prev && merged.some((o) => o.key === prev)) return prev;
         if (userOpts[0]) return userOpts[0].key;
         if (built[0]) return built[0].key;
         return '';
       });
     } catch {
-      setOptions(built);
+      merged = built;
+      setOptions(merged);
       if (built.length > 0) setError('');
       setSelectedKey((prev) => {
         if (prev && built.some((o) => o.key === prev)) return prev;
@@ -185,7 +248,110 @@ export function WatchlistRailFlyout({ open, onClose }) {
     } finally {
       setLoading(false);
     }
+    return merged;
   }, []);
+
+  const userWatchlists = useMemo(() => options.filter((o) => o.kind === 'user'), [options]);
+
+  const openCreatePanel = () => {
+    setSettingsOpen(false);
+    setCreateName('');
+    setCreateTickers([]);
+    setCreateErr('');
+    setManagePanel('create');
+  };
+
+  const openDeletePanel = () => {
+    setSettingsOpen(false);
+    setManagePanel('delete');
+  };
+
+  const openUpdatePickPanel = () => {
+    setSettingsOpen(false);
+    setManagePanel('update-pick');
+  };
+
+  const beginUpdateEdit = (opt) => {
+    if (!opt.watchlistId) return;
+    setUpdateEditId(opt.watchlistId);
+    setUpdateEditName(opt.name);
+    const picks = opt.tickers
+      .filter((t) => t.tickerId)
+      .map((t) => ({
+        id: t.tickerId,
+        symbol: t.symbol,
+        company_name: t.companyName || ''
+      }));
+    setUpdateEditTickers(picks);
+    setUpdateErr('');
+    setManagePanel('update-edit');
+  };
+
+  const submitCreate = async () => {
+    const name = createName.trim();
+    if (!name) {
+      setCreateErr('Name is required');
+      return;
+    }
+    setCreateBusy(true);
+    setCreateErr('');
+    try {
+      const created = await apiJsonAuth('/api/watchlists', { method: 'POST', body: { name } });
+      const wlId = created?.id;
+      if (!wlId) throw new Error('Invalid response from server');
+      const ids = createTickers.map((t) => t.id).filter(Boolean);
+      if (ids.length > 0) {
+        await apiJsonAuth('/api/watchlists/add', {
+          method: 'POST',
+          body: { watchlist_id: wlId, ticker_ids: ids }
+        });
+      }
+      closeManageUi();
+      await load({ forceMine: true });
+      setSelectedKey('usr:' + wlId);
+    } catch (e) {
+      setCreateErr(e?.message || 'Could not create watchlist');
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
+  const deleteUserWatchlist = async (watchlistId) => {
+    setDeleteBusyId(watchlistId);
+    try {
+      await apiJsonAuth('/api/watchlists/' + encodeURIComponent(watchlistId), { method: 'DELETE' });
+      await load({ forceMine: true });
+    } catch (e) {
+      setError(e?.message || 'Could not delete watchlist');
+    } finally {
+      setDeleteBusyId('');
+    }
+  };
+
+  const submitUpdateWatchlist = async () => {
+    const name = updateEditName.trim();
+    if (!name) {
+      setUpdateErr('Name is required');
+      return;
+    }
+    if (!updateEditId) return;
+    setUpdateBusy(true);
+    setUpdateErr('');
+    try {
+      const ticker_ids = updateEditTickers.map((t) => t.id).filter(Boolean);
+      await apiJsonAuth('/api/watchlists/' + encodeURIComponent(updateEditId), {
+        method: 'PATCH',
+        body: { name, ticker_ids }
+      });
+      closeManageUi();
+      await load({ forceMine: true });
+      setSelectedKey('usr:' + updateEditId);
+    } catch (e) {
+      setUpdateErr(e?.message || 'Could not update watchlist');
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -193,13 +359,36 @@ export function WatchlistRailFlyout({ open, onClose }) {
   }, [open, load]);
 
   useEffect(() => {
+    if (open) return;
+    closeManageUi();
+  }, [open, closeManageUi]);
+
+  useEffect(() => {
     if (!open) return;
     function onKey(e) {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      if (managePanel) {
+        closeManageUi();
+        return;
+      }
+      if (settingsOpen) {
+        setSettingsOpen(false);
+        return;
+      }
+      onClose();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, onClose, managePanel, settingsOpen, closeManageUi]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    function onDoc(e) {
+      if (settingsRef.current && !settingsRef.current.contains(e.target)) setSettingsOpen(false);
+    }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [settingsOpen]);
 
   useEffect(() => {
     if (!ddOpen) return;
@@ -258,10 +447,37 @@ export function WatchlistRailFlyout({ open, onClose }) {
           <h2 id="wl-flyout-title" className="wl-flyout__title">
             My Watchlists
           </h2>
-          <div className="wl-flyout__head-actions">
-            <button type="button" className="wl-flyout__iconbtn" title="Watchlist settings" aria-label="Settings">
+          <div className="wl-flyout__head-actions" ref={settingsRef}>
+            <button
+              type="button"
+              className={'wl-flyout__iconbtn' + (settingsOpen ? ' wl-flyout__iconbtn--active' : '')}
+              title="Watchlist settings"
+              aria-label="Settings"
+              aria-expanded={settingsOpen}
+              aria-haspopup="menu"
+              onClick={() => setSettingsOpen((v) => !v)}
+            >
               <IcoGear className="wl-flyout__iconbtn-svg" />
             </button>
+            {settingsOpen ? (
+              <ul className="wl-flyout__settings-menu" role="menu">
+                <li role="none">
+                  <button type="button" className="wl-flyout__settings-item" role="menuitem" onClick={openCreatePanel}>
+                    Create Watchlist
+                  </button>
+                </li>
+                <li role="none">
+                  <button type="button" className="wl-flyout__settings-item" role="menuitem" onClick={openDeletePanel}>
+                    Delete Watchlist
+                  </button>
+                </li>
+                <li role="none">
+                  <button type="button" className="wl-flyout__settings-item" role="menuitem" onClick={openUpdatePickPanel}>
+                    Update Watchlist
+                  </button>
+                </li>
+              </ul>
+            ) : null}
             <button type="button" className="wl-flyout__iconbtn" onClick={onClose} title="Close" aria-label="Close">
               <IcoClose className="wl-flyout__iconbtn-svg" />
             </button>
@@ -356,7 +572,7 @@ export function WatchlistRailFlyout({ open, onClose }) {
                 </tr>
               ) : (
                 sortedRows.map((row) => (
-                  <tr key={row.symbol}>
+                  <tr key={row.tickerId ? row.symbol + '-' + row.tickerId : row.symbol}>
                     <td>
                       <Link className="wl-flyout__sec-link" to={'/ticker/' + encodeURIComponent(row.symbol)}>
                         <span className="wl-flyout__sec-top">
@@ -375,6 +591,194 @@ export function WatchlistRailFlyout({ open, onClose }) {
           </table>
         </div>
       </div>
+
+      {managePanel === 'create' ? (
+        <div
+          className="wl-manage-overlay"
+          role="presentation"
+          onClick={(e) => e.target === e.currentTarget && closeManageUi()}
+        >
+          <div className="wl-manage-modal" role="dialog" aria-labelledby="wl-create-title">
+            <div className="wl-manage-modal__head">
+              <h3 id="wl-create-title" className="wl-manage-modal__title">
+                Create watchlist
+              </h3>
+              <button type="button" className="wl-manage-modal__close" onClick={closeManageUi} aria-label="Close">
+                <IcoClose className="wl-flyout__iconbtn-svg" />
+              </button>
+            </div>
+            <div className="wl-manage-modal__body">
+              <label className="wl-manage-label" htmlFor="wl-create-name">
+                Name
+              </label>
+              <input
+                id="wl-create-name"
+                type="text"
+                className="wl-manage-input"
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                placeholder="Watchlist name"
+                disabled={createBusy}
+                autoComplete="off"
+              />
+              <WatchlistTickerMultiselect
+                idPrefix="wl-create"
+                selected={createTickers}
+                onChange={setCreateTickers}
+                disabled={createBusy}
+              />
+              {createErr ? <p className="wl-manage-err">{createErr}</p> : null}
+            </div>
+            <div className="wl-manage-modal__foot">
+              <button type="button" className="wl-manage-btn wl-manage-btn--ghost" onClick={closeManageUi} disabled={createBusy}>
+                Cancel
+              </button>
+              <button type="button" className="wl-manage-btn wl-manage-btn--primary" onClick={submitCreate} disabled={createBusy}>
+                {createBusy ? 'Saving…' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {managePanel === 'delete' ? (
+        <div
+          className="wl-manage-overlay"
+          role="presentation"
+          onClick={(e) => e.target === e.currentTarget && closeManageUi()}
+        >
+          <div className="wl-manage-modal" role="dialog" aria-labelledby="wl-del-title">
+            <div className="wl-manage-modal__head">
+              <h3 id="wl-del-title" className="wl-manage-modal__title">
+                Delete watchlist
+              </h3>
+              <button type="button" className="wl-manage-modal__close" onClick={closeManageUi} aria-label="Close">
+                <IcoClose className="wl-flyout__iconbtn-svg" />
+              </button>
+            </div>
+            <div className="wl-manage-modal__body">
+              {userWatchlists.length === 0 ? (
+                <p className="wl-manage-muted">You have no custom watchlists to delete.</p>
+              ) : (
+                <ul className="wl-manage-list">
+                  {userWatchlists.map((o) => (
+                    <li key={o.key} className="wl-manage-list__row">
+                      <span className="wl-manage-list__name">{o.name}</span>
+                      <button
+                        type="button"
+                        className="wl-manage-iconbtn"
+                        title={'Delete ' + o.name}
+                        aria-label={'Delete ' + o.name}
+                        disabled={!!deleteBusyId}
+                        onClick={() => o.watchlistId && deleteUserWatchlist(o.watchlistId)}
+                      >
+                        {deleteBusyId === o.watchlistId ? (
+                          <span className="wl-manage-muted">…</span>
+                        ) : (
+                          <IcoTrash className="wl-flyout__iconbtn-svg" />
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="wl-manage-modal__foot">
+              <button type="button" className="wl-manage-btn wl-manage-btn--ghost" onClick={closeManageUi}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {managePanel === 'update-pick' ? (
+        <div
+          className="wl-manage-overlay"
+          role="presentation"
+          onClick={(e) => e.target === e.currentTarget && closeManageUi()}
+        >
+          <div className="wl-manage-modal" role="dialog" aria-labelledby="wl-upd-pick-title">
+            <div className="wl-manage-modal__head">
+              <h3 id="wl-upd-pick-title" className="wl-manage-modal__title">
+                Update watchlist
+              </h3>
+              <button type="button" className="wl-manage-modal__close" onClick={closeManageUi} aria-label="Close">
+                <IcoClose className="wl-flyout__iconbtn-svg" />
+              </button>
+            </div>
+            <div className="wl-manage-modal__body">
+              {userWatchlists.length === 0 ? (
+                <p className="wl-manage-muted">You have no custom watchlists to update.</p>
+              ) : (
+                <ul className="wl-manage-list wl-manage-list--pick">
+                  {userWatchlists.map((o) => (
+                    <li key={o.key}>
+                      <button type="button" className="wl-manage-pick-row" onClick={() => beginUpdateEdit(o)}>
+                        <span className="wl-manage-list__name">{o.name}</span>
+                        <span className="wl-manage-muted">{o.tickers.length} ticker(s)</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="wl-manage-modal__foot">
+              <button type="button" className="wl-manage-btn wl-manage-btn--ghost" onClick={closeManageUi}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {managePanel === 'update-edit' ? (
+        <div
+          className="wl-manage-overlay"
+          role="presentation"
+          onClick={(e) => e.target === e.currentTarget && closeManageUi()}
+        >
+          <div className="wl-manage-modal" role="dialog" aria-labelledby="wl-upd-edit-title">
+            <div className="wl-manage-modal__head">
+              <h3 id="wl-upd-edit-title" className="wl-manage-modal__title">
+                Edit watchlist
+              </h3>
+              <button type="button" className="wl-manage-modal__close" onClick={closeManageUi} aria-label="Close">
+                <IcoClose className="wl-flyout__iconbtn-svg" />
+              </button>
+            </div>
+            <div className="wl-manage-modal__body">
+              <label className="wl-manage-label" htmlFor="wl-upd-name">
+                Name
+              </label>
+              <input
+                id="wl-upd-name"
+                type="text"
+                className="wl-manage-input"
+                value={updateEditName}
+                onChange={(e) => setUpdateEditName(e.target.value)}
+                disabled={updateBusy}
+                autoComplete="off"
+              />
+              <WatchlistTickerMultiselect
+                idPrefix="wl-upd"
+                selected={updateEditTickers}
+                onChange={setUpdateEditTickers}
+                disabled={updateBusy}
+              />
+              {updateErr ? <p className="wl-manage-err">{updateErr}</p> : null}
+            </div>
+            <div className="wl-manage-modal__foot">
+              <button type="button" className="wl-manage-btn wl-manage-btn--ghost" onClick={() => setManagePanel('update-pick')} disabled={updateBusy}>
+                Back
+              </button>
+              <button type="button" className="wl-manage-btn wl-manage-btn--primary" onClick={submitUpdateWatchlist} disabled={updateBusy}>
+                {updateBusy ? 'Saving…' : 'Apply changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

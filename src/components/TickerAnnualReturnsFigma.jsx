@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
+import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
+import { filterReturnsRows } from '../utils/returnsDateRange.js';
 
 /** Match `TickerLightweightChart` / dark ticker cards. */
 const COL_BAR = '#2563eb';
@@ -83,6 +85,7 @@ function csvEscape(s) {
  */
 export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
   const [showTable, setShowTable] = useState(false);
+  const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
 
   const rows = useMemo(() => {
     if (!Array.isArray(annualReturns)) return [];
@@ -100,11 +103,16 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
       .sort((a, b) => a.year - b.year);
   }, [annualReturns]);
 
+  const displayRows = useMemo(
+    () => filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
+    [rows, rangeApplied.start, rangeApplied.end]
+  );
+
   const stats = useMemo(() => {
-    if (!rows.length) return null;
-    const rets = rows.map((r) => r.totalReturn);
-    const pos = rows.filter((r) => r.totalReturn > 0).length;
-    const neg = rows.filter((r) => r.totalReturn < 0).length;
+    if (!displayRows.length) return null;
+    const rets = displayRows.map((r) => r.totalReturn);
+    const pos = displayRows.filter((r) => r.totalReturn > 0).length;
+    const neg = displayRows.filter((r) => r.totalReturn < 0).length;
     const avg = rets.reduce((a, b) => a + b, 0) / rets.length;
     return {
       pos,
@@ -114,14 +122,14 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
       min: Math.min(...rets),
       med: median(rets)
     };
-  }, [rows]);
+  }, [displayRows]);
 
   const onDownloadCsv = useCallback(() => {
-    if (!rows.length) return;
+    if (!displayRows.length) return;
     const headers = ['period', 'year', 'startDate', 'endDate', 'totalReturn', 'startPrice', 'endPrice'];
     const lines = [
       headers.join(','),
-      ...rows.map((r) =>
+      ...displayRows.map((r) =>
         [
           csvEscape(r.period),
           r.year,
@@ -140,10 +148,10 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
     a.download = `${String(symbol || 'ticker').toUpperCase()}-annual-returns.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [rows, symbol]);
+  }, [displayRows, symbol]);
 
   const comboSvg = useMemo(() => {
-    if (!rows.length || !stats) return null;
+    if (!displayRows.length || !stats) return null;
     const W = 880;
     const H = 260;
     const padL = 52;
@@ -152,7 +160,7 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
     const padB = 56;
     const iw = W - padL - padR;
     const ih = H - padT - padB;
-    const n = rows.length;
+    const n = displayRows.length;
     const gap = 0.15;
     const bw = (iw / n) * (1 - gap);
     const step = iw / n;
@@ -177,7 +185,7 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
       );
     });
 
-    const bars = rows.map((r, i) => {
+    const bars = displayRows.map((r, i) => {
       const x = padL + i * step + (step - bw) / 2;
       const y0 = yForValue(0, padT, ih);
       const y1 = yForValue(r.totalReturn, padT, ih);
@@ -197,7 +205,7 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
 
     const avgY = yForValue(stats.avg, padT, ih);
 
-    const xLabels = rows.map((r, i) => {
+    const xLabels = displayRows.map((r, i) => {
       const cx = padL + i * step + step / 2;
       return (
         <text key={r.year} x={cx} y={H - 28} textAnchor="middle" fill={COL_AXIS} fontSize="11" fontWeight="600">
@@ -214,7 +222,7 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
         {xLabels}
       </svg>
     );
-  }, [rows, stats]);
+  }, [displayRows, stats]);
 
   const summaryBars = useMemo(() => {
     if (!stats) return null;
@@ -399,7 +407,20 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
             </button>
           </div>
         </div>
-        <div className="ticker-annual-figma__chart-card">{comboSvg}</div>
+        <ChartDateApplyRow
+          idPrefix="annual-figma"
+          maxDate={asOfDate}
+          onApply={({ start, end }) => setRangeApplied({ start, end })}
+        />
+        <div className="ticker-annual-figma__chart-card">
+          {comboSvg ? (
+            comboSvg
+          ) : (
+            <p className="ticker-annual-figma__empty" style={{ padding: '24px 16px' }}>
+              No annual rows overlap the selected start/end dates. Clear the filter or widen the range.
+            </p>
+          )}
+        </div>
         <div className="ticker-annual-figma__legend">
           <span className="ticker-annual-figma__legend-item">
             <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden />
@@ -424,7 +445,7 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {displayRows.map((r) => (
                   <tr key={r.year}>
                     <td>{r.year}</td>
                     <td>{r.startDate ?? '—'}</td>

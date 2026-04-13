@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
+import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
+import { filterReturnsRows } from '../utils/returnsDateRange.js';
 
 const BUCKETS = [
   { key: 'b01', legend: '0-1%', color: '#38bdf8' },
@@ -143,11 +145,15 @@ function BucketDonut({ counts }) {
  */
 export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate }) {
   const [rightMode, setRightMode] = useState('positive');
+  const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
 
   const rows = useMemo(() => {
     if (!Array.isArray(annualReturns)) return [];
     return [...annualReturns]
       .map((r) => ({
+        period: r.period,
+        startDate: r.startDate,
+        endDate: r.endDate,
         totalReturn: Number(r.totalReturn),
         year: parseYear(r.period)
       }))
@@ -155,10 +161,15 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate }) {
       .sort((a, b) => a.year - b.year);
   }, [annualReturns]);
 
-  const countsTotal = useMemo(() => buildCounts(rows, 'all'), [rows]);
+  const filteredRows = useMemo(
+    () => filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
+    [rows, rangeApplied.start, rangeApplied.end]
+  );
+
+  const countsTotal = useMemo(() => buildCounts(filteredRows, 'all'), [filteredRows]);
   const countsRight = useMemo(
-    () => (rightMode === 'positive' ? buildCounts(rows, 'pos') : buildCounts(rows, 'neg')),
-    [rows, rightMode]
+    () => (rightMode === 'positive' ? buildCounts(filteredRows, 'pos') : buildCounts(filteredRows, 'neg')),
+    [filteredRows, rightMode]
   );
 
   const symU = String(symbol || 'ticker').toUpperCase();
@@ -194,6 +205,11 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate }) {
         <div className="ticker-annual-figma__toolbar">
           <span className="ticker-annual-figma__badge">Annual returns — positive &amp; negative years</span>
         </div>
+        <ChartDateApplyRow
+          idPrefix="annual-posneg"
+          maxDate={asOfDate}
+          onApply={({ start, end }) => setRangeApplied({ start, end })}
+        />
 
         <div className="ticker-annual-donut__stage">
           <div className="ticker-annual-donut__toggle-wrap" aria-label="Right panel mode">

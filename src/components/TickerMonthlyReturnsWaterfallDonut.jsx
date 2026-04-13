@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
+import { filterReturnsRows } from '../utils/returnsDateRange.js';
 
 const DEFAULT_YEAR = 2025;
 const COL_INC = '#2563eb';
@@ -59,6 +61,9 @@ function labelOnDonut(r, degMid) {
  * Renders below `TickerMonthlyReturnsChart`; does not replace it.
  */
 export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, annualReturns, asOfDate }) {
+  const [monthRangeApplied, setMonthRangeApplied] = useState({ start: '', end: '' });
+  const [annualRangeApplied, setAnnualRangeApplied] = useState({ start: '', end: '' });
+
   const monthRows = useMemo(() => {
     if (!Array.isArray(monthlyReturns)) return [];
     const out = [];
@@ -69,6 +74,8 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
       if (!Number.isFinite(tr)) continue;
       out.push({
         period: r.period,
+        startDate: r.startDate,
+        endDate: r.endDate,
         totalReturn: tr,
         year: meta.year,
         month: meta.month
@@ -78,26 +85,38 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
     return out;
   }, [monthlyReturns]);
 
+  const displayMonthRows = useMemo(
+    () => filterReturnsRows(monthRows, monthRangeApplied.start, monthRangeApplied.end),
+    [monthRows, monthRangeApplied.start, monthRangeApplied.end]
+  );
+
   const annualRows = useMemo(() => {
     if (!Array.isArray(annualReturns)) return [];
     return [...annualReturns]
       .map((r) => ({
+        startDate: r.startDate,
+        endDate: r.endDate,
         totalReturn: Number(r.totalReturn),
         year: parseYear(r.period)
       }))
       .filter((r) => Number.isFinite(r.year) && Number.isFinite(r.totalReturn));
   }, [annualReturns]);
 
+  const displayAnnualRows = useMemo(
+    () => filterReturnsRows(annualRows, annualRangeApplied.start, annualRangeApplied.end),
+    [annualRows, annualRangeApplied.start, annualRangeApplied.end]
+  );
+
   const yearStats = useMemo(() => {
-    const pos = annualRows.filter((r) => r.totalReturn > 0).length;
-    const neg = annualRows.filter((r) => r.totalReturn < 0).length;
+    const pos = displayAnnualRows.filter((r) => r.totalReturn > 0).length;
+    const neg = displayAnnualRows.filter((r) => r.totalReturn < 0).length;
     return { pos, neg };
-  }, [annualRows]);
+  }, [displayAnnualRows]);
 
   const availableYears = useMemo(() => {
-    const ys = [...new Set(monthRows.map((r) => r.year))].sort((a, b) => b - a);
+    const ys = [...new Set(displayMonthRows.map((r) => r.year))].sort((a, b) => b - a);
     return ys;
-  }, [monthRows]);
+  }, [displayMonthRows]);
 
   const [selectedYear, setSelectedYear] = useState(DEFAULT_YEAR);
 
@@ -109,11 +128,11 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
 
   const monthValues = useMemo(() => {
     const arr = Array.from({ length: 12 }, () => null);
-    for (const r of monthRows) {
+    for (const r of displayMonthRows) {
       if (r.year === selectedYear) arr[r.month - 1] = r.totalReturn;
     }
     return arr;
-  }, [monthRows, selectedYear]);
+  }, [displayMonthRows, selectedYear]);
 
   const waterfallSvg = useMemo(() => {
     const deltas = monthValues.map((v) => (Number.isFinite(v) ? v : 0));
@@ -309,8 +328,12 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
-  const hasMonthly = monthRows.length > 0;
-  const hasAnnual = annualRows.length > 0;
+  const hasMonthlySource = monthRows.length > 0;
+  const hasMonthly = displayMonthRows.length > 0;
+  const hasAnnualSource = annualRows.length > 0;
+  const hasAnnual = displayAnnualRows.length > 0;
+  const monthlyFilteredEmpty = hasMonthlySource && !hasMonthly;
+  const annualFilteredEmpty = hasAnnualSource && !hasAnnual;
 
   return (
     <div className="ticker-monthly-adv">
@@ -359,7 +382,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
                   className="ticker-monthly__select"
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(Number(e.target.value))}
-                  disabled={!hasMonthly}
+                  disabled={!hasMonthlySource}
                   aria-label="Year for waterfall"
                 >
                   {yearOptions.map((y) => (
@@ -370,7 +393,14 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
                 </select>
               </div>
             </div>
-            {hasMonthly ? (
+            <ChartDateApplyRow
+              idPrefix="monthly-waterfall"
+              maxDate={asOfDate}
+              onApply={({ start, end }) => setMonthRangeApplied({ start, end })}
+            />
+            {monthlyFilteredEmpty ? (
+              <div className="ticker-monthly-adv__empty">No monthly rows overlap the selected date range.</div>
+            ) : hasMonthly ? (
               waterfallSvg
             ) : (
               <div className="ticker-monthly-adv__empty">No monthly returns to plot.</div>
@@ -403,8 +433,8 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
                     counts.
                   </p>
                   <p className="ticker-data-tip__p">
-                    This is <strong>not</strong> filtered by the waterfall year dropdown — it summarizes the full annual series returned for{' '}
-                    <strong>{symU}</strong>.
+                    Use the panel’s <strong>Start date / End date</strong> row (Submit) to filter annual rows independently of the waterfall year
+                    dropdown. The waterfall has its own date filter.
                   </p>
                   {asOfDate ? (
                     <p className="ticker-data-tip__p">
@@ -414,7 +444,14 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
                 </DataInfoTip>
               </div>
             </div>
-            {hasAnnual ? (
+            <ChartDateApplyRow
+              idPrefix="monthly-donut-annual"
+              maxDate={asOfDate}
+              onApply={({ start, end }) => setAnnualRangeApplied({ start, end })}
+            />
+            {annualFilteredEmpty ? (
+              <div className="ticker-monthly-adv__empty">No annual rows overlap the selected date range.</div>
+            ) : hasAnnual ? (
               donutSvg
             ) : (
               <div className="ticker-monthly-adv__empty">No annual returns for this donut.</div>

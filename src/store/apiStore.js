@@ -1,6 +1,6 @@
 import { apiUrl } from '../utils/apiOrigin.js';
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_KEY = 'odin500_api_cache_' + CACHE_VERSION;
 const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'auth_refresh_token';
@@ -262,6 +262,111 @@ export async function fetchWithAuth(url, init = {}) {
   return response;
 }
 
+/**
+ * Ticker search must not use the JSON cache: stale `[]` in sessionStorage was
+ * causing permanent "No matches" until TTL expired.
+ * @param {string} query trimmed search text (caller sanitizes)
+ * @returns {Promise<unknown>} parsed JSON body (usually an array of tickers)
+ */
+export async function fetchTickerSearchLive(query) {
+  const q = String(query || '').trim();
+  if (!q) {
+    return [];
+  }
+  const path = '/api/tickers/search?q=' + encodeURIComponent(q);
+  const url = apiUrl(path);
+  const response = await fetchWithAuth(url, {
+    method: 'GET',
+    cache: 'no-store'
+  });
+  const rawText = await response.text();
+  let payload;
+  try {
+    payload = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    throw new Error('Invalid JSON from ticker search');
+  }
+  if (!response.ok) {
+    throw new Error(
+      (payload && (payload.error || payload.message)) ||
+        'Ticker search failed (' + response.status + ')'
+    );
+  }
+  return payload;
+}
+
+/**
+ * Batch-resolve Supabase ticker `id` by exact symbol (watchlist search fallback when GET /search omits id).
+ * @param {string[]} symbols uppercased symbols
+ * @returns {Promise<Map<string, { id: string, symbol: string, company_name: string }>>}
+ */
+export async function resolveTickerSymbols(symbols) {
+  const unique = [
+    ...new Set(symbols.map((s) => String(s || '').trim().toUpperCase()).filter(Boolean))
+  ].slice(0, 150);
+  if (!unique.length) return new Map();
+
+  const response = await fetchWithAuth(apiUrl('/api/tickers/resolve'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbols: unique }),
+    cache: 'no-store'
+  });
+  const rawText = await response.text();
+  let payload;
+  try {
+    payload = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    throw new Error('Invalid JSON from ticker resolve');
+  }
+  if (!response.ok) {
+    throw new Error(
+      (payload && (payload.error || payload.message)) || 'Ticker resolve failed'
+    );
+  }
+  const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
+  const m = new Map();
+  for (const t of tickers) {
+    const sym = String(t.symbol || '')
+      .trim()
+      .toUpperCase();
+    if (!sym || t.id == null || t.id === '') continue;
+    m.set(sym, {
+      id: String(t.id),
+      symbol: sym,
+      company_name: t.company_name != null ? String(t.company_name) : ''
+    });
+  }
+  return m;
+}
+
+/** Normalize various API shapes to a flat list of { id, symbol, company_name }. */
+export function normalizeTickerSearchRows(payload) {
+  let rows = [];
+  if (Array.isArray(payload)) {
+    rows = payload;
+  } else if (payload && typeof payload === 'object') {
+    if (Array.isArray(payload.data)) rows = payload.data;
+    else if (Array.isArray(payload.tickers)) rows = payload.tickers;
+    else if (Array.isArray(payload.results)) rows = payload.results;
+  }
+  return rows.map((row) => {
+    const id = row.id ?? row.ticker_id ?? row.tickerId;
+    return {
+      id: id != null && id !== '' ? String(id) : '',
+      symbol: String(row.symbol ?? row.Symbol ?? '')
+        .trim()
+        .toUpperCase(),
+      company_name:
+        row.company_name != null
+          ? String(row.company_name)
+          : row.companyName != null
+            ? String(row.companyName)
+            : ''
+    };
+  });
+}
+
 export async function fetchJsonCached({
   path,
   method = 'GET',
@@ -273,7 +378,10 @@ export async function fetchJsonCached({
   const reqKey = makeRequestKey(method, path, body);
   const now = Date.now();
 
-  if (!force) {
+  const skipAppCache =
+    method === 'GET' && typeof path === 'string' && path.includes('/api/tickers/search');
+
+  if (!force && !skipAppCache) {
     const cached = memoryStore.cache.get(reqKey);
     if (cached && now - cached.ts < ttlMs) {
       return { data: cached.data, fromCache: true };
@@ -291,11 +399,15 @@ export async function fetchJsonCached({
       if (token) headers.Authorization = 'Bearer ' + token;
     }
 
-    let response = await fetch(apiUrl(path), {
+    const fetchInit = {
       method,
       headers,
-      body: body == null ? undefined : JSON.stringify(body)
-    });
+      body: body == null ? undefined : JSON.stringify(body),
+      /** Avoid browser HTTP 304 + empty body: `response.ok` is false for 304 and `.json()` often fails. */
+      cache: 'no-store'
+    };
+
+    let response = await fetch(apiUrl(path), fetchInit);
 
     if (response.status === 401 && auth) {
       const refreshed = await refreshSessionOnce();
@@ -304,22 +416,31 @@ export async function fetchJsonCached({
         const h2 = { ...headers };
         if (token2) h2.Authorization = 'Bearer ' + token2;
         response = await fetch(apiUrl(path), {
-          method,
-          headers: h2,
-          body: body == null ? undefined : JSON.stringify(body)
+          ...fetchInit,
+          headers: h2
         });
       }
     }
 
-    const payload = await response.json();
+    const rawText = await response.text();
+    let payload;
+    try {
+      payload = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      throw new Error('Invalid JSON from server: ' + path);
+    }
+
     if (!response.ok) {
       throw new Error(
-        payload?.error || payload?.message || 'Request failed: ' + path
+        (payload && (payload.error || payload.message)) ||
+          'Request failed (' + response.status + '): ' + path
       );
     }
 
-    memoryStore.cache.set(reqKey, { ts: Date.now(), data: payload });
-    persistCacheToSessionStorage();
+    if (!skipAppCache) {
+      memoryStore.cache.set(reqKey, { ts: Date.now(), data: payload });
+      persistCacheToSessionStorage();
+    }
     return { data: payload, fromCache: false };
   })();
 
