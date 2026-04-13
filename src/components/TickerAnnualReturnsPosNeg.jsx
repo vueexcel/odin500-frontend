@@ -1,15 +1,29 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
+import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 
-const BUCKETS = [
+const BUCKETS_DARK = [
   { key: 'b01', legend: '0-1%', color: '#38bdf8' },
   { key: 'b25', legend: '1-2.5%', color: '#f97316' },
   { key: 'b5', legend: '2.5-5%', color: '#64748b' },
   { key: 'b10', legend: '5-10%', color: '#eab308' },
   { key: 'bgt', legend: '>10%', color: '#172554' }
 ];
+
+/** Slightly deeper hues so dark labels read on light backgrounds. */
+const BUCKETS_LIGHT = [
+  { key: 'b01', legend: '0-1%', color: '#0284c7' },
+  { key: 'b25', legend: '1-2.5%', color: '#ea580c' },
+  { key: 'b5', legend: '2.5-5%', color: '#475569' },
+  { key: 'b10', legend: '5-10%', color: '#ca8a04' },
+  { key: 'bgt', legend: '>10%', color: '#2563eb' }
+];
+
+function bucketsForTheme(theme) {
+  return theme === 'light' ? BUCKETS_LIGHT : BUCKETS_DARK;
+}
 
 const DONUT_GAP_DEG = 2.35;
 const R0 = 56;
@@ -86,7 +100,12 @@ function buildCounts(rows, mode) {
   return c;
 }
 
-function BucketDonut({ counts }) {
+function BucketDonut({ counts, buckets, theme }) {
+  const light = theme === 'light';
+  const ringStroke = light ? '#e2e8f0' : '#0d1520';
+  const labelFill = light ? '#0f172a' : '#f8fafc';
+  const labelShadow = light ? 'none' : '0 1px 3px rgba(0,0,0,0.85)';
+
   const total = counts.reduce((a, b) => a + b, 0);
   if (total === 0) {
     return (
@@ -107,13 +126,13 @@ function BucketDonut({ counts }) {
     const d1 = theta + sweep;
     const mid = (d0 + d1) / 2;
     const lp = labelOnDonut(LABEL_R, mid);
-    const meta = BUCKETS[i];
+    const meta = buckets[i];
     segs.push(
       <g key={meta.key}>
         <path
           d={donutSegPath(R0, R1, d0, d1)}
           fill={meta.color}
-          stroke="#0d1520"
+          stroke={ringStroke}
           strokeWidth="3"
           strokeLinejoin="round"
         />
@@ -121,10 +140,10 @@ function BucketDonut({ counts }) {
           x={lp.x}
           y={lp.y + 4}
           textAnchor="middle"
-          fill="#f8fafc"
+          fill={labelFill}
           fontSize="11"
           fontWeight="700"
-          style={{ textShadow: '0 1px 3px rgba(0,0,0,0.85)' }}
+          style={{ textShadow: labelShadow }}
         >
           {meta.legend}, {n}
         </text>
@@ -144,6 +163,8 @@ function BucketDonut({ counts }) {
  * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string }} props
  */
 export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate }) {
+  const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
+  const buckets = useMemo(() => bucketsForTheme(chartTheme), [chartTheme]);
   const [rightMode, setRightMode] = useState('positive');
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
 
@@ -266,10 +287,10 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate }) {
                 </div>
               </div>
               <div className="ticker-annual-donut__donut-wrap">
-                <BucketDonut counts={countsTotal} />
+                <BucketDonut counts={countsTotal} buckets={buckets} theme={chartTheme} />
               </div>
               <div className="ticker-annual-donut__legend">
-                {BUCKETS.map((b) => (
+                {buckets.map((b) => (
                   <span key={b.key} className="ticker-annual-donut__legend-item">
                     <span className="ticker-annual-donut__swatch" style={{ background: b.color }} aria-hidden />
                     {b.legend}
@@ -316,10 +337,10 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate }) {
                 </div>
               </div>
               <div className="ticker-annual-donut__donut-wrap">
-                <BucketDonut counts={countsRight} />
+                <BucketDonut counts={countsRight} buckets={buckets} theme={chartTheme} />
               </div>
               <div className="ticker-annual-donut__legend">
-                {BUCKETS.map((b) => (
+                {buckets.map((b) => (
                   <span key={b.key} className="ticker-annual-donut__legend-item">
                     <span className="ticker-annual-donut__swatch" style={{ background: b.color }} aria-hidden />
                     {b.legend}

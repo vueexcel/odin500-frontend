@@ -7,6 +7,9 @@ import {
 } from '../store/apiStore.js';
 import { sanitizeTickerSearchInput } from '../utils/tickerUrlSync.js';
 
+/** Wait after last keystroke before calling search + resolve (avoids a request per key). */
+const TICKER_SEARCH_DEBOUNCE_MS = 400;
+
 const LOG_PREFIX = '[WatchlistTickerSearch]';
 
 function dbg(...args) {
@@ -100,6 +103,7 @@ export function WatchlistTickerMultiselect({
     }
     let cancelled = false;
     const timer = setTimeout(async () => {
+      if (cancelled) return;
       setLoading(true);
       setSearchErr('');
       dbg('fetch start', { qNorm });
@@ -147,7 +151,7 @@ export function WatchlistTickerMultiselect({
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 150);
+    }, TICKER_SEARCH_DEBOUNCE_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);

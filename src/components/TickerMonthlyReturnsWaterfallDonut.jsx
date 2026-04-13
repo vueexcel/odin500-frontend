@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
+import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 
 const DEFAULT_YEAR = 2025;
 const COL_INC = '#2563eb';
@@ -9,10 +10,6 @@ const COL_DEC = '#f97316';
 const COL_NEU = '#64748b';
 const COL_DONUT_POS = '#172554';
 const COL_DONUT_NEG = '#f97316';
-const COL_GRID = 'rgba(148, 163, 184, 0.14)';
-const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
-const COL_AXIS = '#94a3b8';
-const COL_LABEL = '#e2e8f0';
 const DONUT_GAP_DEG = 2.35;
 const R0 = 52;
 const R1 = 82;
@@ -61,6 +58,7 @@ function labelOnDonut(r, degMid) {
  * Renders below `TickerMonthlyReturnsChart`; does not replace it.
  */
 export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, annualReturns, asOfDate }) {
+  const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const [monthRangeApplied, setMonthRangeApplied] = useState({ start: '', end: '' });
   const [annualRangeApplied, setAnnualRangeApplied] = useState({ start: '', end: '' });
 
@@ -135,6 +133,14 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
   }, [displayMonthRows, selectedYear]);
 
   const waterfallSvg = useMemo(() => {
+    const light = chartTheme === 'light';
+    const COL_GRID = light ? 'rgba(15, 23, 42, 0.1)' : 'rgba(148, 163, 184, 0.14)';
+    const COL_GRID_ZERO = light ? 'rgba(15, 23, 42, 0.22)' : 'rgba(148, 163, 184, 0.35)';
+    const COL_AXIS = light ? '#334155' : '#94a3b8';
+    const COL_LABEL = light ? '#0f172a' : '#e2e8f0';
+    const COL_CONN = light ? 'rgba(15, 23, 42, 0.35)' : 'rgba(148, 163, 184, 0.45)';
+    const COL_TOTAL = light ? '#475569' : COL_NEU;
+
     const deltas = monthValues.map((v) => (Number.isFinite(v) ? v : 0));
     const cum = [0];
     for (let i = 0; i < 12; i++) cum.push(cum[i] + deltas[i]);
@@ -215,7 +221,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
               y1={yJoin}
               x2={xL}
               y2={yJoin}
-              stroke="rgba(148, 163, 184, 0.45)"
+              stroke={COL_CONN}
               strokeWidth={1.25}
               strokeDasharray="3 2"
             />
@@ -235,7 +241,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
 
     const endCum = cum[12];
     const totalLabel = (
-      <text x={padL + iw / 2} y={H - 6} textAnchor="middle" fill={COL_NEU} fontSize="9" fontWeight="700">
+      <text x={padL + iw / 2} y={H - 6} textAnchor="middle" fill={COL_TOTAL} fontSize="9" fontWeight="700">
         Year cumulative (Dec end): {endCum >= 0 ? '+' : ''}
         {endCum.toFixed(1)}%
       </text>
@@ -250,9 +256,12 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
         {totalLabel}
       </svg>
     );
-  }, [monthValues, selectedYear]);
+  }, [monthValues, selectedYear, chartTheme]);
 
   const donutSvg = useMemo(() => {
+    const light = chartTheme === 'light';
+    const ringStroke = light ? '#e2e8f0' : '#0d1520';
+    const emptyFill = light ? '#64748b' : '#94a3b8';
     const { pos, neg } = yearStats;
     const total = pos + neg;
     const cx = 100;
@@ -260,7 +269,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
     if (total === 0) {
       return (
         <svg className="ticker-annual-figma__donut-svg" viewBox="0 0 200 200">
-          <text x="100" y="104" textAnchor="middle" fill="#94a3b8" fontSize="12" fontWeight="600">
+          <text x="100" y="104" textAnchor="middle" fill={emptyFill} fontSize="12" fontWeight="600">
             No annual data
           </text>
         </svg>
@@ -273,7 +282,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
     if (neg === 0) {
       const d = donutSegPath(R0, R1, start, endFull);
       const lp = labelOnDonut((R0 + R1) / 2, start + 180);
-      paths = <path d={d} fill={COL_DONUT_POS} stroke="#0d1520" strokeWidth="2.5" />;
+      paths = <path d={d} fill={COL_DONUT_POS} stroke={ringStroke} strokeWidth="2.5" />;
       labels = (
         <text x={lp.x} y={lp.y + 5} textAnchor="middle" fill="#fff" fontSize="16" fontWeight="800">
           {pos}
@@ -282,7 +291,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
     } else if (pos === 0) {
       const d = donutSegPath(R0, R1, start, endFull);
       const lp = labelOnDonut((R0 + R1) / 2, start + 180);
-      paths = <path d={d} fill={COL_DONUT_NEG} stroke="#0d1520" strokeWidth="2.5" />;
+      paths = <path d={d} fill={COL_DONUT_NEG} stroke={ringStroke} strokeWidth="2.5" />;
       labels = (
         <text x={lp.x} y={lp.y + 5} textAnchor="middle" fill="#fff" fontSize="16" fontWeight="800">
           {neg}
@@ -301,8 +310,8 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
       const ln = labelOnDonut((R0 + R1) / 2, midNeg);
       paths = (
         <>
-          <path d={pPos} fill={COL_DONUT_POS} stroke="#0d1520" strokeWidth="2.5" />
-          <path d={pNeg} fill={COL_DONUT_NEG} stroke="#0d1520" strokeWidth="2.5" />
+          <path d={pPos} fill={COL_DONUT_POS} stroke={ringStroke} strokeWidth="2.5" />
+          <path d={pNeg} fill={COL_DONUT_NEG} stroke={ringStroke} strokeWidth="2.5" />
         </>
       );
       labels = (
@@ -324,7 +333,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
         </g>
       </svg>
     );
-  }, [yearStats]);
+  }, [yearStats, chartTheme]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];

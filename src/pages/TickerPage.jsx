@@ -543,6 +543,24 @@ function pctClass(n) {
   return '';
 }
 
+/** Main chart pixel height by viewport (Lightweight Charts is not fluid vertically). */
+function useMediaChartHeight() {
+  const [height, setHeight] = useState(320);
+  useEffect(() => {
+    const update = () => {
+      const w = window.innerWidth;
+      if (w < 480) setHeight(220);
+      else if (w < 768) setHeight(260);
+      else if (w < 1024) setHeight(290);
+      else setHeight(320);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+  return height;
+}
+
 export default function TickerPage() {
   const { symbol: symbolParam } = useParams();
   const navigate = useNavigate();
@@ -873,6 +891,8 @@ export default function TickerPage() {
   const symQtd = qtdFromRows(statsSorted);
   const spyQtd = qtdFromRows(statsSpySorted);
 
+  const chartHeight = useMediaChartHeight();
+
   const chartRangeLabel = chartApiRange.start + ' → ' + chartApiRange.end;
   const chartModeHelp = appliedCustomRange
     ? 'Using your custom start/end (overrides the pill timeframe until you reset).'
@@ -1163,7 +1183,7 @@ export default function TickerPage() {
               {chartLoading && sortedChart.length === 0 ? (
                 <div className="ticker-chart-skeleton">Loading chart…</div>
               ) : sortedChart.length ? (
-                <TickerLightweightChart rows={sortedChart} height={320} chartType={mainChartType} />
+                <TickerLightweightChart rows={sortedChart} height={chartHeight} chartType={mainChartType} />
               ) : (
                 <div className="ticker-sparkline ticker-sparkline--empty">No OHLC rows in this range.</div>
               )}

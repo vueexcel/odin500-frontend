@@ -62,6 +62,14 @@ function IcoSortChevron({ className }) {
   );
 }
 
+function IcoPlus({ className }) {
+  return (
+    <svg className={className} width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function IcoGear({ className }) {
   return (
     <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -287,6 +295,12 @@ export function WatchlistRailFlyout({ open, onClose }) {
     setManagePanel('update-edit');
   };
 
+  const openUpdateForSelectedUserList = () => {
+    if (!selected || selected.kind !== 'user' || !selected.watchlistId) return;
+    setSettingsOpen(false);
+    beginUpdateEdit(selected);
+  };
+
   const submitCreate = async () => {
     const name = createName.trim();
     if (!name) {
@@ -448,6 +462,17 @@ export function WatchlistRailFlyout({ open, onClose }) {
             My Watchlists
           </h2>
           <div className="wl-flyout__head-actions" ref={settingsRef}>
+            {selected?.kind === 'user' && selected?.watchlistId ? (
+              <button
+                type="button"
+                className="wl-flyout__iconbtn"
+                title="Add tickers to this watchlist"
+                aria-label="Add tickers to this watchlist"
+                onClick={openUpdateForSelectedUserList}
+              >
+                <IcoPlus className="wl-flyout__iconbtn-svg" />
+              </button>
+            ) : null}
             <button
               type="button"
               className={'wl-flyout__iconbtn' + (settingsOpen ? ' wl-flyout__iconbtn--active' : '')}
@@ -566,8 +591,26 @@ export function WatchlistRailFlyout({ open, onClose }) {
                 </tr>
               ) : sortedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="wl-flyout__td-muted">
-                    No tickers in this list.
+                  <td colSpan={3} className="wl-flyout__empty-cell">
+                    {selected?.kind === 'user' && selected?.watchlistId ? (
+                      <div className="wl-flyout__empty-state">
+                        <p className="wl-flyout__empty-msg">
+                          There are no tickers in the Watchlist please Add tickers to see the data
+                        </p>
+                        <button
+                          type="button"
+                          className="wl-flyout__empty-add-btn"
+                          onClick={() => beginUpdateEdit(selected)}
+                          aria-label="Add tickers to this watchlist"
+                        >
+                          <IcoPlus className="wl-flyout__empty-add-ico" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="wl-flyout__empty-state wl-flyout__empty-state--plain">
+                        <p className="wl-flyout__td-muted wl-flyout__empty-fallback">No tickers in this list.</p>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (

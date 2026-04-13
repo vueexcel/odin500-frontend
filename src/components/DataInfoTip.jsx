@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 /** Light “i in circle” for dark UI (matches reference info icon). */
 function IconInfoCircle({ className }) {
@@ -10,42 +11,72 @@ function IconInfoCircle({ className }) {
   );
 }
 
-/** Info button + floating tooltip (ticker cards, annual charts, etc.). */
+function positionTooltip(btnEl, floatEl, align) {
+  if (!btnEl || !floatEl) return;
+  const pad = 12;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const br = btnEl.getBoundingClientRect();
+  const fw = floatEl.offsetWidth;
+  const fh = floatEl.offsetHeight;
+
+  let top = br.bottom + 8;
+  let left = align === 'end' ? br.right - fw : br.left;
+
+  if (left < pad) left = pad;
+  if (left + fw > vw - pad) left = Math.max(pad, vw - pad - fw);
+
+  if (top + fh > vh - pad) {
+    top = br.top - fh - 8;
+  }
+  if (top < pad) top = pad;
+
+  Object.assign(floatEl.style, {
+    position: 'fixed',
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(left)}px`,
+    right: 'auto',
+    bottom: 'auto',
+    zIndex: '10050'
+  });
+}
+
+/** Info button + floating tooltip (portaled to `document.body`, clamped to viewport). */
 export function DataInfoTip({ align = 'end', children }) {
   const [open, setOpen] = useState(false);
-  const [flipH, setFlipH] = useState(false);
   const wrapRef = useRef(null);
-  const floatRef = useRef(null);
+  const btnRef = useRef(null);
+  const portalRef = useRef(null);
 
   useLayoutEffect(() => {
-    if (!open) {
-      setFlipH(false);
-      return;
+    if (!open) return;
+    const float = portalRef.current;
+    const btn = btnRef.current;
+    if (!float || !btn) return;
+
+    function place() {
+      positionTooltip(btn, float, align);
     }
-    const pad = 12;
-    function measure() {
-      const el = floatRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const vw = window.innerWidth;
-      if (align === 'start') {
-        setFlipH(r.right > vw - pad);
-      } else {
-        setFlipH(r.left < pad);
-      }
-    }
-    const id = requestAnimationFrame(() => measure());
-    window.addEventListener('resize', measure);
+
+    place();
+    const id0 = requestAnimationFrame(place);
+    const id1 = requestAnimationFrame(place);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
     return () => {
-      cancelAnimationFrame(id);
-      window.removeEventListener('resize', measure);
+      cancelAnimationFrame(id0);
+      cancelAnimationFrame(id1);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
     };
-  }, [open, align]);
+  }, [open, align, children]);
 
   useEffect(() => {
     if (!open) return;
     function onDoc(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+      const inWrap = wrapRef.current && wrapRef.current.contains(e.target);
+      const inPortal = portalRef.current && portalRef.current.contains(e.target);
+      if (!inWrap && !inPortal) setOpen(false);
     }
     function onKey(e) {
       if (e.key === 'Escape') setOpen(false);
@@ -57,27 +88,29 @@ export function DataInfoTip({ align = 'end', children }) {
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+
   return (
-    <span
-      ref={wrapRef}
-      className={
-        'ticker-data-tip ticker-data-tip--align-' + align + (flipH ? ' ticker-data-tip--flip-h' : '')
-      }
-    >
-      <button
-        type="button"
-        className="ticker-data-tip__btn"
-        aria-expanded={open}
-        aria-label="What data is this?"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <IconInfoCircle className="ticker-data-tip__ico" />
-      </button>
-      {open ? (
-        <div ref={floatRef} className="ticker-data-tip__float" role="tooltip">
-          <div className="ticker-data-tip__inner">{children}</div>
-        </div>
-      ) : null}
-    </span>
+    <>
+      <span ref={wrapRef} className="ticker-data-tip">
+        <button
+          ref={btnRef}
+          type="button"
+          className="ticker-data-tip__btn"
+          aria-expanded={open}
+          aria-label="What data is this?"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <IconInfoCircle className="ticker-data-tip__ico" />
+        </button>
+      </span>
+      {open
+        ? createPortal(
+            <div ref={portalRef} className="ticker-data-tip__float ticker-data-tip__float--portal" role="tooltip">
+              <div className="ticker-data-tip__inner">{children}</div>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
   );
 }

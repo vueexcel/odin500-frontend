@@ -47,7 +47,21 @@ function IconSun() {
   );
 }
 
-export function AppHeader({ compact = false }) {
+function IconMoon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"
+        fill="currentColor"
+        stroke="currentColor"
+        strokeWidth="1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = null }) {
   const navigate = useNavigate();
 
   const handleSignOut = () => {
@@ -96,11 +110,15 @@ export function AppHeader({ compact = false }) {
               <IconBell />
               <span className="header-bell-badge">3</span>
             </button>
-            <button type="button" className="header-theme-switch" aria-label="Toggle theme" title="Theme">
+            <button
+              type="button"
+              className={'header-theme-switch' + (theme === 'light' ? ' header-theme-switch--light' : '')}
+              aria-label="Toggle theme"
+              title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              onClick={onToggleTheme || undefined}
+            >
               <span className="header-theme-switch-track">
-                <span className="header-theme-switch-thumb">
-                  <IconSun />
-                </span>
+                <span className="header-theme-switch-thumb">{theme === 'light' ? <IconSun /> : <IconMoon />}</span>
               </span>
             </button>
             <button type="button" className="header-signout-ghost" onClick={handleSignOut}>

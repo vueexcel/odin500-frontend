@@ -1,6 +1,60 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { createChart, CrosshairMode } from 'lightweight-charts';
 import { mapRowsToCandles, rowDateToTimeKey } from '../utils/chartData.js';
+import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
+
+function chartOptionsForTheme(theme, height) {
+  if (theme === 'light') {
+    return {
+      layout: {
+        background: { color: '#ffffff' },
+        textColor: '#475569'
+      },
+      grid: {
+        vertLines: { color: 'rgba(15, 23, 42, 0.08)' },
+        horzLines: { color: 'rgba(15, 23, 42, 0.08)' }
+      },
+      rightPriceScale: { borderColor: 'rgba(15, 23, 42, 0.12)' },
+      timeScale: {
+        borderColor: 'rgba(15, 23, 42, 0.12)',
+        rightOffset: 4,
+        barSpacing: 8,
+        fixLeftEdge: false,
+        fixRightEdge: false
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color: 'rgba(37, 99, 235, 0.35)', width: 1, style: 2 },
+        horzLine: { color: 'rgba(37, 99, 235, 0.35)', width: 1, style: 2 }
+      },
+      height
+    };
+  }
+  return {
+    layout: {
+      background: { color: '#0d1520' },
+      textColor: '#94a3b8'
+    },
+    grid: {
+      vertLines: { color: 'rgba(148, 163, 184, 0.12)' },
+      horzLines: { color: 'rgba(148, 163, 184, 0.12)' }
+    },
+    rightPriceScale: { borderColor: 'rgba(148, 163, 184, 0.25)' },
+    timeScale: {
+      borderColor: 'rgba(148, 163, 184, 0.25)',
+      rightOffset: 4,
+      barSpacing: 8,
+      fixLeftEdge: false,
+      fixRightEdge: false
+    },
+    crosshair: {
+      mode: CrosshairMode.Normal,
+      vertLine: { color: 'rgba(148, 163, 184, 0.45)', width: 1, style: 2 },
+      horzLine: { color: 'rgba(148, 163, 184, 0.45)', width: 1, style: 2 }
+    },
+    height
+  };
+}
 
 /** @typedef {'line' | 'area' | 'candles' | 'bars'} TickerChartType */
 
@@ -102,6 +156,8 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
   const chartTypeRef = useRef(chartType);
   const [crosshairHtml, setCrosshairHtml] = useState(null);
 
+  const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
+
   const { linePoints, candles, volumes, rowByTime } = useMemo(() => {
     const sorted = [...(rows || [])].sort((a, b) => {
       const ta = rowDateToTimeKey(a);
@@ -115,6 +171,8 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
       if (t) byTime.set(t, row);
     }
     const linePts = candles0.map((c) => ({ time: c.time, value: c.close }));
+    const upCol = chartTheme === 'light' ? 'rgba(22, 163, 74, 0.5)' : 'rgba(34, 197, 94, 0.45)';
+    const downCol = chartTheme === 'light' ? 'rgba(220, 38, 38, 0.5)' : 'rgba(239, 68, 68, 0.45)';
     const volumes0 = candles0.map((c) => {
       const row = byTime.get(c.time);
       const v = row ? pickNum(row, ['Volume', 'volume', 'VOLUME']) : null;
@@ -123,11 +181,11 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
       return {
         time: c.time,
         value: val,
-        color: up ? 'rgba(34, 197, 94, 0.45)' : 'rgba(239, 68, 68, 0.45)'
+        color: up ? upCol : downCol
       };
     });
     return { linePoints: linePts, candles: candles0, volumes: volumes0, rowByTime: byTime };
-  }, [rows]);
+  }, [rows, chartTheme]);
 
   useEffect(() => {
     rowByTimeRef.current = rowByTime;
@@ -137,19 +195,30 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
     chartTypeRef.current = chartType;
   }, [chartType]);
 
-  const addMainSeries = useCallback((chart, type) => {
-    const ohlcStyle = {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderVisible: false,
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
-      priceScaleId: 'right'
-    };
+  const addMainSeries = useCallback((chart, type, theme) => {
+    const ohlcStyle =
+      theme === 'light'
+        ? {
+            upColor: '#16a34a',
+            downColor: '#dc2626',
+            borderVisible: false,
+            wickUpColor: '#16a34a',
+            wickDownColor: '#dc2626',
+            priceScaleId: 'right'
+          }
+        : {
+            upColor: '#22c55e',
+            downColor: '#ef4444',
+            borderVisible: false,
+            wickUpColor: '#22c55e',
+            wickDownColor: '#ef4444',
+            priceScaleId: 'right'
+          };
+    const lineColor = theme === 'light' ? '#0284c7' : '#38bdf8';
     switch (type) {
       case 'line':
         return chart.addLineSeries({
-          color: '#38bdf8',
+          color: lineColor,
           lineWidth: 2,
           priceLineVisible: true,
           lastValueVisible: true,
@@ -158,9 +227,9 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
         });
       case 'area':
         return chart.addAreaSeries({
-          lineColor: '#38bdf8',
-          topColor: 'rgba(56, 189, 248, 0.45)',
-          bottomColor: 'rgba(56, 189, 248, 0.02)',
+          lineColor,
+          topColor: theme === 'light' ? 'rgba(2, 132, 199, 0.35)' : 'rgba(56, 189, 248, 0.45)',
+          bottomColor: theme === 'light' ? 'rgba(2, 132, 199, 0.04)' : 'rgba(56, 189, 248, 0.02)',
           lineWidth: 2,
           priceLineVisible: true,
           lastValueVisible: true,
@@ -173,7 +242,7 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
         return chart.addBarSeries(ohlcStyle);
       default:
         return chart.addLineSeries({
-          color: '#38bdf8',
+          color: lineColor,
           lineWidth: 2,
           priceLineVisible: true,
           lastValueVisible: true,
@@ -187,28 +256,9 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
     const el = containerRef.current;
     if (!el) return;
 
+    const appearance = chartOptionsForTheme(chartTheme, height);
     const chart = createChart(el, {
-      layout: {
-        background: { color: '#0d1520' },
-        textColor: '#94a3b8'
-      },
-      grid: {
-        vertLines: { color: 'rgba(148, 163, 184, 0.12)' },
-        horzLines: { color: 'rgba(148, 163, 184, 0.12)' }
-      },
-      rightPriceScale: { borderColor: 'rgba(148, 163, 184, 0.25)' },
-      timeScale: {
-        borderColor: 'rgba(148, 163, 184, 0.25)',
-        rightOffset: 4,
-        barSpacing: 8,
-        fixLeftEdge: false,
-        fixRightEdge: false
-      },
-      crosshair: {
-        mode: CrosshairMode.Normal,
-        vertLine: { color: 'rgba(148, 163, 184, 0.45)', width: 1, style: 2 },
-        horzLine: { color: 'rgba(148, 163, 184, 0.45)', width: 1, style: 2 }
-      },
+      ...appearance,
       handleScroll: {
         mouseWheel: true,
         pressedMouseMove: true,
@@ -220,11 +270,10 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
         mouseWheel: true,
         pinch: true
       },
-      width: el.clientWidth,
-      height
+      width: el.clientWidth
     });
 
-    const mainSeries = addMainSeries(chart, chartType);
+    const mainSeries = addMainSeries(chart, chartType, chartTheme);
     const volSeries = chart.addHistogramSeries({
       priceFormat: { type: 'volume' },
       priceScaleId: ''
@@ -320,7 +369,7 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
       mainSeriesRef.current = null;
       volRef.current = null;
     };
-  }, [height, chartType, addMainSeries]);
+  }, [height, chartType, addMainSeries, chartTheme]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -345,7 +394,12 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
   return (
     <div className="ticker-lw-chart">
       <div ref={containerRef} className="ticker-lw-chart__root" />
-      <div className="ticker-lw-chart__hover" aria-live="polite">
+      <div
+        className={
+          'ticker-lw-chart__hover' + (chartTheme === 'light' ? ' ticker-lw-chart__hover--light' : '')
+        }
+        aria-live="polite"
+      >
         {crosshairHtml == null ? (
           <>
             <div className="ticker-lw-chart__ohlc-muted">Crosshair</div>
