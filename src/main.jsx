@@ -9,6 +9,7 @@ import SignupPage from './pages/SignupPage.jsx';
 import MarketHeatmapPage from './pages/MarketHeatmapPage.jsx';
 import OdinSignalsPage from './pages/OdinSignalsPage.jsx';
 import TickersPage from './pages/TickersPage.jsx';
+import TickerPage from './pages/TickerPage.jsx';
 import './index.css';
 import { initAuthSessionOnLoad } from './store/apiStore.js';
 
@@ -34,6 +35,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         >
           <Route path="/market" element={<App />} />
           <Route path="/tickers" element={<TickersPage />} />
+          <Route path="/ticker/:symbol?" element={<TickerPage />} />
           <Route path="/heatmap" element={<MarketHeatmapPage />} />
           <Route path="/odin-signals" element={<OdinSignalsPage />} />
           <Route path="/accounts" element={<SimplePage title="Accounts" />} />

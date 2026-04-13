@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { WatchlistRailFlyout } from './WatchlistRailFlyout.jsx';
+
 /**
  * Fixed narrow right rail (Figma): always visible, not expandable.
  */
@@ -89,25 +92,37 @@ function IcoBell() {
 }
 
 export function AppRightRail() {
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
+
   return (
-    <aside className="app-right-rail" aria-label="Quick navigation">
-      <div className="app-right-rail__stack">
-        <button type="button" className="app-right-rail__btn" title="Profile" aria-label="Profile">
-          <IcoUser />
-        </button>
-        <button type="button" className="app-right-rail__btn" title="Analytics" aria-label="Analytics">
-          <IcoAnalytics />
-        </button>
-        <button type="button" className="app-right-rail__btn" title="News" aria-label="News">
-          <IcoNews />
-        </button>
-        <button type="button" className="app-right-rail__btn" title="Trending" aria-label="Trending">
-          <IcoFlame />
-        </button>
-        <button type="button" className="app-right-rail__btn" title="Notifications" aria-label="Notifications">
-          <IcoBell />
-        </button>
-      </div>
-    </aside>
+    <>
+      <WatchlistRailFlyout open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
+      <aside className="app-right-rail" aria-label="Quick navigation">
+        <div className="app-right-rail__stack">
+          <button type="button" className="app-right-rail__btn" title="Profile" aria-label="Profile">
+            <IcoUser />
+          </button>
+          <button
+            type="button"
+            className={'app-right-rail__btn' + (watchlistOpen ? ' app-right-rail__btn--active' : '')}
+            title="My Watchlists"
+            aria-label="My Watchlists"
+            aria-expanded={watchlistOpen}
+            onClick={() => setWatchlistOpen((o) => !o)}
+          >
+            <IcoAnalytics />
+          </button>
+          <button type="button" className="app-right-rail__btn" title="News" aria-label="News">
+            <IcoNews />
+          </button>
+          <button type="button" className="app-right-rail__btn" title="Trending" aria-label="Trending">
+            <IcoFlame />
+          </button>
+          <button type="button" className="app-right-rail__btn" title="Notifications" aria-label="Notifications">
+            <IcoBell />
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }
