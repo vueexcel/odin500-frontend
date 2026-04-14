@@ -4,7 +4,7 @@ import { clearApiCache, clearAuthToken } from '../store/apiStore.js';
 
 const NAV_ITEMS = [
   { to: '/market', label: 'Market' },
-  { to: '/tickers', label: 'Tickers' },
+  { to: '/ticker', label: 'Ticker' },
   { to: '/heatmap', label: 'Heatmap' },
   { to: '/odin-signals', label: 'Odin Signals' },
   { to: '/accounts', label: 'Accounts' },

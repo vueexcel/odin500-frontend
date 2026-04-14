@@ -244,7 +244,7 @@ export function AppSidebar({ expanded, setExpanded }) {
             <nav className="app-sidebar__nav" aria-label="Dashboards">
               <NavRow icon={IconMonitor} label="My Dashboards" onClick={() => {}} />
               <NavRow icon={IconGrid} label="Market Dashboards" onClick={() => {}} />
-              <NavRow to="/tickers" icon={IconBarChart} label="Analytics" />
+              <NavRow to="/odin-signals" icon={IconBarChart} label="Analytics" />
               <NavRow to="/heatmap" icon={IconGrid} label="Heatmap" />
               <NavRow icon={IconDocSearch} label="Advanced Search" onClick={() => {}} />
             </nav>

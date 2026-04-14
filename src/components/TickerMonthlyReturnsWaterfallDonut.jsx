@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
+import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 
 const DEFAULT_YEAR = 2025;
@@ -57,7 +58,7 @@ function labelOnDonut(r, degMid) {
  * Waterfall (cumulative monthly returns for selected year) + donut (# positive / negative years from annual returns).
  * Renders below `TickerMonthlyReturnsChart`; does not replace it.
  */
-export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, annualReturns, asOfDate }) {
+export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, annualReturns, asOfDate, plotHeight }) {
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const [monthRangeApplied, setMonthRangeApplied] = useState({ start: '', end: '' });
   const [annualRangeApplied, setAnnualRangeApplied] = useState({ start: '', end: '' });
@@ -248,7 +249,12 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
     );
 
     return (
-      <svg className="ticker-annual-figma__svg ticker-monthly-adv__svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+      <svg
+        className="ticker-annual-figma__svg ticker-monthly-adv__svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={tickerSvgPlotStyle(plotHeight != null ? Math.min(plotHeight, 420) : null)}
+      >
         {gridLines}
         {connectors}
         {bars}
@@ -256,7 +262,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
         {totalLabel}
       </svg>
     );
-  }, [monthValues, selectedYear, chartTheme]);
+  }, [monthValues, selectedYear, chartTheme, plotHeight]);
 
   const donutSvg = useMemo(() => {
     const light = chartTheme === 'light';
@@ -266,9 +272,12 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
     const total = pos + neg;
     const cx = 100;
     const cy = 100;
+    const donutPx = plotHeight != null ? Math.min(220, plotHeight) : null;
+    const donutStyle = tickerSvgPlotStyle(donutPx);
+
     if (total === 0) {
       return (
-        <svg className="ticker-annual-figma__donut-svg" viewBox="0 0 200 200">
+        <svg className="ticker-annual-figma__donut-svg" viewBox="0 0 200 200" style={donutStyle}>
           <text x="100" y="104" textAnchor="middle" fill={emptyFill} fontSize="12" fontWeight="600">
             No annual data
           </text>
@@ -326,14 +335,14 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
       );
     }
     return (
-      <svg className="ticker-annual-figma__donut-svg" viewBox="0 0 200 200">
+      <svg className="ticker-annual-figma__donut-svg" viewBox="0 0 200 200" style={donutStyle}>
         <g transform={`translate(${cx},${cy})`}>
           {paths}
           {labels}
         </g>
       </svg>
     );
-  }, [yearStats, chartTheme]);
+  }, [yearStats, chartTheme, plotHeight]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];

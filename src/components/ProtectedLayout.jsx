@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
+import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { AppHeader } from './AppHeader.jsx';
 import { AppSidebar } from './AppSidebar.jsx';
 import { AppRightRail } from './AppRightRail.jsx';
@@ -28,6 +29,20 @@ export function ProtectedLayout() {
       /* ignore */
     }
   }, [theme]);
+
+  useEffect(() => {
+    const warmWatchlistCache = () => {
+      if (!getAuthToken()) return;
+      const ttlMs = 2 * 60 * 1000;
+      void Promise.all([
+        fetchJsonCached({ path: '/api/watchlists/defaults', auth: false, ttlMs }),
+        fetchJsonCached({ path: '/api/watchlists', auth: true, ttlMs })
+      ]).catch(() => {});
+    };
+    warmWatchlistCache();
+    window.addEventListener('odin-auth-updated', warmWatchlistCache);
+    return () => window.removeEventListener('odin-auth-updated', warmWatchlistCache);
+  }, []);
 
   const toggleTheme = () => {
     setTheme((curr) => (curr === 'dark' ? 'light' : 'dark'));

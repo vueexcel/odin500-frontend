@@ -1,6 +1,8 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useId, useMemo, useState } from 'react';
+import { useTickerPlotResize } from '../hooks/useTickerPlotResize.js';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
+import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
 /** Match `TickerLightweightChart` / dark ticker cards. */
 const COL_BAR = '#2563eb';
@@ -9,8 +11,85 @@ const COL_GRID = 'rgba(148, 163, 184, 0.14)';
 const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
 const COL_AXIS = '#94a3b8';
 const COL_LABEL = '#e2e8f0';
-const Y_AXIS_MIN = -20;
-const Y_AXIS_MAX = 60;
+
+/** “Nice” tick step for ~`targetCount` intervals across `span`. */
+function pickNiceStep(span, targetCount) {
+  if (!Number.isFinite(span) || span <= 0) return 1;
+  const raw = span / Math.max(2, targetCount);
+  const pow10 = 10 ** Math.floor(Math.log10(Math.max(raw, 1e-9)));
+  const err = raw / pow10;
+  let nice = 10;
+  if (err <= 1.5) nice = 1;
+  else if (err <= 3) nice = 2;
+  else if (err <= 7) nice = 5;
+  return nice * pow10;
+}
+
+function buildTicks(yMin, yMax, step) {
+  const ticks = [];
+  const k0 = Math.ceil((yMin - 1e-9) / step);
+  const k1 = Math.floor((yMax + 1e-9) / step);
+  for (let k = k0; k <= k1; k++) {
+    const t = Math.round(k * step * 1e8) / 1e8;
+    ticks.push(t);
+  }
+  if (!ticks.length) ticks.push(0);
+  return ticks;
+}
+
+/**
+ * Y-axis from data (min/max of series + 0, optional avg). Tick count grows when the chart is taller (`plotPx`).
+ * @param {number[]} seriesValues
+ * @param {number | null} avgExtra — include in domain so the average line stays visible
+ * @param {number | undefined} plotPx — rendered SVG height in CSS px (resize)
+ * @param {number} svgHeight — viewBox height of this chart
+ * @param {number} innerHViewBox — plot inner height in SVG units
+ */
+function computePercentAxis(seriesValues, avgExtra, plotPx, svgHeight, innerHViewBox) {
+  const vals = seriesValues.filter((v) => Number.isFinite(v));
+  if (!vals.length) {
+    return { yMin: -20, yMax: 60, ticks: [-20, -10, 0, 10, 20, 30, 40, 50, 60], step: 10 };
+  }
+  let lo = Math.min(0, ...vals);
+  let hi = Math.max(0, ...vals);
+  if (avgExtra != null && Number.isFinite(avgExtra)) {
+    lo = Math.min(lo, avgExtra);
+    hi = Math.max(hi, avgExtra);
+  }
+  let span = hi - lo;
+  if (span < 1e-6) {
+    lo -= 5;
+    hi += 5;
+    span = 10;
+  }
+  const pad = Math.max(span * 0.08, 2);
+  lo -= pad;
+  hi += pad;
+
+  const effPlot = plotPx != null && Number.isFinite(plotPx) ? plotPx : svgHeight;
+  const renderedInnerPx = innerHViewBox * (effPlot / svgHeight);
+  const minPxPerTick = renderedInnerPx < 200 ? 28 : renderedInnerPx < 340 ? 22 : renderedInnerPx < 500 ? 18 : 14;
+  const targetCount = Math.min(22, Math.max(5, Math.round(renderedInnerPx / minPxPerTick)));
+
+  const step = pickNiceStep(hi - lo, targetCount);
+  const yMin = Math.floor(lo / step) * step;
+  const yMax = Math.ceil(hi / step) * step;
+  const ticks = buildTicks(yMin, yMax, step);
+  return { yMin, yMax, ticks, step };
+}
+
+function yForValueAxis(v, innerTop, innerH, yMin, yMax) {
+  if (!Number.isFinite(v)) return innerTop + innerH / 2;
+  const c = Math.min(yMax, Math.max(yMin, v));
+  if (Math.abs(yMax - yMin) < 1e-12) return innerTop + innerH / 2;
+  return innerTop + ((yMax - c) / (yMax - yMin)) * innerH;
+}
+
+function formatTickPct(t) {
+  const r = Math.round(t * 10) / 10;
+  if (Math.abs(r - Math.round(r)) < 1e-6) return `${Math.round(r)}%`;
+  return `${r}%`;
+}
 
 function parseYear(period) {
   const m = String(period || '').match(/(\d{4})/);
@@ -24,17 +103,6 @@ function median(nums) {
   const s = [...arr].sort((a, b) => a - b);
   const mid = Math.floor(s.length / 2);
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}
-
-function clampY(v) {
-  if (!Number.isFinite(v)) return Y_AXIS_MIN;
-  return Math.min(Y_AXIS_MAX, Math.max(Y_AXIS_MIN, v));
-}
-
-/** Map return % to SVG y (top = Y_AXIS_MAX). */
-function yForValue(v, innerTop, innerH) {
-  const c = clampY(v);
-  return innerTop + ((Y_AXIS_MAX - c) / (Y_AXIS_MAX - Y_AXIS_MIN)) * innerH;
 }
 
 function donutSegPath(r0, r1, deg0, deg1) {
@@ -81,9 +149,21 @@ function csvEscape(s) {
 
 /**
  * Figma-style annual returns + stats (uses `performance.annualReturns` from ticker-returns API).
- * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string }} props
+ * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, resizeStorageKey?: string, resizeDefaultHeight?: number }} props
  */
-export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
+export function TickerAnnualReturnsFigma({
+  symbol,
+  annualReturns,
+  asOfDate,
+  plotHeight,
+  resizeStorageKey,
+  resizeDefaultHeight = 260
+}) {
+  const resize = useTickerPlotResize(resizeStorageKey ?? null, resizeDefaultHeight);
+  const plotPx = resize.plotHeight ?? plotHeight;
+  const clipComboId = useId().replace(/:/g, '');
+  const clipSummaryId = useId().replace(/:/g, '');
+
   const [showTable, setShowTable] = useState(false);
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
 
@@ -165,9 +245,11 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
     const bw = (iw / n) * (1 - gap);
     const step = iw / n;
 
-    const yTicks = [-20, -10, 0, 10, 20, 30, 40, 50, 60];
+    const returns = displayRows.map((r) => r.totalReturn);
+    const { yMin, yMax, ticks: yTicks } = computePercentAxis(returns, stats.avg, plotPx, H, ih);
+
     const gridLines = yTicks.map((t) => {
-      const y = yForValue(t, padT, ih);
+      const y = yForValueAxis(t, padT, ih, yMin, yMax);
       return (
         <g key={t}>
           <line
@@ -175,35 +257,49 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
             y1={y}
             x2={W - padR}
             y2={y}
-            stroke={t === 0 ? COL_GRID_ZERO : COL_GRID}
-            strokeWidth={t === 0 ? 1.35 : 1}
+            stroke={Math.abs(t) < 1e-6 ? COL_GRID_ZERO : COL_GRID}
+            strokeWidth={Math.abs(t) < 1e-6 ? 1.35 : 1}
           />
           <text x={padL - 8} y={y + 4} textAnchor="end" fill={COL_AXIS} fontSize="11" fontWeight="600">
-            {t}%
+            {formatTickPct(t)}
           </text>
         </g>
       );
     });
 
-    const bars = displayRows.map((r, i) => {
+    const barRects = displayRows.map((r, i) => {
       const x = padL + i * step + (step - bw) / 2;
-      const y0 = yForValue(0, padT, ih);
-      const y1 = yForValue(r.totalReturn, padT, ih);
+      const y0 = yForValueAxis(0, padT, ih, yMin, yMax);
+      const y1 = yForValueAxis(r.totalReturn, padT, ih, yMin, yMax);
+      const top = Math.min(y0, y1);
+      const h = Math.abs(y1 - y0);
+      return (
+        <rect key={`r-${r.year}`} x={x} y={top} width={bw} height={Math.max(h, 1)} rx={2} fill={COL_BAR}>
+          <title>
+            {r.year}: {r.totalReturn >= 0 ? '+' : ''}
+            {r.totalReturn.toFixed(2)}% (Y {yMin.toFixed(0)}%–{yMax.toFixed(0)}%)
+          </title>
+        </rect>
+      );
+    });
+
+    const barLabels = displayRows.map((r, i) => {
+      const x = padL + i * step + (step - bw) / 2;
+      const y0 = yForValueAxis(0, padT, ih, yMin, yMax);
+      const y1 = yForValueAxis(r.totalReturn, padT, ih, yMin, yMax);
       const top = Math.min(y0, y1);
       const h = Math.abs(y1 - y0);
       const labY = r.totalReturn >= 0 ? top - 6 : top + h + 14;
       return (
-        <g key={r.year}>
-          <rect x={x} y={top} width={bw} height={Math.max(h, 1)} rx={2} fill={COL_BAR} />
-          <text x={x + bw / 2} y={labY} textAnchor="middle" fill={COL_LABEL} fontSize="11" fontWeight="700">
-            {r.totalReturn >= 0 ? '+' : ''}
-            {r.totalReturn.toFixed(0)}%
-          </text>
-        </g>
+        <text key={`t-${r.year}`} x={x + bw / 2} y={labY} textAnchor="middle" fill={COL_LABEL} fontSize="11" fontWeight="700">
+          {r.totalReturn >= 0 ? '+' : ''}
+          {r.totalReturn.toFixed(0)}%
+        </text>
       );
     });
 
-    const avgY = yForValue(stats.avg, padT, ih);
+    const avgY = yForValueAxis(stats.avg, padT, ih, yMin, yMax);
+    const avgLabelY = avgY < padT + 16 ? avgY + 14 : avgY - 5;
 
     const xLabels = displayRows.map((r, i) => {
       const cx = padL + i * step + step / 2;
@@ -215,14 +311,44 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
     });
 
     return (
-      <svg className="ticker-annual-figma__svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+      <svg
+        className="ticker-annual-figma__svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={tickerSvgPlotStyle(plotPx)}
+        aria-label={`Annual returns bar chart, Y-axis ${formatTickPct(yMin)} to ${formatTickPct(yMax)} from data range; resize to show finer grid labels.`}
+      >
+        <defs>
+          <clipPath id={clipComboId}>
+            <rect x={padL} y={padT} width={iw} height={ih} />
+          </clipPath>
+        </defs>
         {gridLines}
-        <line x1={padL} y1={avgY} x2={W - padR} y2={avgY} stroke={COL_ORANGE} strokeWidth={2.5} />
-        {bars}
+        <g clipPath={`url(#${clipComboId})`}>{barRects}</g>
+        <g pointerEvents="none">
+          <title>
+            Average {stats.avg >= 0 ? '+' : ''}
+            {stats.avg.toFixed(2)}%
+          </title>
+          <line x1={padL} y1={avgY} x2={W - padR} y2={avgY} stroke={COL_ORANGE} strokeWidth={2.5} />
+        </g>
+        <text
+          x={W - padR - 4}
+          y={avgLabelY}
+          textAnchor="end"
+          fill={COL_ORANGE}
+          fontSize="10"
+          fontWeight="700"
+          pointerEvents="none"
+        >
+          Av. {stats.avg >= 0 ? '+' : ''}
+          {stats.avg.toFixed(1)}%
+        </text>
+        {barLabels}
         {xLabels}
       </svg>
     );
-  }, [displayRows, stats]);
+  }, [clipComboId, displayRows, stats, plotPx]);
 
   const summaryBars = useMemo(() => {
     if (!stats) return null;
@@ -245,9 +371,12 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
     const bw = (iw / n) * (1 - gap);
     const step = iw / n;
 
-    const yTicks = [-20, -10, 0, 10, 20, 30, 40, 50, 60];
-    const gridLines = yTicks.map((t) => {
-      const y = yForValue(t, padT, ih);
+    const sumVals = items.map((it) => it.v).filter((v) => Number.isFinite(v));
+    const summaryPlotPx = plotPx != null ? Math.min(plotPx, 320) : 240;
+    const { yMin: syMin, yMax: syMax, ticks: syTicks } = computePercentAxis(sumVals, null, summaryPlotPx, H, ih);
+
+    const gridLines = syTicks.map((t) => {
+      const y = yForValueAxis(t, padT, ih, syMin, syMax);
       return (
         <g key={t}>
           <line
@@ -255,29 +384,40 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
             y1={y}
             x2={W - padR}
             y2={y}
-            stroke={t === 0 ? COL_GRID_ZERO : COL_GRID}
-            strokeWidth={t === 0 ? 1.35 : 1}
+            stroke={Math.abs(t) < 1e-6 ? COL_GRID_ZERO : COL_GRID}
+            strokeWidth={Math.abs(t) < 1e-6 ? 1.35 : 1}
           />
           <text x={padL - 8} y={y + 4} textAnchor="end" fill={COL_AXIS} fontSize="11" fontWeight="600">
-            {t}%
+            {formatTickPct(t)}
           </text>
         </g>
       );
     });
 
-    const bars = items.map((it, i) => {
+    const barRects = items.map((it, i) => {
       const x = padL + i * step + (step - bw) / 2;
-      const y0 = yForValue(0, padT, ih);
-      const y1 = yForValue(it.v, padT, ih);
+      const y0 = yForValueAxis(0, padT, ih, syMin, syMax);
+      const y1 = yForValueAxis(it.v, padT, ih, syMin, syMax);
       const top = Math.min(y0, y1);
       const h = Math.abs(y1 - y0);
-      const labY = it.v >= 0 ? top - 5 : top + h + 14;
       return (
-        <g key={it.key}>
-          <rect x={x} y={top} width={bw} height={Math.max(h, 1)} rx={2} fill={COL_BAR} />
+        <rect key={`sr-${it.key}`} x={x} y={top} width={bw} height={Math.max(h, 1)} rx={2} fill={COL_BAR} />
+      );
+    });
+
+    const barTexts = items.map((it, i) => {
+      const x = padL + i * step + (step - bw) / 2;
+      const y0 = yForValueAxis(0, padT, ih, syMin, syMax);
+      const y1 = yForValueAxis(it.v, padT, ih, syMin, syMax);
+      const top = Math.min(y0, y1);
+      const h = Math.abs(y1 - y0);
+      const labY = !Number.isFinite(it.v) ? H / 2 : it.v >= 0 ? top - 5 : top + h + 14;
+      return (
+        <g key={`st-${it.key}`}>
           <text x={x + bw / 2} y={labY} textAnchor="middle" fill={COL_LABEL} fontSize="11" fontWeight="700">
-            {it.v >= 0 ? '+' : ''}
-            {Number(it.v).toFixed(0)}%
+            {!Number.isFinite(it.v)
+              ? '—'
+              : `${it.v >= 0 ? '+' : ''}${Number(it.v).toFixed(0)}%`}
           </text>
           <text x={x + bw / 2} y={H - 18} textAnchor="middle" fill={COL_AXIS} fontSize="11" fontWeight="700">
             {it.label}
@@ -287,12 +427,23 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
     });
 
     return (
-      <svg className="ticker-annual-figma__svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+      <svg
+        className="ticker-annual-figma__svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={tickerSvgPlotStyle(plotPx != null ? Math.min(plotPx, 320) : null)}
+      >
+        <defs>
+          <clipPath id={clipSummaryId}>
+            <rect x={padL} y={padT} width={iw} height={ih} />
+          </clipPath>
+        </defs>
         {gridLines}
-        {bars}
+        <g clipPath={`url(#${clipSummaryId})`}>{barRects}</g>
+        {barTexts}
       </svg>
     );
-  }, [stats]);
+  }, [clipSummaryId, stats, plotPx]);
 
   const donut = useMemo(() => {
     if (!stats) return null;
@@ -301,9 +452,11 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
     const cy = 100;
     const r0 = 52;
     const r1 = 82;
+    const donutStyle = tickerSvgPlotStyle(plotPx != null ? Math.min(220, plotPx) : null);
+
     if (total === 0) {
       return (
-        <svg className="ticker-annual-figma__donut-svg" viewBox="0 0 200 200">
+        <svg className="ticker-annual-figma__donut-svg" viewBox="0 0 200 200" style={donutStyle}>
           <text x="100" y="104" textAnchor="middle" fill="#94a3b8" fontSize="12" fontWeight="600">
             No data
           </text>
@@ -359,14 +512,14 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
       );
     }
     return (
-      <svg className="ticker-annual-figma__donut-svg" viewBox="0 0 200 200">
+      <svg className="ticker-annual-figma__donut-svg" viewBox="0 0 200 200" style={donutStyle}>
         <g transform={`translate(${cx},${cy})`}>
           {paths}
           {labels}
         </g>
       </svg>
     );
-  }, [stats]);
+  }, [stats, plotPx]);
 
   if (!rows.length) {
     return (
@@ -391,7 +544,11 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
 
   return (
     <div className="ticker-annual-figma">
-      <div className="ticker-annual-figma__section">
+      <div
+        className={
+          'ticker-annual-figma__section' + (resize.enabled ? ' ticker-annual-figma__section--resize' : '')
+        }
+      >
         <div className="ticker-annual-figma__toolbar">
           <span className="ticker-annual-figma__badge">Annual returns</span>
           <div className="ticker-annual-figma__actions">
@@ -458,6 +615,19 @@ export function TickerAnnualReturnsFigma({ symbol, annualReturns, asOfDate }) {
               </tbody>
             </table>
           </div>
+        ) : null}
+        {resize.enabled ? (
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-valuemin={resize.ariaMin}
+            aria-valuemax={resize.ariaMax}
+            aria-valuenow={resize.ariaNow}
+            className="ticker-chart-resize ticker-chart-resize--scope ticker-chart-resize--in-section"
+            title="Drag to resize chart height. Double-click to reset."
+            onPointerDown={resize.onPointerDown}
+            onDoubleClick={resize.onDoubleClick}
+          />
         ) : null}
       </div>
 

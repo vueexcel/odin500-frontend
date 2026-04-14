@@ -367,6 +367,26 @@ export function normalizeTickerSearchRows(payload) {
   });
 }
 
+/**
+ * Return cached JSON if still fresh (same key/TTL rules as fetchJsonCached). No network.
+ * Use to paint UI immediately after prefetch or before a refresh completes.
+ */
+export function peekJsonCached({
+  path,
+  method = 'GET',
+  body,
+  ttlMs = 5 * 60 * 1000
+}) {
+  const reqKey = makeRequestKey(method, path, body);
+  const now = Date.now();
+  const skipAppCache =
+    method === 'GET' && typeof path === 'string' && path.includes('/api/tickers/search');
+  if (skipAppCache) return undefined;
+  const cached = memoryStore.cache.get(reqKey);
+  if (cached && now - cached.ts < ttlMs) return cached.data;
+  return undefined;
+}
+
 export async function fetchJsonCached({
   path,
   method = 'GET',

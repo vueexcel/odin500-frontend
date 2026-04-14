@@ -8,7 +8,8 @@ function chartOptionsForTheme(theme, height) {
     return {
       layout: {
         background: { color: '#ffffff' },
-        textColor: '#475569'
+        textColor: '#475569',
+        attributionLogo: false
       },
       grid: {
         vertLines: { color: 'rgba(15, 23, 42, 0.08)' },
@@ -33,7 +34,8 @@ function chartOptionsForTheme(theme, height) {
   return {
     layout: {
       background: { color: '#0d1520' },
-      textColor: '#94a3b8'
+      textColor: '#94a3b8',
+      attributionLogo: false
     },
     grid: {
       vertLines: { color: 'rgba(148, 163, 184, 0.12)' },
@@ -369,7 +371,14 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
       mainSeriesRef.current = null;
       volRef.current = null;
     };
-  }, [height, chartType, addMainSeries, chartTheme]);
+  }, [chartType, addMainSeries, chartTheme]);
+
+  /** Height alone must not recreate the chart — otherwise the data effect can miss a run and the series stay empty. */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.applyOptions({ height });
+  }, [height]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -384,7 +393,7 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
     }
     volSeries.setData(volumes);
     chart.timeScale().fitContent();
-  }, [linePoints, candles, volumes, chartType]);
+  }, [linePoints, candles, volumes, chartType, chartTheme]);
 
   const hintLine =
     chartType === 'line' || chartType === 'area'

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchJsonCached, fetchWithAuth } from '../store/apiStore.js';
+import { fetchJsonCached, fetchWithAuth, peekJsonCached } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { WatchlistTickerMultiselect } from './WatchlistTickerMultiselect.jsx';
 
@@ -136,6 +136,45 @@ function mapUserTickers(tickers) {
   }));
 }
 
+/** Build flyout options from API payloads; pass `undefined` for a branch that is not loaded yet. */
+function optionsFromApiArrays(defaultsRaw, mineRaw) {
+  const built = [];
+  if (defaultsRaw != null) {
+    const defaults = Array.isArray(defaultsRaw) ? defaultsRaw : [];
+    for (const d of defaults) {
+      const g = String(d.group || '').trim() || 'Default';
+      built.push({
+        key: 'def:' + g,
+        name: g,
+        kind: /** @type {'default'} */ ('default'),
+        tickers: mapDefaultItems(d.items)
+      });
+    }
+  }
+  /** @type {WatchlistOption[]} */
+  const userOpts = [];
+  if (mineRaw != null) {
+    const mine = Array.isArray(mineRaw) ? mineRaw : [];
+    for (const wl of mine) {
+      userOpts.push({
+        key: 'usr:' + wl.id,
+        watchlistId: String(wl.id),
+        name: String(wl.name || 'Untitled').trim() || 'Untitled',
+        kind: /** @type {'user'} */ ('user'),
+        tickers: mapUserTickers(wl.tickers)
+      });
+    }
+  }
+  return [...userOpts, ...built];
+}
+
+function pickSelectedKeyForMerged(merged, prevKey) {
+  if (prevKey && merged.some((o) => o.key === prevKey)) return prevKey;
+  const firstUser = merged.find((o) => o.kind === 'user');
+  if (firstUser) return firstUser.key;
+  return merged[0]?.key || '';
+}
+
 function formatLast(n) {
   if (n == null || !Number.isFinite(n)) return '—';
   const abs = Math.abs(n);
@@ -161,9 +200,14 @@ function pctTone(fraction) {
  * @param {{ open: boolean, onClose: () => void }} props
  */
 export function WatchlistRailFlyout({ open, onClose }) {
+  /** True only when we have no rows to show yet (first paint / cold cache). */
   const [loading, setLoading] = useState(false);
+  /** True while a network refresh is in flight (may already be showing cached/partial rows). */
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [options, setOptions] = useState(/** @type {WatchlistOption[]} */ ([]));
+  const optionsRef = useRef(options);
+  const loadGenRef = useRef(0);
   const [selectedKey, setSelectedKey] = useState('');
   const [sortCol, setSortCol] = useState(/** @type {'security' | 'last' | 'pct'} */ ('pct'));
   const [sortDesc, setSortDesc] = useState(true);
@@ -194,69 +238,131 @@ export function WatchlistRailFlyout({ open, onClose }) {
     setDeleteBusyId('');
   }, []);
 
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
+
+  useEffect(() => {
+    return () => {
+      loadGenRef.current += 1;
+    };
+  }, []);
+
   const load = useCallback(async (opts = {}) => {
     const forceMine = opts.forceMine === true;
-    setLoading(true);
+    const gen = ++loadGenRef.current;
+    const hadOptions = optionsRef.current.length > 0;
+
     setError('');
-    const built = /** @type {WatchlistOption[]} */ ([]);
-    try {
-      const { data: defaultsRaw } = await fetchJsonCached({
+    setRefreshing(true);
+    if (!hadOptions) setLoading(true);
+
+    const defaultsSlot = { done: false, ok: false, built: /** @type {WatchlistOption[]} */ ([]), err: /** @type {unknown} */ (null) };
+    const mineSlot = { done: false, ok: false, raw: /** @type {unknown} */ (null) };
+
+    const merge = () => {
+      if (gen !== loadGenRef.current) return;
+
+      const prev = optionsRef.current;
+      const built = defaultsSlot.done ? defaultsSlot.built : [];
+      const fromPrevUser = prev.filter((o) => o.kind === 'user');
+      let userOpts;
+      if (!mineSlot.done) {
+        userOpts = fromPrevUser;
+      } else if (mineSlot.ok && Array.isArray(mineSlot.raw)) {
+        const mine = mineSlot.raw;
+        userOpts = mine.map((wl) => ({
+          key: 'usr:' + wl.id,
+          watchlistId: String(wl.id),
+          name: String(wl.name || 'Untitled').trim() || 'Untitled',
+          kind: /** @type {'user'} */ ('user'),
+          tickers: mapUserTickers(wl.tickers)
+        }));
+      } else {
+        userOpts = [];
+      }
+
+      const merged = [...userOpts, ...built];
+      setOptions(merged);
+      optionsRef.current = merged;
+
+      if (merged.length > 0) setError('');
+
+      setSelectedKey((prevKey) => pickSelectedKeyForMerged(merged, prevKey));
+    };
+
+    const finish = () => {
+      if (gen !== loadGenRef.current) return;
+      setLoading(false);
+      setRefreshing(false);
+    };
+
+    return await new Promise((resolve) => {
+      let pending = 2;
+      const doneOne = () => {
+        pending -= 1;
+        if (pending <= 0) {
+          finish();
+          resolve(optionsRef.current);
+        }
+      };
+
+      fetchJsonCached({
         path: '/api/watchlists/defaults',
         auth: false,
         ttlMs: 2 * 60 * 1000
-      });
-      const defaults = Array.isArray(defaultsRaw) ? defaultsRaw : [];
-      for (const d of defaults) {
-        const g = String(d.group || '').trim() || 'Default';
-        built.push({
-          key: 'def:' + g,
-          name: g,
-          kind: 'default',
-          tickers: mapDefaultItems(d.items)
-        });
-      }
-    } catch (e) {
-      setError(e?.message || 'Could not load default watchlists');
-    }
+      })
+        .then((r) => {
+          if (gen !== loadGenRef.current) return;
+          const defaults = Array.isArray(r.data) ? r.data : [];
+          const built = /** @type {WatchlistOption[]} */ ([]);
+          for (const d of defaults) {
+            const g = String(d.group || '').trim() || 'Default';
+            built.push({
+              key: 'def:' + g,
+              name: g,
+              kind: 'default',
+              tickers: mapDefaultItems(d.items)
+            });
+          }
+          defaultsSlot.done = true;
+          defaultsSlot.ok = true;
+          defaultsSlot.built = built;
+          merge();
+        })
+        .catch((err) => {
+          if (gen !== loadGenRef.current) return;
+          setError(err?.message || 'Could not load default watchlists');
+          defaultsSlot.done = true;
+          defaultsSlot.ok = false;
+          defaultsSlot.built = [];
+          defaultsSlot.err = err;
+          merge();
+        })
+        .finally(doneOne);
 
-    /** @type {WatchlistOption[]} */
-    let merged = built;
-    try {
-      const { data: mineRaw } = await fetchJsonCached({
+      fetchJsonCached({
         path: '/api/watchlists',
         auth: true,
         ttlMs: 2 * 60 * 1000,
         force: forceMine
-      });
-      const mine = Array.isArray(mineRaw) ? mineRaw : [];
-      const userOpts = mine.map((wl) => ({
-        key: 'usr:' + wl.id,
-        watchlistId: String(wl.id),
-        name: String(wl.name || 'Untitled').trim() || 'Untitled',
-        kind: /** @type {'user'} */ ('user'),
-        tickers: mapUserTickers(wl.tickers)
-      }));
-      merged = [...userOpts, ...built];
-      setOptions(merged);
-      if (userOpts.length + built.length > 0) setError('');
-      setSelectedKey((prev) => {
-        if (prev && merged.some((o) => o.key === prev)) return prev;
-        if (userOpts[0]) return userOpts[0].key;
-        if (built[0]) return built[0].key;
-        return '';
-      });
-    } catch {
-      merged = built;
-      setOptions(merged);
-      if (built.length > 0) setError('');
-      setSelectedKey((prev) => {
-        if (prev && built.some((o) => o.key === prev)) return prev;
-        return built[0]?.key || '';
-      });
-    } finally {
-      setLoading(false);
-    }
-    return merged;
+      })
+        .then((r) => {
+          if (gen !== loadGenRef.current) return;
+          mineSlot.done = true;
+          mineSlot.ok = true;
+          mineSlot.raw = r.data;
+          merge();
+        })
+        .catch(() => {
+          if (gen !== loadGenRef.current) return;
+          mineSlot.done = true;
+          mineSlot.ok = false;
+          mineSlot.raw = null;
+          merge();
+        })
+        .finally(doneOne);
+    });
   }, []);
 
   const userWatchlists = useMemo(() => options.filter((o) => o.kind === 'user'), [options]);
@@ -369,7 +475,19 @@ export function WatchlistRailFlyout({ open, onClose }) {
 
   useEffect(() => {
     if (!open) return;
-    load();
+    const ttlMs = 2 * 60 * 1000;
+    const d = peekJsonCached({ path: '/api/watchlists/defaults', auth: false, ttlMs });
+    const m = peekJsonCached({ path: '/api/watchlists', auth: true, ttlMs });
+    if (d !== undefined || m !== undefined) {
+      const merged = optionsFromApiArrays(d, m);
+      if (merged.length > 0) {
+        setOptions(merged);
+        optionsRef.current = merged;
+        setLoading(false);
+        setSelectedKey((prev) => pickSelectedKeyForMerged(merged, prev));
+      }
+    }
+    void load();
   }, [open, load]);
 
   useEffect(() => {
@@ -515,11 +633,13 @@ export function WatchlistRailFlyout({ open, onClose }) {
             className="wl-flyout__select"
             aria-haspopup="listbox"
             aria-expanded={ddOpen}
-            disabled={!options.length && !loading}
+            disabled={!options.length && loading}
             onClick={() => setDdOpen((v) => !v)}
           >
             <IcoUserWatchlistSmall className="wl-flyout__select-ico" />
-            <span className="wl-flyout__select-label">{loading ? 'Loading…' : selected?.name || '—'}</span>
+            <span className="wl-flyout__select-label">
+              {loading && !options.length ? 'Loading…' : selected?.name || '—'}
+            </span>
             <IcoChevronDown className="wl-flyout__select-chev" />
           </button>
           {ddOpen && options.length > 0 ? (
@@ -554,7 +674,7 @@ export function WatchlistRailFlyout({ open, onClose }) {
 
         {error ? <p className="wl-flyout__err">{error}</p> : null}
 
-        <div className="wl-flyout__table-wrap">
+        <div className="wl-flyout__table-wrap" aria-busy={refreshing}>
           <table className="wl-flyout__table">
             <thead>
               <tr>
@@ -583,12 +703,23 @@ export function WatchlistRailFlyout({ open, onClose }) {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={3} className="wl-flyout__td-muted">
-                    Loading…
-                  </td>
-                </tr>
+              {loading && sortedRows.length === 0 ? (
+                <>
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <tr key={'sk-' + i} className="wl-flyout__skel-row" aria-hidden>
+                      <td>
+                        <span className="wl-flyout__skel-bar wl-flyout__skel-bar--wide" />
+                        <span className="wl-flyout__skel-bar wl-flyout__skel-bar--narrow" />
+                      </td>
+                      <td className="wl-flyout__td-num">
+                        <span className="wl-flyout__skel-bar wl-flyout__skel-bar--num" />
+                      </td>
+                      <td className="wl-flyout__td-pct">
+                        <span className="wl-flyout__skel-bar wl-flyout__skel-bar--pct" />
+                      </td>
+                    </tr>
+                  ))}
+                </>
               ) : sortedRows.length === 0 ? (
                 <tr>
                   <td colSpan={3} className="wl-flyout__empty-cell">

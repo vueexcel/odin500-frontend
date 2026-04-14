@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
+import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
 const COL_BAR = '#2563eb';
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
@@ -27,9 +28,9 @@ function yForValue(v, innerTop, innerH, yMin, yMax) {
 
 /**
  * Monthly returns for one calendar year (Figma-style), with year dropdown + info tip.
- * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string }} props
+ * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number }} props
  */
-export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate }) {
+export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, plotHeight }) {
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
 
   const rows = useMemo(() => {
@@ -157,13 +158,18 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate }) 
     });
 
     return (
-      <svg className="ticker-annual-figma__svg ticker-monthly__svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+      <svg
+        className="ticker-annual-figma__svg ticker-monthly__svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={tickerSvgPlotStyle(plotHeight)}
+      >
         {gridLines}
         {bars}
         {xLabels}
       </svg>
     );
-  }, [monthValues, yMin, yMax]);
+  }, [monthValues, yMin, yMax, plotHeight]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];

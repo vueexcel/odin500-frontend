@@ -2,6 +2,7 @@ import { useMemo, useState, useSyncExternalStore } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
+import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 
 const BUCKETS_DARK = [
@@ -100,7 +101,7 @@ function buildCounts(rows, mode) {
   return c;
 }
 
-function BucketDonut({ counts, buckets, theme }) {
+function BucketDonut({ counts, buckets, theme, plotHeight }) {
   const light = theme === 'light';
   const ringStroke = light ? '#e2e8f0' : '#0d1520';
   const labelFill = light ? '#0f172a' : '#f8fafc';
@@ -151,8 +152,14 @@ function BucketDonut({ counts, buckets, theme }) {
     );
     theta = d1 + DONUT_GAP_DEG;
   }
+  const h = plotHeight != null ? Math.min(320, plotHeight) : null;
   return (
-    <svg className="ticker-annual-donut__svg" viewBox="-110 -110 220 220" aria-hidden>
+    <svg
+      className="ticker-annual-donut__svg"
+      viewBox="-110 -110 220 220"
+      aria-hidden
+      style={tickerSvgPlotStyle(h)}
+    >
       <g>{segs}</g>
     </svg>
   );
@@ -160,9 +167,9 @@ function BucketDonut({ counts, buckets, theme }) {
 
 /**
  * Figma-style bucketed donuts + center toggle (uses `performance.annualReturns`).
- * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string }} props
+ * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number }} props
  */
-export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate }) {
+export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate, plotHeight }) {
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const buckets = useMemo(() => bucketsForTheme(chartTheme), [chartTheme]);
   const [rightMode, setRightMode] = useState('positive');
@@ -287,7 +294,7 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate }) {
                 </div>
               </div>
               <div className="ticker-annual-donut__donut-wrap">
-                <BucketDonut counts={countsTotal} buckets={buckets} theme={chartTheme} />
+                <BucketDonut counts={countsTotal} buckets={buckets} theme={chartTheme} plotHeight={plotHeight} />
               </div>
               <div className="ticker-annual-donut__legend">
                 {buckets.map((b) => (
@@ -337,7 +344,7 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate }) {
                 </div>
               </div>
               <div className="ticker-annual-donut__donut-wrap">
-                <BucketDonut counts={countsRight} buckets={buckets} theme={chartTheme} />
+                <BucketDonut counts={countsRight} buckets={buckets} theme={chartTheme} plotHeight={plotHeight} />
               </div>
               <div className="ticker-annual-donut__legend">
                 {buckets.map((b) => (

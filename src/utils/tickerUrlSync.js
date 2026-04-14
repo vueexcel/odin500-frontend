@@ -1,3 +1,4 @@
+/** Default when `?ticker=` / `?symbol=` is missing or invalid (e.g. Odin Signals). */
 export const DEFAULT_TICKERS_PAGE_SYMBOL = 'NVDA';
 
 export function sanitizeTickerPageInput(raw) {
@@ -17,7 +18,7 @@ export function sanitizeTickerSearchInput(raw) {
     .slice(0, 48);
 }
 
-/** URL ?ticker=… (or legacy ?symbol=…); falls back to default when missing/invalid. */
+/** URL `?ticker=` or legacy `?symbol=`; falls back to {@link DEFAULT_TICKERS_PAGE_SYMBOL} when missing/invalid. */
 export function resolveTickersPageSymbol(searchParams) {
   const raw =
     searchParams.get('ticker') ||

@@ -159,15 +159,21 @@ export function WatchlistTickerMultiselect({
   }, [qNorm, open]);
 
   useEffect(() => {
-    function onDoc(e) {
-      const t = /** @type {Node} */ (e.target);
-      if (wrapRef.current?.contains(t)) return;
-      if (dropdownRef.current?.contains(t)) return;
+    if (!open) return;
+    function onPointerDownCapture(e) {
+      if (e.button !== 0 && e.button !== undefined) return;
+      const path = e.composedPath();
+      for (const node of path) {
+        if (node === document || node === window) break;
+        if (!(node instanceof Element)) continue;
+        if (wrapRef.current?.contains(node)) return;
+        if (dropdownRef.current?.contains(node)) return;
+      }
       setOpen(false);
     }
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
+    document.addEventListener('pointerdown', onPointerDownCapture, true);
+    return () => document.removeEventListener('pointerdown', onPointerDownCapture, true);
+  }, [open]);
 
   function toggleRow(row) {
     const id = String(row.id);

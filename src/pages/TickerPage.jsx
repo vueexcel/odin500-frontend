@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
@@ -6,6 +6,7 @@ import { TickerAnnualReturnsPosNeg } from '../components/TickerAnnualReturnsPosN
 import { TickerMonthlyReturnsChart } from '../components/TickerMonthlyReturnsChart.jsx';
 import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyReturnsWaterfallDonut.jsx';
 import { TickerQuarterlyReturnsChart } from '../components/TickerQuarterlyReturnsChart.jsx';
+import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import {
   IconChartTypeDropdown,
@@ -20,6 +21,17 @@ const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y
 /** Must stay ≤ backend `OHLC_SIGNALS_MAX_RANGE_DAYS` (default 40000). */
 const MAX_SIGNAL_RANGE_DAYS = 40000;
 const BENCHMARK = 'SPY';
+
+/** Persisted main-chart pixel height (drag resize). */
+const CHART_USER_H_KEY = 'odin_ticker_chart_h';
+const CHART_H_MIN = 200;
+const CHART_H_MAX = 1400;
+
+const RESIZE_KEY_ANNUAL_FIGMA = 'odin_ticker_resize_annual_figma';
+const RESIZE_KEY_ANNUAL_POSNEG = 'odin_ticker_resize_annual_posneg';
+const RESIZE_KEY_QUARTERLY = 'odin_ticker_resize_quarterly';
+const RESIZE_KEY_MONTHLY = 'odin_ticker_resize_monthly';
+const RESIZE_KEY_MONTHLY_ADV = 'odin_ticker_resize_monthly_waterfall';
 
 /** Placeholder headlines until a news API is wired. */
 function dummyTickerNews(symbol) {
@@ -586,6 +598,26 @@ export default function TickerPage() {
   const [mainChartType, setMainChartType] = useState('line');
   const [ohlcTickerBounds, setOhlcTickerBounds] = useState(/** @type {{ min: string, max: string } | null} */ (null));
 
+  const chartBodyRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const chartPlotHostRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const mediaChartHeight = useMediaChartHeight();
+  const mediaHRef = useRef(mediaChartHeight);
+  mediaHRef.current = mediaChartHeight;
+  const resizeDragRef = useRef(/** @type {{ active: boolean, startY: number, startH: number } | null} */ (null));
+
+  const [userChartHeight, setUserChartHeight] = useState(() => {
+    try {
+      const raw = localStorage.getItem(CHART_USER_H_KEY);
+      const n = raw != null ? parseInt(raw, 10) : NaN;
+      if (Number.isFinite(n) && n >= CHART_H_MIN && n <= CHART_H_MAX) return n;
+    } catch {
+      /* ignore */
+    }
+    return null;
+  });
+  const [chartFs, setChartFs] = useState(false);
+  const [fsPlotH, setFsPlotH] = useState(0);
+
   const chartApiRange = useMemo(() => {
     if (appliedCustomRange?.start && appliedCustomRange?.end) {
       const n = normalizeCustomChartRange(appliedCustomRange.start, appliedCustomRange.end, asOfDate);
@@ -834,6 +866,103 @@ export default function TickerPage() {
 
   const sortedChart = useMemo(() => sortRowsAsc(ohlcRows), [ohlcRows]);
 
+  useEffect(() => {
+    const sync = () => {
+      const el = chartBodyRef.current;
+      const d = /** @type {Document & { webkitFullscreenElement?: Element | null }} */ (document);
+      setChartFs(!!el && (document.fullscreenElement === el || d.webkitFullscreenElement === el));
+    };
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+    sync();
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      document.removeEventListener('webkitfullscreenchange', sync);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!chartFs) {
+      setFsPlotH(0);
+      return;
+    }
+    const el = chartPlotHostRef.current;
+    if (!el) return;
+    const apply = () => {
+      const h = Math.round(el.clientHeight);
+      setFsPlotH(Math.max(CHART_H_MIN, h));
+    };
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(el);
+    apply();
+    return () => ro.disconnect();
+  }, [chartFs, sortedChart.length, mainChartType, chartLoading]);
+
+  const onChartResizePointerDown = useCallback(
+    (e) => {
+      if (chartFs) return;
+      e.preventDefault();
+      const startH = userChartHeight ?? mediaChartHeight;
+      resizeDragRef.current = { active: true, startY: e.clientY, startH };
+      const onMove = (ev) => {
+        const drag = resizeDragRef.current;
+        if (!drag?.active) return;
+        const dy = ev.clientY - drag.startY;
+        const next = Math.round(Math.max(CHART_H_MIN, Math.min(CHART_H_MAX, drag.startH + dy)));
+        setUserChartHeight(next);
+      };
+      const onUp = () => {
+        if (resizeDragRef.current) resizeDragRef.current.active = false;
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        setUserChartHeight((prev) => {
+          const v = prev == null ? mediaHRef.current : prev;
+          try {
+            localStorage.setItem(CHART_USER_H_KEY, String(v));
+          } catch {
+            /* ignore */
+          }
+          return prev;
+        });
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    },
+    [chartFs, userChartHeight, mediaChartHeight]
+  );
+
+  const onChartResizeDoubleClick = useCallback((e) => {
+    e.preventDefault();
+    try {
+      localStorage.removeItem(CHART_USER_H_KEY);
+    } catch {
+      /* ignore */
+    }
+    setUserChartHeight(null);
+  }, []);
+
+  const toggleChartFullscreen = useCallback(async () => {
+    const el = chartBodyRef.current;
+    if (!el) return;
+    const d = /** @type {Document & { webkitExitFullscreen?: () => Promise<void> | void; webkitFullscreenElement?: Element | null }} */ (
+      document
+    );
+    const fsEl = d.fullscreenElement ?? d.webkitFullscreenElement;
+    try {
+      if (fsEl === el) {
+        if (d.exitFullscreen) await d.exitFullscreen();
+        else d.webkitExitFullscreen?.();
+      } else if (el.requestFullscreen) {
+        await el.requestFullscreen();
+      } else {
+        /** @type {{ webkitRequestFullscreen?: () => void }} */
+        (el).webkitRequestFullscreen?.();
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const lastRow = sortedChart.length ? sortedChart[sortedChart.length - 1] : null;
   const prevRow = sortedChart.length > 1 ? sortedChart[sortedChart.length - 2] : null;
   const lastClose = lastRow ? pickNum(lastRow, ['Close', 'close']) : null;
@@ -891,7 +1020,8 @@ export default function TickerPage() {
   const symQtd = qtdFromRows(statsSorted);
   const spyQtd = qtdFromRows(statsSpySorted);
 
-  const chartHeight = useMediaChartHeight();
+  const basePixelHeight = userChartHeight ?? mediaChartHeight;
+  const plotHeight = chartFs && fsPlotH >= CHART_H_MIN ? fsPlotH : basePixelHeight;
 
   const chartRangeLabel = chartApiRange.start + ' → ' + chartApiRange.end;
   const chartModeHelp = appliedCustomRange
@@ -1170,7 +1300,7 @@ export default function TickerPage() {
               </div>
             </div>
 
-            <div className="ticker-chart-body">
+            <div ref={chartBodyRef} className="ticker-chart-body">
               <div className="ticker-chart-legend">
                 <span className="ticker-chart-legend__sym">{sym}</span>
                 <span className="ticker-chart-legend__name">{company}</span>
@@ -1180,13 +1310,19 @@ export default function TickerPage() {
                 ) : null}
                 <span className="ticker-chart-legend__sig">Signal: {lastSignal}</span>
               </div>
-              {chartLoading && sortedChart.length === 0 ? (
-                <div className="ticker-chart-skeleton">Loading chart…</div>
-              ) : sortedChart.length ? (
-                <TickerLightweightChart rows={sortedChart} height={chartHeight} chartType={mainChartType} />
-              ) : (
-                <div className="ticker-sparkline ticker-sparkline--empty">No OHLC rows in this range.</div>
-              )}
+              <div
+                ref={chartPlotHostRef}
+                className={'ticker-chart-plot-host' + (chartFs ? ' ticker-chart-plot-host--fs' : '')}
+                style={chartFs ? undefined : { height: basePixelHeight }}
+              >
+                {chartLoading && sortedChart.length === 0 ? (
+                  <div className="ticker-chart-skeleton">Loading chart…</div>
+                ) : sortedChart.length ? (
+                  <TickerLightweightChart rows={sortedChart} height={plotHeight} chartType={mainChartType} />
+                ) : (
+                  <div className="ticker-sparkline ticker-sparkline--empty">No OHLC rows in this range.</div>
+                )}
+              </div>
               <div className="ticker-chart-footer-icons">
                 <button type="button" className="ticker-chart-footer-icons__btn" aria-label="Settings">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -1194,12 +1330,37 @@ export default function TickerPage() {
                     <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
                   </svg>
                 </button>
-                <button type="button" className="ticker-chart-footer-icons__btn" aria-label="Expand">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M9 3H3v6M15 3h6v6M3 15v6h6M21 15v6h-6" />
-                  </svg>
+                <button
+                  type="button"
+                  className="ticker-chart-footer-icons__btn"
+                  onClick={() => toggleChartFullscreen()}
+                  aria-pressed={chartFs}
+                  aria-label={chartFs ? 'Exit chart fullscreen' : 'Enter chart fullscreen'}
+                >
+                  {chartFs ? (
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M4 14v6h6M20 14v6h-6M4 10V4h6M20 10V4h-6" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M9 3H3v6M15 3h6v6M3 15v6h6M21 15v6h-6" />
+                    </svg>
+                  )}
                 </button>
               </div>
+              {!chartFs ? (
+                <div
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-valuemin={CHART_H_MIN}
+                  aria-valuemax={CHART_H_MAX}
+                  aria-valuenow={basePixelHeight}
+                  className="ticker-chart-resize"
+                  title="Drag to resize chart height. Double-click to reset."
+                  onPointerDown={onChartResizePointerDown}
+                  onDoubleClick={onChartResizeDoubleClick}
+                />
+              ) : null}
             </div>
           </section>
 
@@ -1237,16 +1398,30 @@ export default function TickerPage() {
             </ul>
           </section>
 
-          <TickerAnnualReturnsFigma symbol={sym} annualReturns={annualReturnsRaw} asOfDate={asOfDate} />
-          <TickerAnnualReturnsPosNeg symbol={sym} annualReturns={annualReturnsRaw} asOfDate={asOfDate} />
-          <TickerQuarterlyReturnsChart symbol={sym} quarterlyReturns={quarterlyReturnsRaw} asOfDate={asOfDate} />
-          <TickerMonthlyReturnsChart symbol={sym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} />
-          <TickerMonthlyReturnsWaterfallDonut
+          <TickerAnnualReturnsFigma
             symbol={sym}
-            monthlyReturns={monthlyReturnsRaw}
             annualReturns={annualReturnsRaw}
             asOfDate={asOfDate}
+            resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
+            resizeDefaultHeight={260}
           />
+          <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
+            <TickerAnnualReturnsPosNeg symbol={sym} annualReturns={annualReturnsRaw} asOfDate={asOfDate} />
+          </TickerChartResizeScope>
+          <TickerChartResizeScope storageKey={RESIZE_KEY_QUARTERLY} defaultHeight={288}>
+            <TickerQuarterlyReturnsChart symbol={sym} quarterlyReturns={quarterlyReturnsRaw} asOfDate={asOfDate} />
+          </TickerChartResizeScope>
+          <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
+            <TickerMonthlyReturnsChart symbol={sym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} />
+          </TickerChartResizeScope>
+          <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY_ADV} defaultHeight={300}>
+            <TickerMonthlyReturnsWaterfallDonut
+              symbol={sym}
+              monthlyReturns={monthlyReturnsRaw}
+              annualReturns={annualReturnsRaw}
+              asOfDate={asOfDate}
+            />
+          </TickerChartResizeScope>
         </div>
 
         <aside className="ticker-page__aside">

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
+import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
 const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
@@ -52,9 +53,9 @@ function buildRows(quarterlyReturns) {
 
 /**
  * Two grouped quarterly bar charts (by year | by quarter), dark UI + per-panel info tips.
- * @param {{ symbol: string, quarterlyReturns?: unknown[], asOfDate?: string }} props
+ * @param {{ symbol: string, quarterlyReturns?: unknown[], asOfDate?: string, plotHeight?: number }} props
  */
-export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate }) {
+export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate, plotHeight }) {
   const rows = useMemo(() => buildRows(quarterlyReturns), [quarterlyReturns]);
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
 
@@ -166,13 +167,18 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
     });
 
     return (
-      <svg className="ticker-annual-figma__svg ticker-quarterly__svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+      <svg
+        className="ticker-annual-figma__svg ticker-quarterly__svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={tickerSvgPlotStyle(plotHeight)}
+      >
         {gridLines}
         {bars}
         {xLabels}
       </svg>
     );
-  }, [years, byYear, yMin, yMax]);
+  }, [years, byYear, yMin, yMax, plotHeight]);
 
   const rightSvg = useMemo(() => {
     if (!years.length) return null;
@@ -248,13 +254,18 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
     });
 
     return (
-      <svg className="ticker-annual-figma__svg ticker-quarterly__svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+      <svg
+        className="ticker-annual-figma__svg ticker-quarterly__svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={tickerSvgPlotStyle(plotHeight)}
+      >
         {gridLines}
         {bars}
         {xLabels}
       </svg>
     );
-  }, [years, byQuarter, yearColors, yMin, yMax]);
+  }, [years, byQuarter, yearColors, yMin, yMax, plotHeight]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
 
