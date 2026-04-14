@@ -3185,6 +3185,7 @@ button:disabled {
   min-height: 120px;
   border-radius: 8px;
   border: 1px solid rgba(51, 65, 85, 0.6);
+  scrollbar-width: none;
 }
 
 .heatmap-table {
@@ -3337,6 +3338,7 @@ button:disabled {
   font-weight: 700;
   letter-spacing: 0.06em;
   pointer-events: none;
+  fill: #94a3b8;
 }
 
 .sector-treemap__tick {
@@ -3371,6 +3373,7 @@ button:disabled {
   font-weight: 800;
   letter-spacing: 0.07em;
   pointer-events: none;
+  fill: #03500c;
 }
 
 .sector-treemap__industry-title {
@@ -6176,5 +6179,136 @@ button:disabled {
 
 [data-theme="light"] .ticker-page .ticker-annual-figma__code {
   color: #0369a1;
+}
+
+[data-theme="light"] .heatmap-page {
+  background: linear-gradient(180deg, #eef4fb 0%, #e7effa 100%);
+  color: #0f172a;
+}
+
+[data-theme="light"] .heatmap-card {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(148, 163, 184, 0.5);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .heatmap-card__title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .heatmap-card__hint {
+  color: #64748b;
+}
+
+[data-theme="light"] .heatmap-index-row {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+[data-theme="light"] .heatmap-index-row:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+[data-theme="light"] .heatmap-index-row--active {
+  border-color: #60a5fa;
+  background: #dbeafe;
+}
+
+[data-theme="light"] .heatmap-index-row__chev {
+  color: #475569;
+}
+
+[data-theme="light"] .heatmap-field-label {
+  color: #475569;
+}
+
+[data-theme="light"] .heatmap-select,
+[data-theme="light"] .heatmap-search__input {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .heatmap-search__icon {
+  color: #64748b;
+}
+
+[data-theme="light"] .heatmap-table-wrap {
+  border-color: #dbe3ef;
+}
+
+[data-theme="light"] .heatmap-table th {
+  background: #f8fafc;
+  color: #475569;
+}
+
+[data-theme="light"] .heatmap-table td {
+  border-top-color: #e2e8f0;
+  color: #334155;
+}
+
+[data-theme="light"] .heatmap-table__ticker {
+  color: #0f172a;
+}
+
+[data-theme="light"] .heatmap-main {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(148, 163, 184, 0.55);
+}
+
+[data-theme="light"] .heatmap-main__date {
+  color: #0f172a;
+}
+
+[data-theme="light"] .heatmap-main__cal {
+  color: #0284c7;
+}
+
+[data-theme="light"] .heatmap-icon-btn {
+  background: #ffffff;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .heatmap-icon-btn:hover:not(:disabled) {
+  border-color: #60a5fa;
+  color: #0f172a;
+}
+
+[data-theme="light"] .heatmap-main__error {
+  background: rgba(254, 226, 226, 0.95);
+  color: #b91c1c;
+}
+
+[data-theme="light"] .heatmap-main__loading {
+  color: #64748b;
+}
+
+[data-theme="light"] .heatmap-treemap-outer {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .sector-treemap--finviz {
+  background: #f8fafc;
+}
+
+[data-theme="light"] .sector-treemap__sector-title {
+  fill: #03500c;
+}
+
+[data-theme="light"] .sector-treemap__industry-title {
+  fill: #166534;
+}
+
+[data-theme="light"] .heatmap-scale-bar {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+[data-theme="light"] .heatmap-scale-bar__lbl,
+[data-theme="light"] .heatmap-scale-bar__slider label {
+  color: #334155;
 }
 
