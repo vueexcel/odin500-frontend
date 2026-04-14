@@ -3230,7 +3230,7 @@ button:disabled {
   padding: 12px 14px 14px;
   display: flex;
   flex-direction: column;
-  min-height: min(94vh, 1080px);
+  min-height: min(96vh, 1200px);
 }
 
 .heatmap-main__header {
@@ -3300,17 +3300,17 @@ button:disabled {
 
 .heatmap-treemap-outer {
   flex: 1;
-  min-height: min(72vh, 760px);
+  min-height: min(80vh, 920px);
   overflow: auto;
-  border-radius: 10px;
-  border: 1px solid rgba(51, 65, 85, 0.6);
-  background: #121212;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: #0b0f16;
 }
 
 .heatmap-treemap-zoom {
   width: 100%;
-  height: min(82vh, 920px);
-  min-height: 560px;
+  height: min(88vh, 1120px);
+  min-height: 700px;
 }
 
 .sector-treemap {
@@ -3363,20 +3363,21 @@ button:disabled {
 }
 
 .sector-treemap--finviz {
-  background: #121212;
+  background: #0b0f16;
 }
 
 .sector-treemap__sector-title {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   pointer-events: none;
 }
 
 .sector-treemap__industry-title {
   font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   pointer-events: none;
 }
 
@@ -3385,11 +3386,11 @@ button:disabled {
 }
 
 .sector-treemap__tick.sector-treemap__tick--finviz:not(.sector-treemap__tick--oneline):not(.sector-treemap__tick--micro) {
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .sector-treemap__pct.sector-treemap__tick--finviz:not(.sector-treemap__tick--micro) {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 

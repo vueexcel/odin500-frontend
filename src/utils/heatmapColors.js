@@ -1,7 +1,17 @@
+function parseHeatNumber(value) {
+  if (value == null) return NaN;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
+  const s = String(value).trim();
+  if (!s) return NaN;
+  const compact = s.replace(/[%\s]/g, '').replace(/,/g, '');
+  const n = Number(compact);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 /** Map % return to fill color; clamp to symmetric scale (Figma-style red → grey → green). */
 export function returnToHeatColor(pct, scaleMin = -3, scaleMax = 3) {
-  if (pct == null || Number.isNaN(Number(pct))) return '#475569';
-  const x = Number(pct);
+  const x = parseHeatNumber(pct);
+  if (!Number.isFinite(x)) return '#475569';
   const lo = Math.min(scaleMin, scaleMax);
   const hi = Math.max(scaleMin, scaleMax);
   const t = hi === lo ? 0.5 : (x - lo) / (hi - lo);

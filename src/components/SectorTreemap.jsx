@@ -11,8 +11,57 @@ function norm(s) {
     .trim();
 }
 
-function treemapWeight(price) {
-  const p = Number(price);
+function parseNum(v) {
+  if (v == null) return NaN;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+  const s = String(v).trim();
+  if (!s) return NaN;
+  const compact = s.replace(/[%\s]/g, '').replace(/,/g, '');
+  const n = Number(compact);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function readWeight(row) {
+  const candidates = [
+    row.weight,
+    row.Weight,
+    row.indexWeight,
+    row.index_weight,
+    row.weightPercent,
+    row.weight_percentage,
+    row.weightage,
+    row.Weightage
+  ];
+  for (const c of candidates) {
+    const n = parseNum(c);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function readChangePct(row) {
+  const candidates = [
+    row.totalReturnPercentage,
+    row.total_return_percentage,
+    row.changePercent,
+    row.change_percentage,
+    row.changePct,
+    row.percentChange,
+    row.pct_change
+  ];
+  for (const c of candidates) {
+    const n = parseNum(c);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function treemapWeight(row) {
+  const explicit = readWeight(row);
+  if (explicit != null) return Math.max(explicit, 0.01);
+  const mc = parseNum(row.marketCap ?? row.market_cap ?? row.MarketCap);
+  if (Number.isFinite(mc) && mc > 0) return Math.max(mc, 0.01);
+  const p = parseNum(row.price);
   const base = Number.isFinite(p) && p > 0 ? Math.pow(p, 0.82) : 40;
   return Math.max(base, 6);
 }
@@ -44,12 +93,12 @@ function buildHierarchy(rows) {
         name: indName,
         children: stocks.map((t) => ({
           name: t.symbol,
-          value: treemapWeight(t.price),
+          value: treemapWeight(t),
           symbol: t.symbol,
           security: t.security || '',
           sector: secName,
           industry: indName,
-          changePct: t.totalReturnPercentage,
+          changePct: readChangePct(t),
           price: t.price
         }))
       });
@@ -70,8 +119,8 @@ function peersForIndustry(rows, featured) {
       symbol: r.symbol,
       security: r.security || '',
       price: r.price,
-      changePct: r.totalReturnPercentage,
-      weight: treemapWeight(r.price)
+      changePct: readChangePct(r),
+      weight: treemapWeight(r)
     }))
     .sort((a, b) => b.weight - a.weight);
 }
@@ -84,8 +133,8 @@ function peersForSector(rows, featured) {
       symbol: r.symbol,
       security: r.security || '',
       price: r.price,
-      changePct: r.totalReturnPercentage,
-      weight: treemapWeight(r.price)
+      changePct: readChangePct(r),
+      weight: treemapWeight(r)
     }))
     .sort((a, b) => b.weight - a.weight);
 }
@@ -213,11 +262,11 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
     const tm = d3treemap()
       .tile(treemapSquarify)
       .size([size.w, size.h])
-      .paddingOuter(3)
+      .paddingOuter(1)
       .paddingInner(1)
       .paddingTop((d) => {
-        if (d.depth === 1) return 22;
-        if (d.depth === 2) return 13;
+        if (d.depth === 1) return 20;
+        if (d.depth === 2) return 12;
         return 0;
       })
       .round(true);
@@ -337,9 +386,9 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
                 y={node.y0}
                 width={sw}
                 height={band}
-                fill="rgba(10, 15, 26, 0.96)"
-                stroke="rgba(30, 41, 59, 0.9)"
-                strokeWidth={1}
+                fill="#0a0f16"
+                stroke="rgba(148, 163, 184, 0.22)"
+                strokeWidth={0.8}
                 style={{ cursor: 'pointer' }}
               />
               <text
@@ -400,16 +449,16 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
                 y={node.y0}
                 width={iw}
                 height={band}
-                fill="rgba(0, 0, 0, 0.42)"
-                stroke="rgba(250, 204, 21, 0.15)"
-                strokeWidth={1}
+                fill="rgba(4, 12, 10, 0.96)"
+                stroke="rgba(34, 197, 94, 0.38)"
+                strokeWidth={0.8}
                 style={{ cursor: 'pointer' }}
               />
               <text
                 x={node.x0 + 5}
                 y={node.y0 + band * 0.72}
                 className="sector-treemap__industry-title"
-                fill="#fde047"
+                fill="#86efac"
                 pointerEvents="none"
               >
                 {short}

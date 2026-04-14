@@ -63,6 +63,14 @@ function formatPctEuSigned(n) {
   return s;
 }
 
+function parsePct(v) {
+  if (v == null) return NaN;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+  const compact = String(v).trim().replace(/[%\s]/g, '').replace(/,/g, '');
+  const n = Number(compact);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 export default function MarketHeatmapPage() {
   const [apiIndices, setApiIndices] = useState([]);
   const [periodOptions, setPeriodOptions] = useState([]);
@@ -177,8 +185,8 @@ export default function MarketHeatmapPage() {
   const tableRows = useMemo(() => {
     const copy = [...filteredRows];
     copy.sort((a, b) => {
-      const da = Math.abs(Number(a.totalReturnPercentage) || 0);
-      const db = Math.abs(Number(b.totalReturnPercentage) || 0);
+      const da = Math.abs(parsePct(a.totalReturnPercentage) || 0);
+      const db = Math.abs(parsePct(b.totalReturnPercentage) || 0);
       return db - da;
     });
     return copy.slice(0, 80);
@@ -327,7 +335,7 @@ export default function MarketHeatmapPage() {
                 </thead>
                 <tbody>
                   {tableRows.map((t) => {
-                    const pct = Number(t.totalReturnPercentage);
+                    const pct = parsePct(t.totalReturnPercentage);
                     const neg = Number.isFinite(pct) && pct < 0;
                     const pos = Number.isFinite(pct) && pct > 0;
                     return (
