@@ -56,11 +56,11 @@ export const CHART_INFO_TIPS = {
       'Example: changing scale from ±3% to ±10% compresses colors so small moves appear less saturated.'
   },
   odinOmxGauge: {
-    data: 'Data shown: OMX gauge summarizing dominant signal regime for the selected index list.',
+    data: 'Data shown: OMX gauge with a 0-100 weighted sentiment score for the selected index list.',
     calculation:
-      'Calculation: each ticker signal is bucketed from totalReturnPercentage, then the strongest bucket count is highlighted on the gauge.',
+      'Calculation: each ticker contributes one signal bucket (L1/L2/L3/N/S3/S2/S1) and OMX is the weighted average score: L1=100, L2=83, L3=67, N=50, S3=33, S2=17, S1=0.',
     example:
-      'Example: if S1 has 42 names and all others are lower, gauge headline shows Strong Bearish with count 42.'
+      'Example: if 50% are S1 (0), 30% are N (50), and 20% are L2 (83), OMX = 0.5*0 + 0.3*50 + 0.2*83 = 31.6 (Bearish).'
   },
   odinDirectionDonut: {
     data: 'Data shown: donut split of Long, Short, and Neutral signal counts.',

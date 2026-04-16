@@ -38,9 +38,24 @@ const INDEX_MENU = [
   { id: 'sp500', apiIndex: 'SP500', label: 'SP 500' },
   { id: 'dow', apiIndex: 'Dow Jones', label: 'Dow Jones 30' },
   { id: 'nasdaq', apiIndex: 'Nasdaq 100', label: 'Nasdaq 100' },
-  { id: 'russell', apiIndex: 'Russell 2000', label: 'Russell 2000' },
   { id: 'all', apiIndex: 'All Stocks', label: 'All Stocks' }
 ];
+
+const OMX_SIGNAL_SCORES = {
+  L1: 100,
+  L2: 83,
+  L3: 67,
+  N: 50,
+  S3: 33,
+  S2: 17,
+  S1: 0
+};
+
+const OMX_DIRECTION_SCORES = {
+  long: 100,
+  neutral: 50,
+  short: 0
+};
 
 function fmtPrice(n) {
   if (!Number.isFinite(Number(n))) return '—';
@@ -201,53 +216,107 @@ export default function OdinSignalsPage() {
     return { ...out, total, long, short, neutral };
   }, [indexRows]);
 
-  const strongestBucket = useMemo(() => {
-    const candidates = [
-      { key: 'S1', label: 'Strong Bearish' },
-      { key: 'S2', label: 'Bearish' },
-      { key: 'N', label: 'Neutral' },
-      { key: 'L2', label: 'Bullish' },
-      { key: 'L1', label: 'Strong Bullish' }
-    ];
-    let best = candidates[0];
-    let max = signalStats[best.key] || 0;
-    for (const c of candidates) {
-      const v = signalStats[c.key] || 0;
-      if (v > max) {
-        max = v;
-        best = c;
-      }
+  const omxMetrics = useMemo(() => {
+    const total = signalStats.total;
+    if (total <= 0) {
+      return {
+        hasData: false,
+        score: null,
+        label: 'No data',
+        gaugeStart: 180,
+        gaugeEnd: 180
+      };
     }
-    return { ...best, count: max };
+    const weightedSum = Object.entries(OMX_SIGNAL_SCORES).reduce((sum, [signal, score]) => {
+      return sum + (signalStats[signal] || 0) * score;
+    }, 0);
+    const score = weightedSum / total;
+    const clamped = Math.max(0, Math.min(100, score));
+    const label =
+      clamped >= 70
+        ? 'Strong Bullish'
+        : clamped >= 55
+          ? 'Bullish'
+          : clamped >= 45
+            ? 'Neutral'
+            : clamped >= 30
+              ? 'Bearish'
+              : 'Strong Bearish';
+    const centerAngle = 180 + (clamped / 100) * 180;
+    return {
+      hasData: true,
+      score: clamped,
+      label,
+      gaugeStart: centerAngle - 2.5,
+      gaugeEnd: centerAngle + 2.5
+    };
+  }, [signalStats]);
+
+  const directionMetrics = useMemo(() => {
+    const total = signalStats.total;
+    if (total <= 0) return { hasData: false, score: null, label: 'No data' };
+    const weightedSum =
+      signalStats.long * OMX_DIRECTION_SCORES.long +
+      signalStats.neutral * OMX_DIRECTION_SCORES.neutral +
+      signalStats.short * OMX_DIRECTION_SCORES.short;
+    const score = Math.max(0, Math.min(100, weightedSum / total));
+    const label = score >= 55 ? 'Bullish tilt' : score <= 44 ? 'Bearish tilt' : 'Neutral tilt';
+    return { hasData: true, score, label };
   }, [signalStats]);
 
   useEffect(() => {
     let cancelled = false;
+    const toMappedRows = (list) =>
+      list
+        .map((r) => ({
+          symbol: String(r.symbol || '').toUpperCase(),
+          security: String(r.security || ''),
+          price: Number(r.price),
+          sector: String(r.sector || 'Other').trim() || 'Other',
+          industry: String(r.industry || 'General').trim() || 'General',
+          totalReturnPercentage: r.totalReturnPercentage,
+          signal: signalFromReturn(r.totalReturnPercentage),
+          ret: Number(r.totalReturnPercentage)
+        }))
+        .filter((r) => r.symbol);
+
     async function loadIndexRows() {
       if (!getAuthToken()) return;
       setIndexLoading(true);
       try {
-        const { data } = await fetchJsonCached({
-          path: '/api/market/ticker-details',
-          method: 'POST',
-          body: { index: activeIndex.apiIndex, period: 'last-date' },
-          ttlMs: 5 * 60 * 1000
-        });
+        let list = [];
+        if (activeIndex.id === 'all') {
+          const marketIndices = ['SP500', 'Dow Jones', 'Nasdaq 100'];
+          const responses = await Promise.all(
+            marketIndices.map((indexName) =>
+              fetchJsonCached({
+                path: '/api/market/ticker-details',
+                method: 'POST',
+                body: { index: indexName, period: 'last-date' },
+                ttlMs: 5 * 60 * 1000
+              })
+            )
+          );
+          const uniqueBySymbol = new Map();
+          for (const response of responses) {
+            const rows = Array.isArray(response?.data?.data) ? response.data.data : [];
+            const mappedRows = toMappedRows(rows);
+            for (const row of mappedRows) {
+              if (!uniqueBySymbol.has(row.symbol)) uniqueBySymbol.set(row.symbol, row);
+            }
+          }
+          list = Array.from(uniqueBySymbol.values());
+        } else {
+          const { data } = await fetchJsonCached({
+            path: '/api/market/ticker-details',
+            method: 'POST',
+            body: { index: activeIndex.apiIndex, period: 'last-date' },
+            ttlMs: 5 * 60 * 1000
+          });
+          list = Array.isArray(data?.data) ? data.data : [];
+        }
         if (cancelled) return;
-        const list = Array.isArray(data?.data) ? data.data : [];
-        const mapped = list
-          .map((r) => ({
-            symbol: String(r.symbol || '').toUpperCase(),
-            security: String(r.security || ''),
-            price: Number(r.price),
-            sector: String(r.sector || 'Other').trim() || 'Other',
-            industry: String(r.industry || 'General').trim() || 'General',
-            totalReturnPercentage: r.totalReturnPercentage,
-            signal: signalFromReturn(r.totalReturnPercentage),
-            ret: Number(r.totalReturnPercentage)
-          }))
-          .filter((r) => r.symbol)
-          .sort((a, b) => Math.abs(Number(b.ret) || 0) - Math.abs(Number(a.ret) || 0));
+        const mapped = toMappedRows(list).sort((a, b) => Math.abs(Number(b.ret) || 0) - Math.abs(Number(a.ret) || 0));
         setIndexRows(mapped);
       } catch {
         if (!cancelled) setIndexRows([]);
@@ -311,7 +380,7 @@ export default function OdinSignalsPage() {
       <div className="odin-signals-layout">
         <aside className="odin-signals-left">
           <section className="odin-side-card">
-            <header className="odin-side-card__head">index-selection-1</header>
+            <header className="odin-side-card__head">Index Selection</header>
             <div className="odin-index-list__sub">Index / List selection</div>
             <div className="odin-index-list">
               {INDEX_MENU.map((m) => (
@@ -329,7 +398,7 @@ export default function OdinSignalsPage() {
           </section>
 
           <section className="odin-side-card">
-            <header className="odin-side-card__head">tickers-list-signals-1</header>
+            <header className="odin-side-card__head">Tickers List Signals</header>
             <div className="odin-tickers-list">
               <div className="odin-tickers-list__head">
                 <span>Ticker</span>
@@ -377,10 +446,10 @@ export default function OdinSignalsPage() {
                   ].map((s, i) => (
                     <path key={i} d={donutArcPath(160, 140, 62, 105, s.from, s.to)} fill={s.color} />
                   ))}
-                  <path d={donutArcPath(160, 140, 0, 54, 228, 233)} fill="#1e3a8a" />
+                  <path d={donutArcPath(160, 140, 0, 54, omxMetrics.gaugeStart, omxMetrics.gaugeEnd)} fill="#1e3a8a" />
                 </svg>
-                <div className="odin-omx-card__kpi">{strongestBucket.count}</div>
-                <div className="odin-omx-card__sub">{strongestBucket.label}</div>
+                <div className="odin-omx-card__kpi">{omxMetrics.hasData ? omxMetrics.score.toFixed(1) : '—'}</div>
+                <div className="odin-omx-card__sub">{omxMetrics.label}</div>
               </article>
 
               <article className="odin-omx-card">
@@ -420,6 +489,8 @@ export default function OdinSignalsPage() {
                   <span><i style={{ background: '#f08a35' }} />Short</span>
                   <span><i style={{ background: '#9e9e9e' }} />Neutral</span>
                 </div>
+                <div className="odin-omx-card__kpi">{directionMetrics.hasData ? directionMetrics.score.toFixed(1) : '—'}</div>
+                <div className="odin-omx-card__sub">{directionMetrics.label}</div>
               </article>
 
               <article className="odin-omx-card">

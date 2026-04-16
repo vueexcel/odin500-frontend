@@ -3947,7 +3947,6 @@ button:disabled {
   border: none;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: transparent;
-  color: #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -8369,7 +8368,8 @@ button:disabled {
 }
 
 [data-theme="light"] .odin-index-list {
-  background: #d1d5db;
+  background: white;
+  color: black;
 }
 
 [data-theme="light"] .odin-tickers-list {
