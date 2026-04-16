@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { ChartInfoTip } from './ChartInfoTip.jsx';
+import { CHART_INFO_TIPS } from './chartInfoTips.js';
 
 function pctClass(v) {
   if (v == null || !Number.isFinite(v)) return '';
@@ -53,6 +55,10 @@ export function TickerSection16Section17({ rows, compareRows }) {
   return (
     <section className="ticker-s16s17">
       <div className="ticker-s16s17__card ticker-s16">
+        <div className="ticker-card__h-with-tip">
+          <h3 className="ticker-subh ticker-subh--flex">Relative Strength (SP500)</h3>
+          <ChartInfoTip tip={CHART_INFO_TIPS.tickerRelativeStrength} align="start" />
+        </div>
         <table className="ticker-s16__table">
           <thead>
             <tr>
@@ -78,6 +84,10 @@ export function TickerSection16Section17({ rows, compareRows }) {
       </div>
 
       <div className="ticker-s16s17__card ticker-s17">
+        <div className="ticker-card__h-with-tip">
+          <h3 className="ticker-subh ticker-subh--flex">Relative Strength Diff Bars</h3>
+          <ChartInfoTip tip={CHART_INFO_TIPS.tickerRelativeStrength} align="start" />
+        </div>
         <div className="ticker-s17__plot">
           <div className="ticker-s17__zero" />
           {bars.map((b) => (

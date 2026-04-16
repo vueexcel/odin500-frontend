@@ -24,17 +24,16 @@ function IconYouTube({ className }) {
   );
 }
 
-const linkClass =
-  'text-sky-400/90 hover:text-sky-300 transition-colors text-sm leading-relaxed block';
+const linkClass = 'site-footer__link transition-colors text-sm leading-relaxed block';
 
 export function SiteFooter() {
   return (
-    <footer className="w-full bg-[#0a1628] text-white border-t border-white/5">
+    <footer className="site-footer w-full border-t">
       <div className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-6 lg:py-8">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-12">
           {/* Column 1 — Company & apps */}
           <div className="space-y-5">
-            <p className="text-xs text-slate-400">© 2026 ODIN. All rights reserved.</p>
+            <p className="site-footer__muted text-xs">© 2026 ODIN. All rights reserved.</p>
             <div className="flex items-center gap-3">
               <a
                 href="https://reddit.com"
@@ -65,17 +64,17 @@ export function SiteFooter() {
               </a>
             </div>
             <div className="space-y-2 text-sm">
-              <p className="font-semibold text-white">ODIN SaaS</p>
-              <p className="text-slate-300">Address: -----</p>
-              <p className="text-slate-300">
+              <p className="site-footer__label font-semibold">ODIN SaaS</p>
+              <p className="site-footer__muted">Address: -----</p>
+              <p className="site-footer__muted">
                 Email:{' '}
-                <a href="mailto:help@odin.com" className="text-sky-400 hover:text-sky-300">
+                <a href="mailto:help@odin.com" className="site-footer__link">
                   help@odin.com
                 </a>
               </p>
             </div>
             <div>
-              <p className="mb-3 text-sm font-semibold text-white">Get ODIN App:</p>
+              <p className="site-footer__label mb-3 text-sm font-semibold">Get ODIN App:</p>
               <div className="flex gap-3">
                 <a
                   href="#"
@@ -117,7 +116,7 @@ export function SiteFooter() {
 
           {/* Column 2 — Product */}
           <div>
-            <h3 className="mb-4 text-sm font-bold tracking-wide text-white">Product</h3>
+            <h3 className="site-footer__heading mb-4 text-sm font-bold tracking-wide">Product</h3>
             <ul className="space-y-3">
               <li>
                 <Link to="/market" className={linkClass}>
@@ -149,7 +148,7 @@ export function SiteFooter() {
 
           {/* Column 3 — Resources */}
           <div>
-            <h3 className="mb-4 text-sm font-bold tracking-wide text-white">Resources</h3>
+            <h3 className="site-footer__heading mb-4 text-sm font-bold tracking-wide">Resources</h3>
             <ul className="space-y-3">
               <li>
                 <a href="#" className={linkClass}>
@@ -186,7 +185,7 @@ export function SiteFooter() {
 
           {/* Column 4 — Support */}
           <div>
-            <h3 className="mb-4 text-sm font-bold tracking-wide text-white">Support</h3>
+            <h3 className="site-footer__heading mb-4 text-sm font-bold tracking-wide">Support</h3>
             <ul className="space-y-3">
               <li>
                 <a href="#" className={linkClass}>

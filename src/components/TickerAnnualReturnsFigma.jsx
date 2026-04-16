@@ -1,6 +1,8 @@
 import { useCallback, useId, useMemo, useState } from 'react';
+import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { useTickerPlotResize } from '../hooks/useTickerPlotResize.js';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
+import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
@@ -550,7 +552,9 @@ export function TickerAnnualReturnsFigma({
         }
       >
         <div className="ticker-annual-figma__toolbar">
-          <span className="ticker-annual-figma__badge">Annual returns</span>
+          <span className="ticker-annual-figma__badge">
+            Annual returns <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualReturns} align="end" />
+          </span>
           <div className="ticker-annual-figma__actions">
             <button
               type="button"
@@ -633,7 +637,10 @@ export function TickerAnnualReturnsFigma({
 
       <div className="ticker-annual-figma__section">
         <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--stack">
-          <span className="ticker-annual-figma__badge">Annual stats — positive / negative, min max</span>
+          <span className="ticker-annual-figma__badge">
+            Annual stats — positive / negative, min max{' '}
+            <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualStats} align="end" />
+          </span>
         </div>
         <div className="ticker-annual-figma__split">
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--donut">

@@ -35,43 +35,39 @@ const RESIZE_KEY_QUARTERLY = 'odin_ticker_resize_quarterly';
 const RESIZE_KEY_MONTHLY = 'odin_ticker_resize_monthly';
 const RESIZE_KEY_MONTHLY_ADV = 'odin_ticker_resize_monthly_waterfall';
 
-/** Placeholder headlines until a news API is wired. */
-function dummyTickerNews(symbol) {
-  const s = String(symbol || 'Ticker')
-    .trim()
-    .toUpperCase() || 'TICKER';
-  return [
-    {
-      id: 'dn1',
-      title: `${s} sees brisk turnover as large-cap tech tracks a broad index rebound`,
-      source: 'Market Wire (demo)',
-      time: '35m ago'
-    },
-    {
-      id: 'dn2',
-      title: `Analyst note: ${s} margin outlook debated ahead of the next earnings season`,
-      source: 'Desk research (demo)',
-      time: '2h ago'
-    },
-    {
-      id: 'dn3',
-      title: `${s} mentioned in sector rotation commentary — flows described as “mixed but constructive”`,
-      source: 'Macro Brief (demo)',
-      time: '5h ago'
-    },
-    {
-      id: 'dn4',
-      title: `Institutional holders trim a slice of ${s}, filings show; price action still range-bound`,
-      source: '13F watch (demo)',
-      time: 'Yesterday'
-    },
-    {
-      id: 'dn5',
-      title: `${s} liquidity stays orderly; implied vol off recent highs`,
-      source: 'Flow desk (demo)',
-      time: 'Yesterday'
-    }
-  ];
+const FINNHUB_NEWS_REST_URL = 'https://finnhub.io/api/v1/news';
+const FINNHUB_NEWS_TOKEN =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_FINNHUB_TOKEN) ||
+  'd7g8jb1r01qqb8ringj0d7g8jb1r01qqb8ringjg';
+const MAX_NEWS_ITEMS = 120;
+const NEWS_PAGE_SIZE = 5;
+
+function fmtNewsTime(unixSec) {
+  const ts = Number(unixSec);
+  if (!Number.isFinite(ts)) return '';
+  const d = new Date(ts * 1000);
+  const now = Date.now();
+  const diffMin = Math.floor((now - d.getTime()) / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 24 * 60) return `${Math.floor(diffMin / 60)}h ago`;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function mapFinnhubNewsItem(row) {
+  if (!row || typeof row !== 'object') return null;
+  const id = row.id != null ? String(row.id) : row.url || row.headline;
+  const title = String(row.headline || '').trim();
+  if (!id || !title) return null;
+  const url = String(row.url || '').trim();
+  return {
+    id,
+    title,
+    source: String(row.source || 'Finnhub').trim() || 'Finnhub',
+    time: fmtNewsTime(row.datetime),
+    url,
+    related: String(row.related || '')
+  };
 }
 
 const PERF_COLS = [
@@ -594,6 +590,10 @@ export default function TickerPage() {
   const [statsRows, setStatsRows] = useState([]);
   const [statsRowsSpy, setStatsRowsSpy] = useState([]);
   const [tailRows, setTailRows] = useState([]);
+  const [liveNews, setLiveNews] = useState([]);
+  const [newsBusy, setNewsBusy] = useState(true);
+  const [newsError, setNewsError] = useState('');
+  const [newsPage, setNewsPage] = useState(1);
   const [appliedCustomRange, setAppliedCustomRange] = useState(null);
   const [draftChartStart, setDraftChartStart] = useState('');
   const [draftChartEnd, setDraftChartEnd] = useState('');
@@ -837,6 +837,70 @@ export default function TickerPage() {
       cancelled = true;
     };
   }, [sym, timeframe, asOfDate, authVersion, returnsSym, chartApiRange.start, chartApiRange.end]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer = null;
+    let minId = 0;
+
+    async function loadGeneralNews() {
+      if (!FINNHUB_NEWS_TOKEN) {
+        setNewsBusy(false);
+        setNewsError('Finnhub token is missing.');
+        return;
+      }
+      try {
+        const qs = new URLSearchParams({
+          category: 'general',
+          token: FINNHUB_NEWS_TOKEN
+        });
+        if (minId > 0) qs.set('minId', String(minId));
+        const res = await fetch(`${FINNHUB_NEWS_REST_URL}?${qs.toString()}`);
+        if (!res.ok) throw new Error(`News request failed (${res.status})`);
+        const payload = await res.json();
+        if (cancelled) return;
+        const rows = Array.isArray(payload) ? payload : [];
+        const mapped = rows.map(mapFinnhubNewsItem).filter(Boolean);
+        if (mapped.length) {
+          const maxSeen = rows.reduce((mx, r) => Math.max(mx, Number(r?.id) || 0), minId);
+          minId = Math.max(minId, maxSeen);
+          setLiveNews((prev) => {
+            const seen = new Set(prev.map((n) => n.id));
+            const next = [...mapped.filter((n) => !seen.has(n.id)), ...prev];
+            return next.slice(0, MAX_NEWS_ITEMS);
+          });
+        }
+        setNewsError('');
+      } catch (e) {
+        if (cancelled) return;
+        setNewsError(e.message || 'Failed to load general trading news.');
+      } finally {
+        if (!cancelled) setNewsBusy(false);
+      }
+    }
+
+    setLiveNews([]);
+    setNewsBusy(true);
+    setNewsError('');
+    setNewsPage(1);
+    loadGeneralNews();
+    timer = window.setInterval(loadGeneralNews, 30000);
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearInterval(timer);
+    };
+  }, []);
+
+  const newsTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(liveNews.length / NEWS_PAGE_SIZE)),
+    [liveNews.length]
+  );
+  const newsPageSafe = Math.min(Math.max(1, newsPage), newsTotalPages);
+  const newsPageItems = useMemo(() => {
+    const start = (newsPageSafe - 1) * NEWS_PAGE_SIZE;
+    return liveNews.slice(start, start + NEWS_PAGE_SIZE);
+  }, [liveNews, newsPageSafe]);
 
   const myDetail = useMemo(() => {
     const u = sym.toUpperCase();
@@ -1412,20 +1476,27 @@ export default function TickerPage() {
               </h2>
               <DataInfoTip align="start">
                 <p className="ticker-data-tip__p">
-                  <strong>News</strong> below is <strong>sample copy only</strong> for layout. A real feed would use a
-                  separate headlines API from OHLC.
+                  <strong>News</strong> below comes from Finnhub general trading category via REST API.
                 </p>
-                <p className="ticker-data-tip__p">Market blocks above use live endpoints; this list is not live news.</p>
+                <p className="ticker-data-tip__p">This list is market-wide and refreshes every 30 seconds.</p>
               </DataInfoTip>
             </div>
-            <p className="ticker-page__news-sample-note">Sample headlines — not from a live wire.</p>
+            {newsBusy ? <p className="ticker-page__news-sample-note">Loading general trading news…</p> : null}
+            {!newsBusy && newsError ? <p className="ticker-page__news-sample-note">{newsError}</p> : null}
+            {!newsBusy && !newsError && !liveNews.length ? (
+              <p className="ticker-page__news-sample-note">No general trading headlines yet.</p>
+            ) : null}
             <ul className="ticker-news-list">
-              {dummyTickerNews(sym).map((n) => (
+              {newsPageItems.map((n) => (
                 <li key={n.id} className="ticker-news-list__li">
                   <a
                     className="ticker-news-list__a"
-                    href="#ticker-news-h"
-                    onClick={(e) => e.preventDefault()}
+                    href={n.url || '#ticker-news-h'}
+                    onClick={(e) => {
+                      if (!n.url) e.preventDefault();
+                    }}
+                    target={n.url ? '_blank' : undefined}
+                    rel={n.url ? 'noopener noreferrer' : undefined}
                   >
                     {n.title}
                   </a>
@@ -1437,6 +1508,29 @@ export default function TickerPage() {
                 </li>
               ))}
             </ul>
+            {liveNews.length > NEWS_PAGE_SIZE ? (
+              <div className="ticker-news-pagination" aria-label="News pagination">
+                <button
+                  type="button"
+                  className="ticker-outline-btn"
+                  disabled={newsPageSafe <= 1}
+                  onClick={() => setNewsPage((p) => Math.max(1, p - 1))}
+                >
+                  Prev
+                </button>
+                <span className="ticker-news-pagination__label">
+                  Page {newsPageSafe} of {newsTotalPages}
+                </span>
+                <button
+                  type="button"
+                  className="ticker-outline-btn"
+                  disabled={newsPageSafe >= newsTotalPages}
+                  onClick={() => setNewsPage((p) => Math.min(newsTotalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+            ) : null}
           </section>
 
           <TickerAnnualReturnsFigma

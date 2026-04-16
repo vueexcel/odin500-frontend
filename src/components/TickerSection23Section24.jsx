@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ChartInfoTip } from './ChartInfoTip.jsx';
+import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 
 const GROUPS = [
@@ -162,7 +164,10 @@ export function TickerSection23Section24({ initialTicker = '' }) {
   return (
     <section className="ticker-s23s24">
       <div className="ticker-s23s24__card ticker-s23">
-        <header className="ticker-s23s24__head">Section 23</header>
+        <div className="ticker-card__h-with-tip">
+          <h3 className="ticker-subh ticker-subh--flex">Benchmark vs Ticker Table</h3>
+          <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
+        </div>
         <div className="ticker-s23s24__controls">
           <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="ticker-s23s24__select">
             {GROUPS.map((g) => (
@@ -209,7 +214,10 @@ export function TickerSection23Section24({ initialTicker = '' }) {
       </div>
 
       <div className="ticker-s23s24__card ticker-s24">
-        <header className="ticker-s23s24__head">Section 24</header>
+        <div className="ticker-card__h-with-tip">
+          <h3 className="ticker-subh ticker-subh--flex">Benchmark vs Ticker Bars</h3>
+          <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
+        </div>
         <div className="ticker-s24__chart">
           <svg viewBox="0 0 860 320" preserveAspectRatio="none" className="ticker-s24__svg">
             {axis.ticks.map((t) => {

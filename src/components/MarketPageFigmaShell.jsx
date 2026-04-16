@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { fetchJsonCached, fetchWithAuth, getAuthToken } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { NormalizedPerformanceCard } from './NormalizedPerformanceCard.jsx';
 import { SectorTreemap } from './SectorTreemap.jsx';
 import { DEFAULT_SELECTED_KEYS, META_BY_KEY, MARKET_SERIES } from './marketSeriesRegistry.js';
 import { returnToSummaryTableHeatColor, summaryTableTextOnFill } from '../utils/heatmapColors.js';
+import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import {
   calcLatestDelta,
   calcRangeReturnPct,
@@ -16,8 +18,8 @@ import {
 } from '../utils/marketCalculations.js';
 
 const LEFT_GROUPS = [
-  { id: 'us', title: 'key US indices snapshot-1' },
-  { id: 'sector', title: 'sp500 sectors-snapshot-1' },
+  { id: 'us', title: 'Key US Indices ' },
+  { id: 'sector', title: 'SP500 Sectors' },
   { id: 'other', title: 'Other Markets (ETFs)' }
 ];
 const REFRESH_MAP = { manual: 0, '15s': 15000, '30s': 30000, '60s': 60000 };
@@ -218,7 +220,9 @@ function SummaryReturnsCard({ refreshMs = 0 }) {
 
   return (
     <section className="mkt-summary-card mkt-summary-card--figma">
-      <header className="mkt-summary-card__head mkt-summary-card__head--figma">Index returns</header>
+      <header className="mkt-summary-card__head mkt-summary-card__head--figma">
+        Index returns <ChartInfoTip tip={CHART_INFO_TIPS.marketIndexReturns} align="start" />
+      </header>
       <div className="mkt-summary-card__table-wrap">
       <table className="mkt-summary-card__table mkt-summary-card__table--figma">
         <thead>
@@ -310,6 +314,7 @@ function MarketHeatmapThumbnail({ refreshMs = 0 }) {
     <section className="mkt-heat-thumb-card mkt-heat-thumb-card--figma">
       <header className="mkt-heat-thumb-card__head mkt-heat-thumb-card__head--figma mkt-heat-thumb-card__head--row">
         <span className="mkt-heat-thumb-card__title">{HEATMAP_THUMB_INDEX} heatmap</span>
+        <ChartInfoTip tip={CHART_INFO_TIPS.marketHeatmapThumb} align="start" />
         <Link to="/heatmap" className="mkt-heat-thumb-card__link">
           Full heatmap →
         </Link>
@@ -360,7 +365,7 @@ function RightWatchlistCard({ refreshMs = 0 }) {
   return (
     <aside className="mkt-right">
       <section className="mkt-watch-card">
-        <header className="mkt-watch-card__head">tickers-list-1</header>
+        <header className="mkt-watch-card__head">Tickers List</header>
         <div className="mkt-watch-card__table">
           <div className="mkt-watch-card__row mkt-watch-card__row--head">
             <span>Security</span>

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
 import { SectorTreemap } from '../components/SectorTreemap.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
 import { returnToHeatColor } from '../utils/heatmapColors.js';
 
 /** `apiIndex` must match `market_groups.name` from Supabase (see GET /api/market/indices). */
@@ -376,6 +378,7 @@ export default function MarketHeatmapPage() {
                 </svg>
               </span>
               {formatListDate(new Date())}
+              <ChartInfoTip tip={CHART_INFO_TIPS.heatmapTreemap} align="start" />
             </div>
             <div className="heatmap-main__tools">
               <button type="button" className="heatmap-icon-btn" onClick={toggleFullscreen} title="Fullscreen">

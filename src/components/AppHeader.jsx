@@ -1,5 +1,7 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import odinLogo from '../assets/odin500-logo.svg';
+import odinLogoLight from '../assets/odin500-logo-light.svg';
 import { clearApiCache, clearAuthToken } from '../store/apiStore.js';
 
 const NAV_ITEMS = [
@@ -11,6 +13,24 @@ const NAV_ITEMS = [
   { to: '/premium', label: 'Premium' },
   { to: '/about', label: 'About' }
 ];
+
+const FINNHUB_NEWS_REST_URL = 'https://finnhub.io/api/v1/news';
+const FINNHUB_NEWS_TOKEN =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_FINNHUB_TOKEN) ||
+  'd7g8jb1r01qqb8ringj0d7g8jb1r01qqb8ringjg';
+const HEADER_NEWS_LIMIT = 5;
+
+function fmtNewsTime(unixSec) {
+  const ts = Number(unixSec);
+  if (!Number.isFinite(ts)) return '';
+  const d = new Date(ts * 1000);
+  const now = Date.now();
+  const diffMin = Math.floor((now - d.getTime()) / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 24 * 60) return `${Math.floor(diffMin / 60)}h ago`;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 function IconSearchInset() {
   return (
@@ -63,12 +83,70 @@ function IconMoon() {
 
 export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = null }) {
   const navigate = useNavigate();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [newsBusy, setNewsBusy] = useState(false);
+  const [newsError, setNewsError] = useState('');
+  const [newsItems, setNewsItems] = useState([]);
+  const profileWrapRef = useRef(null);
+  const bellWrapRef = useRef(null);
+  const headerLogo = theme === 'light' ? odinLogoLight : odinLogo;
 
   const handleSignOut = () => {
     clearAuthToken();
     clearApiCache();
     navigate('/login', { replace: true });
   };
+
+  const loadGeneralNews = useCallback(async () => {
+    if (!FINNHUB_NEWS_TOKEN) {
+      setNewsError('Token missing');
+      return;
+    }
+    setNewsBusy(true);
+    setNewsError('');
+    try {
+      const qs = new URLSearchParams({
+        category: 'general',
+        token: FINNHUB_NEWS_TOKEN
+      });
+      const res = await fetch(`${FINNHUB_NEWS_REST_URL}?${qs.toString()}`);
+      if (!res.ok) throw new Error(`News request failed (${res.status})`);
+      const payload = await res.json();
+      const rows = Array.isArray(payload) ? payload : [];
+      const mapped = rows
+        .map((r) => ({
+          id: String(r?.id ?? ''),
+          headline: String(r?.headline || '').trim(),
+          source: String(r?.source || 'Finnhub').trim() || 'Finnhub',
+          time: fmtNewsTime(r?.datetime),
+          url: String(r?.url || '').trim()
+        }))
+        .filter((r) => r.id && r.headline)
+        .slice(0, HEADER_NEWS_LIMIT);
+      setNewsItems(mapped);
+    } catch (e) {
+      setNewsError(e.message || 'Failed to load news');
+      setNewsItems([]);
+    } finally {
+      setNewsBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onDown = (e) => {
+      const t = e.target;
+      if (profileWrapRef.current && !profileWrapRef.current.contains(t)) setProfileOpen(false);
+      if (bellWrapRef.current && !bellWrapRef.current.contains(t)) setBellOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, []);
+
+  useEffect(() => {
+    if (!bellOpen) return;
+    loadGeneralNews();
+  }, [bellOpen, loadGeneralNews]);
 
   if (compact) {
     return (
@@ -77,7 +155,7 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
         <div className="app-header-inner app-header-inner--figma">
           <div className="app-header-left-figma">
             <NavLink to="/market" className="app-header-wordmark-link" title="Odin500 home">
-              <img src={odinLogo} alt="Odin500" className="app-header-logo-img" />
+              <img src={headerLogo} alt="Odin500" className="app-header-logo-img" />
             </NavLink>
           </div>
 
@@ -103,13 +181,91 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
                 <IconSearchInset />
               </button>
             </div>
-            <button type="button" className="header-avatar-btn" aria-label="Account">
-              <span className="header-avatar-placeholder" />
-            </button>
-            <button type="button" className="header-bell-btn" aria-label="Notifications">
-              <IconBell />
-              <span className="header-bell-badge">3</span>
-            </button>
+            <div className="header-util-wrap" ref={profileWrapRef}>
+              <button
+                type="button"
+                className={'header-avatar-btn' + (profileOpen ? ' header-avatar-btn--active' : '')}
+                aria-label="Profile"
+                aria-expanded={profileOpen}
+                onClick={() => {
+                  setProfileOpen((v) => !v);
+                  setBellOpen(false);
+                }}
+              >
+                <span className="header-avatar-placeholder" />
+              </button>
+              {profileOpen ? (
+                <div className="header-pop header-pop--profile" role="menu" aria-label="Profile menu">
+                  <div className="header-pop__profile-top">
+                    <span className="header-pop__profile-icon" aria-hidden />
+                    <span className="header-pop__profile-name">Profile</span>
+                  </div>
+                  <button type="button" className="header-pop__item" onClick={() => setProfileOpen(false)}>
+                    Your Profile
+                  </button>
+                  <button type="button" className="header-pop__item" onClick={() => setProfileOpen(false)}>
+                    Setting
+                  </button>
+                  <button
+                    type="button"
+                    className="header-pop__item header-pop__item--danger"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      handleSignOut();
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <div className="header-util-wrap" ref={bellWrapRef}>
+              <button
+                type="button"
+                className={'header-bell-btn' + (bellOpen ? ' header-bell-btn--active' : '')}
+                aria-label="Notifications"
+                aria-expanded={bellOpen}
+                onClick={() => {
+                  setBellOpen((v) => !v);
+                  setProfileOpen(false);
+                }}
+              >
+                <IconBell />
+                <span className="header-bell-badge">{Math.min(newsItems.length, HEADER_NEWS_LIMIT)}</span>
+              </button>
+              {bellOpen ? (
+                <div className="header-pop header-pop--news" role="dialog" aria-label="Latest news">
+                  <div className="header-pop__title-row">
+                    <strong>Latest News</strong>
+                  </div>
+                  {newsBusy ? <div className="header-pop__status">Loading news...</div> : null}
+                  {!newsBusy && newsError ? <div className="header-pop__status">{newsError}</div> : null}
+                  {!newsBusy && !newsError && !newsItems.length ? (
+                    <div className="header-pop__status">No headlines yet.</div>
+                  ) : null}
+                  <ul className="header-news-list">
+                    {newsItems.map((n) => (
+                      <li key={n.id} className="header-news-list__li">
+                        <a
+                          className="header-news-list__a"
+                          href={n.url || '#'}
+                          target={n.url ? '_blank' : undefined}
+                          rel={n.url ? 'noopener noreferrer' : undefined}
+                          onClick={(e) => {
+                            if (!n.url) e.preventDefault();
+                          }}
+                        >
+                          {n.headline}
+                        </a>
+                        <span className="header-news-list__meta">
+                          {n.source} · {n.time}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
             <button
               type="button"
               className={'header-theme-switch' + (theme === 'light' ? ' header-theme-switch--light' : '')}
@@ -121,9 +277,6 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
                 <span className="header-theme-switch-thumb">{theme === 'light' ? <IconSun /> : <IconMoon />}</span>
               </span>
             </button>
-            <button type="button" className="header-signout-ghost" onClick={handleSignOut}>
-              Sign out
-            </button>
           </div>
         </div>
       </header>
@@ -134,7 +287,7 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
     <header className="app-header">
       <div className="app-header-inner">
         <div className="brand">
-          <img src={odinLogo} alt="Odin500" className="brand-logo" />
+          <img src={headerLogo} alt="Odin500" className="brand-logo" />
         </div>
 
         <nav className="main-nav">
@@ -151,9 +304,6 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
 
         <div className="header-actions">
           <input className="header-search" type="text" placeholder="Search" />
-          <button type="button" className="btn-secondary header-signout" onClick={handleSignOut}>
-            Sign out
-          </button>
         </div>
       </div>
     </header>

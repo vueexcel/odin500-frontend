@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ChartInfoTip } from './ChartInfoTip.jsx';
+import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import { fetchWithAuth, getAuthToken } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { META_BY_KEY, TICKER_BY_KEY, MARKET_SERIES } from './marketSeriesRegistry.js';
@@ -163,7 +165,9 @@ export function NormalizedPerformanceCard({
   return (
     <section className="np-card" aria-label="Normalized performance">
       <header className="np-card__head">
-        <h2 className="np-card__title">Normalized Performance</h2>
+        <h2 className="np-card__title">
+          Normalized Performance <ChartInfoTip tip={CHART_INFO_TIPS.normalizedPerformance} align="start" />
+        </h2>
         <div className="np-card__head-actions">
           <button type="button" className="np-card__linkbtn">
             Export
@@ -216,7 +220,7 @@ export function NormalizedPerformanceCard({
         {loading ? <div className="np-card__status">Loading normalized performance…</div> : null}
         {error ? <div className="np-card__status np-card__status--error">{error}</div> : null}
         <svg className="np-chart" viewBox="0 0 820 470" preserveAspectRatio="none" role="img" aria-label="Normalized performance chart">
-          <rect x={0} y={0} width={820} height={470} fill="#202b3a" />
+          <rect x={0} y={0} width={820} height={470} className="np-chart__bg" />
           {yTicks.map((t) => {
             const y = chart.y + ((maxY - t) / (maxY - minY)) * chart.h;
             return (

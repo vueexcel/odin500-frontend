@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
 import { OdinFigmaSignalTreemap } from '../components/OdinFigmaSignalTreemap.jsx';
 import { ChartPanel } from '../components/ChartPanel.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
@@ -15,6 +16,7 @@ import {
   sanitizeTickerPageInput
 } from '../utils/tickerUrlSync.js';
 import { ODIN_FIGMA_LEGEND_ITEMS, figmaFillForSignal } from '../utils/odinSignalTreemap.js';
+import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
 
 const RANGE_PRESETS = [
   { key: '1y', label: '1Y', years: 1 },
@@ -361,7 +363,9 @@ export default function OdinSignalsPage() {
             <header className="odin-omx__head">Odin Market Indication (OMX)</header>
             <div className="odin-omx__grid">
               <article className="odin-omx-card">
-                <header className="odin-omx-card__cap">{activeIndex.label} OMX</header>
+                <header className="odin-omx-card__cap">
+                  {activeIndex.label} OMX <ChartInfoTip tip={CHART_INFO_TIPS.odinOmxGauge} align="start" />
+                </header>
                 <svg viewBox="0 0 320 170" className="odin-omx-gauge" aria-hidden>
                   {[
                     { from: 180, to: 210, color: '#ff0000' },
@@ -380,7 +384,10 @@ export default function OdinSignalsPage() {
               </article>
 
               <article className="odin-omx-card">
-                <header className="odin-omx-card__cap">{activeIndex.label.toLowerCase()}-direction-breakdown-1</header>
+                <header className="odin-omx-card__cap">
+                  {activeIndex.label.toLowerCase()} Direction Breakdown{' '}
+                  <ChartInfoTip tip={CHART_INFO_TIPS.odinDirectionDonut} align="start" />
+                </header>
                 <svg viewBox="0 0 320 210" className="odin-omx-donut" aria-hidden>
                   {(() => {
                     const total = Math.max(1, signalStats.total);
@@ -416,7 +423,9 @@ export default function OdinSignalsPage() {
               </article>
 
               <article className="odin-omx-card">
-                <header className="odin-omx-card__cap">{activeIndex.label}-signals-breakdown-1</header>
+                <header className="odin-omx-card__cap">
+                  {activeIndex.label} Signals Breakdown <ChartInfoTip tip={CHART_INFO_TIPS.odinSignalDonut} align="start" />
+                </header>
                 <svg viewBox="0 0 320 210" className="odin-omx-donut" aria-hidden>
                   {(() => {
                     const total = Math.max(1, signalStats.total);
@@ -486,6 +495,7 @@ export default function OdinSignalsPage() {
           <section className="odin-signals-heatmap" aria-label="Signal heatmap by sector">
             <h2 className="odin-signals-heatmap__title">
               {activeIndex.label} — signal heatmap
+              <ChartInfoTip tip={CHART_INFO_TIPS.odinSignalTreemap} align="start" />
             </h2>
             <p className="odin-signals-heatmap__sub">
               Tiles are grouped by signal (s1, s3, l1, …). Size follows strength tier; colors match the Odin Figma
