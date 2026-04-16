@@ -6,6 +6,8 @@ import { TickerAnnualReturnsPosNeg } from '../components/TickerAnnualReturnsPosN
 import { TickerMonthlyReturnsChart } from '../components/TickerMonthlyReturnsChart.jsx';
 import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyReturnsWaterfallDonut.jsx';
 import { TickerQuarterlyReturnsChart } from '../components/TickerQuarterlyReturnsChart.jsx';
+import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
+import { TickerSection23Section24 } from '../components/TickerSection23Section24.jsx';
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import {
@@ -1020,6 +1022,45 @@ export default function TickerPage() {
   const symQtd = qtdFromRows(statsSorted);
   const spyQtd = qtdFromRows(statsSpySorted);
 
+  const section16Rows = useMemo(() => {
+    const compact = COMPARE_ROWS.filter((r) => ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD'].includes(r.key));
+    return compact.map((row) => {
+      const symPct = row.period
+        ? pickDynamic(dynamicSym, row.period)
+        : row.mtd
+          ? symMtd
+          : row.qtd
+            ? symQtd
+            : null;
+      return { label: row.key, value: symPct };
+    });
+  }, [dynamicSym, symMtd, symQtd]);
+
+  const section17CompareRows = useMemo(() => {
+    const compact = COMPARE_ROWS.filter((r) => ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD'].includes(r.key));
+    return compact.map((row) => {
+      const symPct = row.period
+        ? pickDynamic(dynamicSym, row.period)
+        : row.mtd
+          ? symMtd
+          : row.qtd
+            ? symQtd
+            : null;
+      const spyPct = row.period
+        ? pickDynamic(dynamicSpy, row.period)
+        : row.mtd
+          ? spyMtd
+          : row.qtd
+            ? spyQtd
+            : null;
+      const diff =
+        symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct)
+          ? symPct - spyPct
+          : null;
+      return { label: row.key, symPct, spyPct, diff };
+    });
+  }, [dynamicSym, dynamicSpy, symMtd, spyMtd, symQtd, spyQtd]);
+
   const basePixelHeight = userChartHeight ?? mediaChartHeight;
   const plotHeight = chartFs && fsPlotH >= CHART_H_MIN ? fsPlotH : basePixelHeight;
 
@@ -1422,6 +1463,8 @@ export default function TickerPage() {
               asOfDate={asOfDate}
             />
           </TickerChartResizeScope>
+          <TickerSection16Section17 rows={section16Rows} compareRows={section17CompareRows} />
+          <TickerSection23Section24 initialTicker={sym} />
         </div>
 
         <aside className="ticker-page__aside">

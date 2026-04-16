@@ -4,9 +4,11 @@ import {
   forwardRef,
   useImperativeHandle,
   useState,
-  useCallback
+  useCallback,
+  useSyncExternalStore
 } from 'react';
 import { createChart } from 'lightweight-charts';
+import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 
 function formatChartTime(t) {
   if (t == null) return '—';
@@ -31,6 +33,7 @@ function formatPrice(n) {
 }
 
 export const ChartPanel = forwardRef(function ChartPanel(_props, ref) {
+  const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
@@ -42,6 +45,32 @@ export const ChartPanel = forwardRef(function ChartPanel(_props, ref) {
     const s = candleSeriesRef.current;
     const m = markersRef.current;
     if (s && m?.length) s.setMarkers(m);
+  }, []);
+
+  const applyChartTheme = useCallback((theme) => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    if (theme === 'light') {
+      chart.applyOptions({
+        layout: { background: { color: '#ffffff' }, textColor: '#334155' },
+        grid: {
+          vertLines: { color: 'rgba(148, 163, 184, 0.22)' },
+          horzLines: { color: 'rgba(148, 163, 184, 0.22)' }
+        },
+        rightPriceScale: { borderColor: 'rgba(148, 163, 184, 0.45)' },
+        timeScale: { borderColor: 'rgba(148, 163, 184, 0.45)' }
+      });
+    } else {
+      chart.applyOptions({
+        layout: { background: { color: '#0b1220' }, textColor: '#d1d5db' },
+        grid: {
+          vertLines: { color: 'rgba(148, 163, 184, 0.2)' },
+          horzLines: { color: 'rgba(148, 163, 184, 0.2)' }
+        },
+        rightPriceScale: { borderColor: 'rgba(148, 163, 184, 0.35)' },
+        timeScale: { borderColor: 'rgba(148, 163, 184, 0.35)' }
+      });
+    }
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -98,6 +127,8 @@ export const ChartPanel = forwardRef(function ChartPanel(_props, ref) {
     });
 
     chartRef.current = chart;
+    applyChartTheme(chartTheme);
+
     candleSeriesRef.current = candleSeries;
     ma200SeriesRef.current = ma200Series;
 
@@ -147,7 +178,11 @@ export const ChartPanel = forwardRef(function ChartPanel(_props, ref) {
       candleSeriesRef.current = null;
       ma200SeriesRef.current = null;
     };
-  }, [applyMarkers]);
+  }, [applyMarkers, applyChartTheme, chartTheme]);
+
+  useEffect(() => {
+    applyChartTheme(chartTheme);
+  }, [chartTheme, applyChartTheme]);
 
   return (
     <div className="panel">

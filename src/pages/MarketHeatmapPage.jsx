@@ -427,6 +427,7 @@ export default function MarketHeatmapPage() {
                 scaleMin={scaleMin}
                 scaleMax={scaleMax}
                 highlightSymbol={hoverSymbol}
+                finvizStrict
               />
             </div>
           </div>

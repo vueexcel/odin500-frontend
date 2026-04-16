@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ControlPanel } from './components/ControlPanel.jsx';
 import { ChartPanel } from './components/ChartPanel.jsx';
+import { MarketPageFigmaShell } from './components/MarketPageFigmaShell.jsx';
 import { useTickerList } from './hooks/useTickerList.js';
 import { apiUrl } from './utils/apiOrigin.js';
 import { fetchWithAuth, getAuthToken } from './store/apiStore.js';
@@ -233,6 +234,7 @@ export default function App() {
 
   return (
     <div className="container">
+      <MarketPageFigmaShell />
       <h1>OHLC + Signals Indicator Chart</h1>
 
       <ControlPanel

@@ -66,6 +66,64 @@ function treemapWeight(row) {
   return Math.max(base, 6);
 }
 
+function fallbackOnlyWeight(row) {
+  const mc = parseNum(row.marketCap ?? row.market_cap ?? row.MarketCap);
+  if (Number.isFinite(mc) && mc > 0) return Math.max(mc, 0.01);
+  const p = parseNum(row.price);
+  const base = Number.isFinite(p) && p > 0 ? Math.pow(p, 0.82) : 40;
+  return Math.max(base, 6);
+}
+
+/**
+ * Normalize rows for layout:
+ * - If explicit index weights exist (e.g. SP500 percentages), use them as primary sizing signal.
+ * - Missing explicit weights get a small proxy so they never overpower real weighted names.
+ */
+function resolveTreemapRows(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return [];
+
+  // Plausible explicit index percentages across SP500/Nasdaq100/Dow30.
+  // Any much larger number is most likely fallback-derived, not true index weight.
+  const MAX_PLAUSIBLE_INDEX_WEIGHT = 20;
+  const explicitRaw = list
+    .map((r) => readWeight(r))
+    .filter((n) => Number.isFinite(n) && n > 0 && n <= MAX_PLAUSIBLE_INDEX_WEIGHT);
+  const hasExplicit = explicitRaw.length >= Math.max(8, Math.floor(list.length * 0.1));
+
+  let scale = 1;
+  if (hasExplicit) {
+    const mx = Math.max(...explicitRaw);
+    // Some feeds use fractions (0.0755) instead of percentages (7.55).
+    if (mx <= 1.5) scale = 100;
+  }
+
+  const explicitScaled = explicitRaw.map((n) => n * scale);
+  const explicitMin = explicitScaled.length ? Math.min(...explicitScaled) : 0.25;
+  const explicitMed = explicitScaled.length
+    ? [...explicitScaled].sort((a, b) => a - b)[Math.floor(explicitScaled.length / 2)]
+    : 1;
+
+  return list.map((r) => {
+    const ew = readWeight(r);
+    if (
+      hasExplicit &&
+      Number.isFinite(ew) &&
+      ew > 0 &&
+      ew <= MAX_PLAUSIBLE_INDEX_WEIGHT
+    ) {
+      return { ...r, __tmw: Math.max(ew * scale, 0.01) };
+    }
+    if (hasExplicit) {
+      // Keep fallback rows visible but below true weighted constituents.
+      const proxy = fallbackOnlyWeight(r);
+      const compressed = Math.max(explicitMin * 0.35, Math.min(explicitMed * 0.25, Math.log10(proxy + 1)));
+      return { ...r, __tmw: Math.max(compressed, 0.01) };
+    }
+    return { ...r, __tmw: treemapWeight(r) };
+  });
+}
+
 function formatChangePct(pct) {
   if (pct == null || !Number.isFinite(Number(pct))) return '—';
   const v = Number(pct);
@@ -93,7 +151,7 @@ function buildHierarchy(rows) {
         name: indName,
         children: stocks.map((t) => ({
           name: t.symbol,
-          value: treemapWeight(t),
+          value: Number(t.__tmw) > 0 ? Number(t.__tmw) : treemapWeight(t),
           symbol: t.symbol,
           security: t.security || '',
           sector: secName,
@@ -120,7 +178,7 @@ function peersForIndustry(rows, featured) {
       security: r.security || '',
       price: r.price,
       changePct: readChangePct(r),
-      weight: treemapWeight(r)
+      weight: Number(r.__tmw) > 0 ? Number(r.__tmw) : treemapWeight(r)
     }))
     .sort((a, b) => b.weight - a.weight);
 }
@@ -134,7 +192,7 @@ function peersForSector(rows, featured) {
       security: r.security || '',
       price: r.price,
       changePct: readChangePct(r),
-      weight: treemapWeight(r)
+      weight: Number(r.__tmw) > 0 ? Number(r.__tmw) : treemapWeight(r)
     }))
     .sort((a, b) => b.weight - a.weight);
 }
@@ -216,11 +274,19 @@ function fitTileTwoLine(w, h, sym, pctStr) {
   return null;
 }
 
-export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymbol = '' }) {
+export function SectorTreemap({
+  rows,
+  scaleMin = -3,
+  scaleMax = 3,
+  highlightSymbol = '',
+  disableTooltip = false,
+  finvizStrict = false
+}) {
   const wrapRef = useRef(null);
   const hideTimerRef = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [hover, setHover] = useState(null);
+  const weightedRows = useMemo(() => resolveTreemapRows(rows), [rows]);
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current != null) {
@@ -252,9 +318,34 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
     return () => ro.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (!weightedRows.length) return;
+    const ls =
+      typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_TREEMAP_WEIGHTS') === '1';
+    if (!import.meta.env.DEV && !ls) return;
+    const nums = weightedRows.map((r) => Number(r.__tmw)).filter((n) => Number.isFinite(n) && n > 0);
+    const maxW = nums.length ? Math.max(...nums) : 0;
+    console.info('[SectorTreemap] tile weights', {
+      tickers: weightedRows.length,
+      sample: weightedRows.slice(0, 5).map((r) => ({ symbol: r.symbol, weight: r.__tmw, rawWeight: r.weight })),
+      maxWeight: maxW,
+      note:
+        maxW > 0 && maxW < 30
+          ? 'Typical range for Slickcharts %-weights (API `weight` field).'
+          : 'Large values often mean price/marketCap fallback — fix server index-weight symbol matching or run `node scripts/fetch-slickcharts-weights.js`.'
+    });
+    if (ls) {
+      console.table(
+        weightedRows
+          .map((r) => ({ symbol: r.symbol, weight: Number(r.__tmw), rawWeight: Number(r.weight), sector: r.sector, industry: r.industry }))
+          .sort((a, b) => (b.weight || 0) - (a.weight || 0))
+      );
+    }
+  }, [weightedRows]);
+
   const layoutRoot = useMemo(() => {
-    if (!rows.length || size.w < 40 || size.h < 40) return null;
-    const data = buildHierarchy(rows);
+    if (!weightedRows.length || size.w < 40 || size.h < 40) return null;
+    const data = buildHierarchy(weightedRows);
     if (!data.children?.length) return null;
     const root = hierarchy(data)
       .sum((d) => (d.children ? 0 : d.value))
@@ -262,17 +353,17 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
     const tm = d3treemap()
       .tile(treemapSquarify)
       .size([size.w, size.h])
-      .paddingOuter(1)
-      .paddingInner(1)
+      .paddingOuter(finvizStrict ? 0.5 : 1)
+      .paddingInner(finvizStrict ? 0.5 : 1)
       .paddingTop((d) => {
-        if (d.depth === 1) return 20;
-        if (d.depth === 2) return 12;
+        if (d.depth === 1) return finvizStrict ? 14 : 20;
+        if (d.depth === 2) return finvizStrict ? 9 : 12;
         return 0;
       })
       .round(true);
     tm(root);
     return root;
-  }, [rows, size.w, size.h]);
+  }, [weightedRows, size.w, size.h, finvizStrict]);
 
   const sectorNodes = layoutRoot?.children || [];
   const industryNodes = useMemo(() => {
@@ -287,12 +378,12 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
   const leaves = layoutRoot?.leaves() || [];
 
   const peerList = useMemo(() => {
-    if (!hover?.data || !rows.length) return [];
+    if (!hover?.data || !weightedRows.length) return [];
     const scope = hover.peerScope || 'industry';
-    if (scope === 'sector') return peersForSector(rows, hover.data);
-    return peersForIndustry(rows, hover.data);
+    if (scope === 'sector') return peersForSector(weightedRows, hover.data);
+    return peersForIndustry(weightedRows, hover.data);
   }, [
-    rows,
+    weightedRows,
     hover?.data?.symbol,
     hover?.data?.sector,
     hover?.data?.industry,
@@ -312,6 +403,7 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
   }
 
   const tooltipEl =
+    !disableTooltip &&
     hover &&
     typeof document !== 'undefined' &&
     createPortal(
@@ -338,6 +430,7 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
         role="img"
         aria-label="Sector and industry heatmap"
         onMouseLeave={(e) => {
+          if (disableTooltip) return;
           const t = e.relatedTarget;
           if (t && typeof t.closest === 'function' && t.closest('.heatmap-tooltip')) return;
           scheduleHide();
@@ -346,8 +439,8 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
         {sectorNodes.map((node) => {
           const sw = node.x1 - node.x0;
           const sh = node.y1 - node.y0;
-          const band = Math.min(22, Math.max(14, sh * 0.11));
-          if (sw < 24 || sh < 20) return null;
+          const band = finvizStrict ? Math.min(16, Math.max(10, sh * 0.08)) : Math.min(22, Math.max(14, sh * 0.11));
+          if (sw < (finvizStrict ? 18 : 24) || sh < (finvizStrict ? 14 : 20)) return null;
           const sectorFeatured = node
             .leaves()
             .map((l) => l.data)
@@ -356,7 +449,7 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
             <g
               key={'sec-band-' + node.data.name}
               onMouseEnter={(e) => {
-                if (!sectorFeatured) return;
+                if (disableTooltip || !sectorFeatured) return;
                 clearHideTimer();
                 const pos = tooltipPosition(e.clientX, e.clientY);
                 setHover({
@@ -367,7 +460,7 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
                 });
               }}
               onMouseMove={(e) => {
-                if (!sectorFeatured) return;
+                if (disableTooltip || !sectorFeatured) return;
                 const pos = tooltipPosition(e.clientX, e.clientY);
                 setHover((prev) => {
                   if (
@@ -406,8 +499,8 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
         {industryNodes.map((node) => {
           const iw = node.x1 - node.x0;
           const ih = node.y1 - node.y0;
-          const band = Math.min(14, Math.max(10, ih * 0.09));
-          if (iw < 28 || ih < 18) return null;
+          const band = finvizStrict ? Math.min(11, Math.max(7, ih * 0.07)) : Math.min(14, Math.max(10, ih * 0.09));
+          if (iw < (finvizStrict ? 18 : 28) || ih < (finvizStrict ? 12 : 18)) return null;
           const label = String(node.data.name).toUpperCase();
           const maxChars = Math.floor(iw / 6.5);
           const short = label.length > maxChars && maxChars > 6 ? label.slice(0, maxChars - 2) + '…' : label;
@@ -419,7 +512,7 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
             <g
               key={'ind-' + node.data.name + '-' + node.x0}
               onMouseEnter={(e) => {
-                if (!industryFeatured) return;
+                if (disableTooltip || !industryFeatured) return;
                 clearHideTimer();
                 const pos = tooltipPosition(e.clientX, e.clientY);
                 setHover({
@@ -430,7 +523,7 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
                 });
               }}
               onMouseMove={(e) => {
-                if (!industryFeatured) return;
+                if (disableTooltip || !industryFeatured) return;
                 const pos = tooltipPosition(e.clientX, e.clientY);
                 setHover((prev) => {
                   if (
@@ -491,6 +584,7 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
               className={'sector-treemap__cell' + (active ? ' sector-treemap__cell--hi' : '')}
               style={{ cursor: 'pointer' }}
               onMouseEnter={(e) => {
+                if (disableTooltip) return;
                 clearHideTimer();
                 const pos = tooltipPosition(e.clientX, e.clientY);
                 setHover({
@@ -501,6 +595,7 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
                 });
               }}
               onMouseMove={(e) => {
+                if (disableTooltip) return;
                 const pos = tooltipPosition(e.clientX, e.clientY);
                 setHover((prev) => {
                   if (
@@ -514,7 +609,7 @@ export function SectorTreemap({ rows, scaleMin = -3, scaleMax = 3, highlightSymb
                 });
               }}
             >
-              <title>{tooltipTitle}</title>
+              {disableTooltip ? null : <title>{tooltipTitle}</title>}
               <rect
                 x={node.x0}
                 y={node.y0}

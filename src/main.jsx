@@ -9,6 +9,7 @@ import SignupPage from './pages/SignupPage.jsx';
 import MarketHeatmapPage from './pages/MarketHeatmapPage.jsx';
 import OdinSignalsPage from './pages/OdinSignalsPage.jsx';
 import TickerPage from './pages/TickerPage.jsx';
+import Pricing from './pages/Pricing.jsx';
 import './index.css';
 import { initAuthSessionOnLoad } from './store/apiStore.js';
 
@@ -38,8 +39,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/heatmap" element={<MarketHeatmapPage />} />
           <Route path="/odin-signals" element={<OdinSignalsPage />} />
           <Route path="/accounts" element={<SimplePage title="Accounts" />} />
-          <Route path="/premium" element={<SimplePage title="Premium" />} />
+          <Route path="/premium" element={<Pricing />} />
           <Route path="/about" element={<SimplePage title="About" />} />
+          <Route path="/pricing"  />
         </Route>
         <Route
           path="/"
