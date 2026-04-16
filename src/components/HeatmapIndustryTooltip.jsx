@@ -63,8 +63,14 @@ export function HeatmapIndustryTooltip({
   onMouseLeave
 }) {
   if (!featured) return null;
-  const crumb = `${String(featured.sector || '').toUpperCase()} — ${String(featured.industry || '').toUpperCase()}`;
-  const heroBg = returnToHeatColor(featured.changePct, scaleMin, scaleMax);
+  const crumb =
+    featured.__odinSignalCrumb != null
+      ? String(featured.__odinSignalCrumb)
+      : `${String(featured.sector || '').toUpperCase()} — ${String(featured.industry || '').toUpperCase()}`;
+  const heroBg =
+    featured.__heatmapFillHex != null
+      ? featured.__heatmapFillHex
+      : returnToHeatColor(featured.changePct, scaleMin, scaleMax);
   const up = Number(featured.changePct) >= 0;
   const seed = hashSeed(featured.symbol);
 

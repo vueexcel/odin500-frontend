@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { OdinFigmaSignalTreemap } from '../components/OdinFigmaSignalTreemap.jsx';
 import { ChartPanel } from '../components/ChartPanel.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { fetchJsonCached } from '../store/apiStore.js';
@@ -13,6 +14,7 @@ import {
   resolveTickersPageSymbol,
   sanitizeTickerPageInput
 } from '../utils/tickerUrlSync.js';
+import { ODIN_FIGMA_LEGEND_ITEMS, figmaFillForSignal } from '../utils/odinSignalTreemap.js';
 
 const RANGE_PRESETS = [
   { key: '1y', label: '1Y', years: 1 },
@@ -72,6 +74,14 @@ function subtractYearsFromIsoEnd(endIso, years) {
   return toDateInput(d);
 }
 
+function formatListDate(d) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric'
+  }).format(d);
+}
+
 export default function OdinSignalsPage() {
   const chartRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -83,6 +93,11 @@ export default function OdinSignalsPage() {
   const [indexId, setIndexId] = useState('sp500');
   const [indexRows, setIndexRows] = useState([]);
   const [indexLoading, setIndexLoading] = useState(false);
+  const [odinHeatmapZoom, setOdinHeatmapZoom] = useState(1);
+  const [odinSignalBinSpan, setOdinSignalBinSpan] = useState(15);
+  const [odinHeatmapHover, setOdinHeatmapHover] = useState('');
+  const odinHeatmapMainRef = useRef(null);
+  const odinTreemapHostRef = useRef(null);
 
   const { startDate, endDate } = useMemo(() => {
     const end = toDateInput(new Date());
@@ -221,7 +236,11 @@ export default function OdinSignalsPage() {
         const mapped = list
           .map((r) => ({
             symbol: String(r.symbol || '').toUpperCase(),
+            security: String(r.security || ''),
             price: Number(r.price),
+            sector: String(r.sector || 'Other').trim() || 'Other',
+            industry: String(r.industry || 'General').trim() || 'General',
+            totalReturnPercentage: r.totalReturnPercentage,
             signal: signalFromReturn(r.totalReturnPercentage),
             ret: Number(r.totalReturnPercentage)
           }))
@@ -239,6 +258,51 @@ export default function OdinSignalsPage() {
       cancelled = true;
     };
   }, [activeIndex.apiIndex]);
+
+  const odinTreemapRows = useMemo(
+    () =>
+      indexRows.map((r) => ({
+        symbol: r.symbol,
+        security: r.security,
+        price: r.price,
+        sector: r.sector,
+        industry: r.industry,
+        totalReturnPercentage: r.totalReturnPercentage
+      })),
+    [indexRows]
+  );
+
+  const toggleOdinHeatmapFullscreen = useCallback(() => {
+    const el = odinHeatmapMainRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) el.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  }, []);
+
+  const downloadOdinHeatmapCsv = useCallback(() => {
+    if (!odinTreemapRows.length) return;
+    const header = ['Symbol', 'Security', 'Sector', 'Industry', 'Price', 'ChangePercent'];
+    const lines = [
+      header.join(','),
+      ...odinTreemapRows.map((r) =>
+        [
+          r.symbol,
+          `"${String(r.security || '').replace(/"/g, '""')}"`,
+          `"${String(r.sector || '').replace(/"/g, '""')}"`,
+          `"${String(r.industry || '').replace(/"/g, '""')}"`,
+          r.price != null ? Number(r.price) : '',
+          r.totalReturnPercentage != null ? Number(r.totalReturnPercentage) : ''
+        ].join(',')
+      )
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `odin-signals-heatmap-${activeIndex.id}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [odinTreemapRows, activeIndex.id]);
 
   return (
     <div className="odin-signals-page">
@@ -277,6 +341,8 @@ export default function OdinSignalsPage() {
                   type="button"
                   className="odin-tickers-list__row"
                   onClick={() => setSymbolInUrl(r.symbol)}
+                  onMouseEnter={() => setOdinHeatmapHover(r.symbol)}
+                  onMouseLeave={() => setOdinHeatmapHover('')}
                 >
                   <span>{r.symbol}</span>
                   <span>{r.signal}</span>
@@ -417,7 +483,137 @@ export default function OdinSignalsPage() {
             </div>
           </section>
 
-          <div className="odin-signals-page__toolbar">
+          <section className="odin-signals-heatmap" aria-label="Signal heatmap by sector">
+            <h2 className="odin-signals-heatmap__title">
+              {activeIndex.label} — signal heatmap
+            </h2>
+            <p className="odin-signals-heatmap__sub">
+              Tiles are grouped by signal (s1, s3, l1, …). Size follows strength tier; colors match the Odin Figma
+              palette.
+            </p>
+            <div className="odin-signals-heatmap__main heatmap-main" ref={odinHeatmapMainRef}>
+              <header className="heatmap-main__header">
+                <div className="heatmap-main__date">
+                  <span className="heatmap-main__cal" aria-hidden>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.75" />
+                      <path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  {formatListDate(new Date())}
+                </div>
+                <div className="heatmap-main__tools">
+                  <button
+                    type="button"
+                    className="heatmap-icon-btn"
+                    onClick={toggleOdinHeatmapFullscreen}
+                    title="Fullscreen"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 3H5a2 2 0 00-2 2v4M21 9V5a2 2 0 00-2-2h-4M15 21h4a2 2 0 002-2v-4M3 15v4a2 2 0 002 2h4" />
+                    </svg>
+                  </button>
+                  <button type="button" className="heatmap-icon-btn" title="Share" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="18" cy="5" r="3" />
+                      <circle cx="6" cy="12" r="3" />
+                      <circle cx="18" cy="19" r="3" />
+                      <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="heatmap-icon-btn"
+                    onClick={downloadOdinHeatmapCsv}
+                    title="Download CSV"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 3v12m0 0l4-4m-4 4L8 11M5 21h14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="heatmap-icon-btn"
+                    onClick={() =>
+                      setOdinHeatmapZoom((z) => Math.min(2.25, Math.round((z + 0.25) * 100) / 100))
+                    }
+                    title="Zoom in"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M21 21l-4-4M11 8v6M8 11h6" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="heatmap-icon-btn"
+                    onClick={() =>
+                      setOdinHeatmapZoom((z) => Math.max(0.75, Math.round((z - 0.25) * 100) / 100))
+                    }
+                    title="Zoom out"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M21 21l-4-4M8 11h6" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
+              </header>
+
+              {indexLoading ? <div className="heatmap-main__loading">Loading heatmap…</div> : null}
+              {!indexLoading && !odinTreemapRows.length ? (
+                <div className="heatmap-main__error">No tickers for this index.</div>
+              ) : null}
+
+              <div className="heatmap-treemap-outer odin-signals-heatmap__treemap" ref={odinTreemapHostRef}>
+                {odinTreemapRows.length > 0 ? (
+                  <div
+                    className="heatmap-treemap-zoom"
+                    style={{
+                      transform: `scale(${odinHeatmapZoom})`,
+                      transformOrigin: 'top left'
+                    }}
+                  >
+                    <OdinFigmaSignalTreemap
+                      rows={odinTreemapRows}
+                      signalBinSpan={odinSignalBinSpan}
+                      scaleMin={-3}
+                      scaleMax={3}
+                      highlightSymbol={odinHeatmapHover}
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              <footer className="heatmap-scale-bar odin-signals-heatmap__scale">
+                <div className="heatmap-scale-bar__swatches odin-signals-heatmap__figma-legend">
+                  {ODIN_FIGMA_LEGEND_ITEMS.map((item) => (
+                    <div key={item.code} className="heatmap-scale-bar__cell">
+                      <span
+                        className="heatmap-scale-bar__chip"
+                        style={{ background: figmaFillForSignal(item.code) }}
+                      />
+                      <span className="heatmap-scale-bar__lbl">{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="heatmap-scale-bar__slider">
+                  <label htmlFor="odin-signal-bin-span">Return range ±{odinSignalBinSpan}% → buckets S3…L3</label>
+                  <input
+                    id="odin-signal-bin-span"
+                    type="range"
+                    min="5"
+                    max="40"
+                    step="1"
+                    value={odinSignalBinSpan}
+                    onChange={(e) => setOdinSignalBinSpan(Number(e.target.value))}
+                  />
+                </div>
+              </footer>
+            </div>
+          </section>
+
+          {/* <div className="odin-signals-page__toolbar">
             <div className="odin-signals-page__title-block">
               <h1 className="odin-signals-page__title">Odin Signals</h1>
               <p className="odin-signals-page__subtitle">
@@ -448,17 +644,17 @@ export default function OdinSignalsPage() {
                 ))}
               </div>
             </div>
-          </div>
+          </div> */}
 
-          {error ? <div className="odin-signals-page__error">{error}</div> : null}
+          {/* {error ? <div className="odin-signals-page__error">{error}</div> : null}
           {loading ? <div className="odin-signals-page__loading">Loading…</div> : null}
 
           <div className="odin-signals-page__meta">
             {symbol} · {startDate} → {endDate} · {meta.rowCount} bars · {meta.signalCount} signals · MA200{' '}
             {meta.maPoints} pts
-          </div>
+          </div> */}
 
-          <div className="odin-signals-legend" aria-label="Signal legend">
+          {/* <div className="odin-signals-legend" aria-label="Signal legend">
             {SIGNAL_LEGEND.map((s) => (
               <span key={s.code} className="odin-signals-legend__item">
                 <span className="odin-signals-legend__swatch" style={{ background: s.color }} />
@@ -469,9 +665,9 @@ export default function OdinSignalsPage() {
               <span className="odin-signals-legend__line" />
               MA200
             </span>
-          </div>
+          </div> */}
 
-          <ChartPanel ref={chartRef} />
+          {/* <ChartPanel ref={chartRef} /> */}
         </main>
       </div>
     </div>

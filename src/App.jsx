@@ -235,7 +235,7 @@ export default function App() {
   return (
     <div className="container">
       <MarketPageFigmaShell />
-      <h1>OHLC + Signals Indicator Chart</h1>
+      {/* <h1>OHLC + Signals Indicator Chart</h1>
 
       <ControlPanel
         ticker={ticker}
@@ -260,9 +260,9 @@ export default function App() {
         statusType={status.type}
         onInvalidateOdin={invalidateCachedOdinPayload}
         allTickers={allTickers}
-      />
+      /> */}
 
-      <ChartPanel ref={chartRef} />
+      {/* <ChartPanel ref={chartRef} /> */}
     </div>
   );
 }

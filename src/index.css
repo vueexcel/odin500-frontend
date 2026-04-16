@@ -3,6 +3,11 @@
 /* Match ProtectedLayout: `dark:` utilities when app theme is dark. */
 @custom-variant dark (html[data-theme="dark"] &);
 
+/* Auth split layout: wordmark reads navy on light form panels */
+html[data-theme="light"] .auth-split-logo {
+  filter: brightness(0) saturate(100%) invert(11%) sepia(22%) saturate(1200%) hue-rotate(175deg);
+}
+
 :root {
   --bg: #111827;
   --panel: #1f2937;
@@ -4015,6 +4020,91 @@ button:disabled {
   margin-left: auto;
 }
 
+/* Odin Signals — bottom sector treemap (signal-sized tiles, S3…L3 legend) */
+.odin-signals-heatmap {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  width: 100%;
+  min-width: 0;
+}
+
+.odin-signals-heatmap__title {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #e2e8f0;
+  letter-spacing: -0.02em;
+}
+
+.odin-signals-heatmap__sub {
+  margin: 0 0 16px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #94a3b8;
+  max-width: 52rem;
+}
+
+.odin-signals-heatmap__main {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+.odin-signals-heatmap .heatmap-main__header {
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.odin-signals-heatmap .heatmap-main__date {
+  color: #1e293b;
+}
+
+.odin-signals-heatmap .heatmap-icon-btn {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  color: #475569;
+}
+
+.odin-signals-heatmap .heatmap-icon-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.odin-signals-heatmap__treemap {
+  min-height: 440px;
+  background: #ffffff;
+}
+
+.odin-figma-treemap {
+  min-height: 420px;
+  width: 100%;
+}
+
+.odin-figma-treemap__svg {
+  display: block;
+}
+
+.odin-signals-heatmap__scale {
+  border-top: 1px solid #e5e7eb;
+  background: #fafafa;
+  padding-top: 10px;
+}
+
+.odin-signals-heatmap__figma-legend {
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+
+.odin-signals-heatmap__figma-legend .heatmap-scale-bar__lbl {
+  text-transform: none;
+  font-weight: 600;
+  color: #334155;
+}
+
 .ticker-symbol-search {
   position: relative;
   margin-bottom: 12px;
@@ -8016,6 +8106,23 @@ button:disabled {
 [data-theme="light"] .heatmap-page {
   background: linear-gradient(180deg, #eef4fb 0%, #e7effa 100%);
   color: #0f172a;
+}
+
+[data-theme="light"] .odin-signals-heatmap {
+  border-top-color: rgba(148, 163, 184, 0.35);
+}
+
+[data-theme="light"] .odin-signals-heatmap__title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .odin-signals-heatmap__sub {
+  color: #64748b;
+}
+
+[data-theme="light"] .odin-signals-heatmap__main {
+  background: #ffffff;
+  border-color: #e2e8f0;
 }
 
 [data-theme="light"] .heatmap-card {

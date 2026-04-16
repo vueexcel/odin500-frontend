@@ -2,6 +2,7 @@ import { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { hierarchy, treemap as d3treemap, treemapSquarify } from 'd3-hierarchy';
 import { returnToHeatColor } from '../utils/heatmapColors.js';
+import { resolveOdinSignalTreemapRows } from '../utils/odinSignalTreemap.js';
 import { HeatmapIndustryTooltip } from './HeatmapIndustryTooltip.jsx';
 
 function norm(s) {
@@ -157,7 +158,9 @@ function buildHierarchy(rows) {
           sector: secName,
           industry: indName,
           changePct: readChangePct(t),
-          price: t.price
+          price: t.price,
+          chartNum: t.__chartNum != null ? Number(t.__chartNum) : undefined,
+          signalCode: t.__signalCode
         }))
       });
     }
@@ -280,13 +283,20 @@ export function SectorTreemap({
   scaleMax = 3,
   highlightSymbol = '',
   disableTooltip = false,
-  finvizStrict = false
+  finvizStrict = false,
+  /** When true, tile size follows signal tier (L1/S1 largest … N smallest) and fill uses discrete chart −3…+3 → S3…L3 colors. */
+  odinSignalMode = false,
+  /** Half-range in %-points for bucketing returns into chart numbers (odin mode only). */
+  signalBinSpan = 15
 }) {
   const wrapRef = useRef(null);
   const hideTimerRef = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [hover, setHover] = useState(null);
-  const weightedRows = useMemo(() => resolveTreemapRows(rows), [rows]);
+  const weightedRows = useMemo(() => {
+    if (odinSignalMode) return resolveOdinSignalTreemapRows(rows, signalBinSpan);
+    return resolveTreemapRows(rows);
+  }, [rows, odinSignalMode, signalBinSpan]);
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current != null) {
@@ -349,7 +359,13 @@ export function SectorTreemap({
     if (!data.children?.length) return null;
     const root = hierarchy(data)
       .sum((d) => (d.children ? 0 : d.value))
-      .sort((a, b) => (b.value || 0) - (a.value || 0));
+      .sort((a, b) => {
+        const dv = (b.value || 0) - (a.value || 0);
+        if (dv !== 0) return dv;
+        return String(a.data?.symbol || a.data?.name || '').localeCompare(
+          String(b.data?.symbol || b.data?.name || '')
+        );
+      });
     const tm = d3treemap()
       .tile(treemapSquarify)
       .size([size.w, size.h])
@@ -564,7 +580,11 @@ export function SectorTreemap({
           const h = node.y1 - node.y0;
           const sym = node.data.symbol || node.data.name;
           const pct = node.data.changePct;
-          const fill = returnToHeatColor(pct, scaleMin, scaleMax);
+          const cn = node.data.chartNum;
+          const fill =
+            odinSignalMode && Number.isFinite(Number(cn))
+              ? returnToHeatColor(Number(cn), -3, 3)
+              : returnToHeatColor(pct, scaleMin, scaleMax);
           const active = highlightSymbol && String(sym).toUpperCase() === highlightSymbol.toUpperCase();
           const pctStr = formatChangePct(pct);
           const tooltipTitle = `${sym} — ${pctStr}`;
