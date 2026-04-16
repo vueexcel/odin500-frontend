@@ -1802,6 +1802,7 @@ body {
   margin: 0;
   padding: 0;
   overflow: auto;
+  scrollbar-width: none;
 }
 
 .header-news-list__li {
@@ -8368,7 +8369,7 @@ button:disabled {
 }
 
 [data-theme="light"] .odin-index-list {
-  background: #0d2f57;
+  background: #d1d5db;
 }
 
 [data-theme="light"] .odin-tickers-list {

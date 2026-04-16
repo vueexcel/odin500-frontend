@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import odinLogo from '../assets/odin500-logo.svg';
 import odinLogoLight from '../assets/odin500-logo-light.svg';
+import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { clearApiCache, clearAuthToken } from '../store/apiStore.js';
 
 const NAV_ITEMS = [
@@ -14,23 +15,7 @@ const NAV_ITEMS = [
   { to: '/about', label: 'About' }
 ];
 
-const FINNHUB_NEWS_REST_URL = 'https://finnhub.io/api/v1/news';
-const FINNHUB_NEWS_TOKEN =
-  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_FINNHUB_TOKEN) ||
-  'd7g8jb1r01qqb8ringj0d7g8jb1r01qqb8ringjg';
 const HEADER_NEWS_LIMIT = 5;
-
-function fmtNewsTime(unixSec) {
-  const ts = Number(unixSec);
-  if (!Number.isFinite(ts)) return '';
-  const d = new Date(ts * 1000);
-  const now = Date.now();
-  const diffMin = Math.floor((now - d.getTime()) / 60000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffMin < 24 * 60) return `${Math.floor(diffMin / 60)}h ago`;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
 
 function IconSearchInset() {
   return (
@@ -85,9 +70,8 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
-  const [newsBusy, setNewsBusy] = useState(false);
-  const [newsError, setNewsError] = useState('');
-  const [newsItems, setNewsItems] = useState([]);
+  const { busy: newsBusy, error: newsError, items: feedItems } = useGeneralNewsFeed();
+  const newsItems = feedItems.slice(0, HEADER_NEWS_LIMIT);
   const profileWrapRef = useRef(null);
   const bellWrapRef = useRef(null);
   const headerLogo = theme === 'light' ? odinLogoLight : odinLogo;
@@ -98,41 +82,6 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
     navigate('/login', { replace: true });
   };
 
-  const loadGeneralNews = useCallback(async () => {
-    if (!FINNHUB_NEWS_TOKEN) {
-      setNewsError('Token missing');
-      return;
-    }
-    setNewsBusy(true);
-    setNewsError('');
-    try {
-      const qs = new URLSearchParams({
-        category: 'general',
-        token: FINNHUB_NEWS_TOKEN
-      });
-      const res = await fetch(`${FINNHUB_NEWS_REST_URL}?${qs.toString()}`);
-      if (!res.ok) throw new Error(`News request failed (${res.status})`);
-      const payload = await res.json();
-      const rows = Array.isArray(payload) ? payload : [];
-      const mapped = rows
-        .map((r) => ({
-          id: String(r?.id ?? ''),
-          headline: String(r?.headline || '').trim(),
-          source: String(r?.source || 'Finnhub').trim() || 'Finnhub',
-          time: fmtNewsTime(r?.datetime),
-          url: String(r?.url || '').trim()
-        }))
-        .filter((r) => r.id && r.headline)
-        .slice(0, HEADER_NEWS_LIMIT);
-      setNewsItems(mapped);
-    } catch (e) {
-      setNewsError(e.message || 'Failed to load news');
-      setNewsItems([]);
-    } finally {
-      setNewsBusy(false);
-    }
-  }, []);
-
   useEffect(() => {
     const onDown = (e) => {
       const t = e.target;
@@ -142,11 +91,6 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, []);
-
-  useEffect(() => {
-    if (!bellOpen) return;
-    loadGeneralNews();
-  }, [bellOpen, loadGeneralNews]);
 
   if (compact) {
     return (

@@ -34,7 +34,8 @@ export function NormalizedPerformanceCard({
   timeframe,
   onTimeframeChange,
   axisMode = 'auto',
-  refreshMs = 0
+  refreshMs = 0,
+  loadSeriesRows = null
 }) {
   const [tfLocal, setTfLocal] = useState('6M');
   const [activeKeysLocal, setActiveKeysLocal] = useState(['INDU', 'SPX', 'NDX', 'XLK']);
@@ -70,6 +71,10 @@ export function NormalizedPerformanceCard({
         const results = await Promise.all(
           keysToLoad.map(async (k) => {
             const ticker = TICKER_BY_KEY[k];
+            if (typeof loadSeriesRows === 'function') {
+              const rows = await loadSeriesRows(ticker, start, end);
+              return [k, normalizeRows(rows)];
+            }
             const res = await fetchWithAuth(apiUrl('/api/market/ohlc-signals-indicator'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -100,7 +105,7 @@ export function NormalizedPerformanceCard({
       cancelled = true;
       if (timer) window.clearInterval(timer);
     };
-  }, [tf, activeKeys, refreshMs]);
+  }, [tf, activeKeys, refreshMs, loadSeriesRows]);
 
   const allPts = useMemo(() => {
     const vals = [];
@@ -196,7 +201,7 @@ export function NormalizedPerformanceCard({
           const s = META_BY_KEY[k];
           if (!s) return null;
           return (
-          <button key={s.key} type="button" className="np-card__chip">
+          <div key={s.key} className="np-card__chip">
             <span className="np-card__chip-bar" style={{ background: s.color }} />
             {s.label}
             <button
@@ -211,7 +216,7 @@ export function NormalizedPerformanceCard({
             >
               ×
             </button>
-          </button>
+          </div>
           );
         })}
       </div>

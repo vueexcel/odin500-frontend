@@ -58,12 +58,17 @@ function niceAxisBounds(rows) {
   return { min, max, ticks };
 }
 
-export function TickerSection23Section24({ initialTicker = '' }) {
+export function TickerSection23Section24({
+  initialTicker = '',
+  initialTickerReturns = null,
+  initialBenchmarkReturns = null,
+  initialSp500Rows = []
+}) {
   const [groupId, setGroupId] = useState('sp500');
   const [groupRows, setGroupRows] = useState([]);
   const [ticker, setTicker] = useState(String(initialTicker || '').toUpperCase());
-  const [tickerReturns, setTickerReturns] = useState(null);
-  const [benchReturns, setBenchReturns] = useState(null);
+  const [tickerReturns, setTickerReturns] = useState(initialTickerReturns);
+  const [benchReturns, setBenchReturns] = useState(initialBenchmarkReturns);
   const [loadingGroup, setLoadingGroup] = useState(false);
   const [loadingReturns, setLoadingReturns] = useState(false);
 
@@ -75,12 +80,17 @@ export function TickerSection23Section24({ initialTicker = '' }) {
       if (!getAuthToken()) return;
       setLoadingGroup(true);
       try {
-        const { data } = await fetchJsonCached({
-          path: '/api/market/ticker-details',
-          method: 'POST',
-          body: { index: activeGroup.apiIndex, period: 'last-1-year' },
-          ttlMs: 10 * 60 * 1000
-        });
+        const data =
+          activeGroup.id === 'sp500' && Array.isArray(initialSp500Rows) && initialSp500Rows.length
+            ? { data: initialSp500Rows }
+            : (
+                await fetchJsonCached({
+                  path: '/api/market/ticker-details',
+                  method: 'POST',
+                  body: { index: activeGroup.apiIndex, period: 'last-1-year' },
+                  ttlMs: 10 * 60 * 1000
+                })
+              ).data;
         if (cancelled) return;
         const list = Array.isArray(data?.data) ? data.data : [];
         const sorted = [...list].sort((a, b) =>
@@ -101,12 +111,34 @@ export function TickerSection23Section24({ initialTicker = '' }) {
     return () => {
       cancelled = true;
     };
-  }, [activeGroup.apiIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeGroup.apiIndex, activeGroup.id, initialSp500Rows]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (
+      initialTickerReturns &&
+      String(initialTickerReturns?.ticker || '').toUpperCase() === String(ticker || '').toUpperCase()
+    ) {
+      setTickerReturns(initialTickerReturns);
+    }
+  }, [initialTickerReturns, ticker]);
+
+  useEffect(() => {
+    if (activeGroup.benchmark === 'SPY' && initialBenchmarkReturns) {
+      setBenchReturns(initialBenchmarkReturns);
+    }
+  }, [activeGroup.benchmark, initialBenchmarkReturns]);
 
   useEffect(() => {
     let cancelled = false;
     async function loadReturns() {
       if (!getAuthToken() || !ticker) return;
+      const hasTicker =
+        tickerReturns &&
+        String(tickerReturns?.ticker || '').toUpperCase() === String(ticker).toUpperCase();
+      const hasBench =
+        benchReturns &&
+        String(benchReturns?.ticker || '').toUpperCase() === String(activeGroup.benchmark).toUpperCase();
+      if (hasTicker && hasBench) return;
       setLoadingReturns(true);
       try {
         const [tRes, bRes] = await Promise.all([
@@ -139,7 +171,7 @@ export function TickerSection23Section24({ initialTicker = '' }) {
     return () => {
       cancelled = true;
     };
-  }, [ticker, activeGroup.benchmark]);
+  }, [ticker, activeGroup.benchmark, tickerReturns, benchReturns]);
 
   const rows = useMemo(() => {
     const dynT = tickerReturns?.performance?.dynamicPeriods || [];

@@ -15,6 +15,7 @@ import {
   TICKER_CHART_TYPE_OPTIONS,
   TickerLightweightChart
 } from '../components/TickerLightweightChart.jsx';
+import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
@@ -35,40 +36,8 @@ const RESIZE_KEY_QUARTERLY = 'odin_ticker_resize_quarterly';
 const RESIZE_KEY_MONTHLY = 'odin_ticker_resize_monthly';
 const RESIZE_KEY_MONTHLY_ADV = 'odin_ticker_resize_monthly_waterfall';
 
-const FINNHUB_NEWS_REST_URL = 'https://finnhub.io/api/v1/news';
-const FINNHUB_NEWS_TOKEN =
-  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_FINNHUB_TOKEN) ||
-  'd7g8jb1r01qqb8ringj0d7g8jb1r01qqb8ringjg';
 const MAX_NEWS_ITEMS = 120;
 const NEWS_PAGE_SIZE = 5;
-
-function fmtNewsTime(unixSec) {
-  const ts = Number(unixSec);
-  if (!Number.isFinite(ts)) return '';
-  const d = new Date(ts * 1000);
-  const now = Date.now();
-  const diffMin = Math.floor((now - d.getTime()) / 60000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffMin < 24 * 60) return `${Math.floor(diffMin / 60)}h ago`;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-function mapFinnhubNewsItem(row) {
-  if (!row || typeof row !== 'object') return null;
-  const id = row.id != null ? String(row.id) : row.url || row.headline;
-  const title = String(row.headline || '').trim();
-  if (!id || !title) return null;
-  const url = String(row.url || '').trim();
-  return {
-    id,
-    title,
-    source: String(row.source || 'Finnhub').trim() || 'Finnhub',
-    time: fmtNewsTime(row.datetime),
-    url,
-    related: String(row.related || '')
-  };
-}
 
 const PERF_COLS = [
   { label: '1M', period: 'Last Month' },
@@ -590,10 +559,9 @@ export default function TickerPage() {
   const [statsRows, setStatsRows] = useState([]);
   const [statsRowsSpy, setStatsRowsSpy] = useState([]);
   const [tailRows, setTailRows] = useState([]);
-  const [liveNews, setLiveNews] = useState([]);
-  const [newsBusy, setNewsBusy] = useState(true);
-  const [newsError, setNewsError] = useState('');
   const [newsPage, setNewsPage] = useState(1);
+  const { busy: newsBusy, error: newsError, items: liveNewsAll } = useGeneralNewsFeed();
+  const liveNews = useMemo(() => liveNewsAll.slice(0, MAX_NEWS_ITEMS), [liveNewsAll]);
   const [appliedCustomRange, setAppliedCustomRange] = useState(null);
   const [draftChartStart, setDraftChartStart] = useState('');
   const [draftChartEnd, setDraftChartEnd] = useState('');
@@ -839,58 +807,8 @@ export default function TickerPage() {
   }, [sym, timeframe, asOfDate, authVersion, returnsSym, chartApiRange.start, chartApiRange.end]);
 
   useEffect(() => {
-    let cancelled = false;
-    let timer = null;
-    let minId = 0;
-
-    async function loadGeneralNews() {
-      if (!FINNHUB_NEWS_TOKEN) {
-        setNewsBusy(false);
-        setNewsError('Finnhub token is missing.');
-        return;
-      }
-      try {
-        const qs = new URLSearchParams({
-          category: 'general',
-          token: FINNHUB_NEWS_TOKEN
-        });
-        if (minId > 0) qs.set('minId', String(minId));
-        const res = await fetch(`${FINNHUB_NEWS_REST_URL}?${qs.toString()}`);
-        if (!res.ok) throw new Error(`News request failed (${res.status})`);
-        const payload = await res.json();
-        if (cancelled) return;
-        const rows = Array.isArray(payload) ? payload : [];
-        const mapped = rows.map(mapFinnhubNewsItem).filter(Boolean);
-        if (mapped.length) {
-          const maxSeen = rows.reduce((mx, r) => Math.max(mx, Number(r?.id) || 0), minId);
-          minId = Math.max(minId, maxSeen);
-          setLiveNews((prev) => {
-            const seen = new Set(prev.map((n) => n.id));
-            const next = [...mapped.filter((n) => !seen.has(n.id)), ...prev];
-            return next.slice(0, MAX_NEWS_ITEMS);
-          });
-        }
-        setNewsError('');
-      } catch (e) {
-        if (cancelled) return;
-        setNewsError(e.message || 'Failed to load general trading news.');
-      } finally {
-        if (!cancelled) setNewsBusy(false);
-      }
-    }
-
-    setLiveNews([]);
-    setNewsBusy(true);
-    setNewsError('');
     setNewsPage(1);
-    loadGeneralNews();
-    timer = window.setInterval(loadGeneralNews, 30000);
-
-    return () => {
-      cancelled = true;
-      if (timer) window.clearInterval(timer);
-    };
-  }, []);
+  }, [sym]);
 
   const newsTotalPages = useMemo(
     () => Math.max(1, Math.ceil(liveNews.length / NEWS_PAGE_SIZE)),
@@ -1558,7 +1476,12 @@ export default function TickerPage() {
             />
           </TickerChartResizeScope>
           <TickerSection16Section17 rows={section16Rows} compareRows={section17CompareRows} />
-          <TickerSection23Section24 initialTicker={sym} />
+          <TickerSection23Section24
+            initialTicker={sym}
+            initialTickerReturns={returnsSym}
+            initialBenchmarkReturns={returnsSpy}
+            initialSp500Rows={detailRows}
+          />
         </div>
 
         <aside className="ticker-page__aside">

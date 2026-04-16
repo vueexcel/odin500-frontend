@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import { warmWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
 import { AppHeader } from './AppHeader.jsx';
 import { AppSidebar } from './AppSidebar.jsx';
 import { AppRightRail } from './AppRightRail.jsx';
@@ -35,7 +36,7 @@ export function ProtectedLayout() {
       if (!getAuthToken()) return;
       const ttlMs = 2 * 60 * 1000;
       void Promise.all([
-        fetchJsonCached({ path: '/api/watchlists/defaults', auth: false, ttlMs }),
+        warmWatchlistDefaults(ttlMs),
         fetchJsonCached({ path: '/api/watchlists', auth: true, ttlMs })
       ]).catch(() => {});
     };

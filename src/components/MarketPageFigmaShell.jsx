@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { fetchJsonCached, fetchWithAuth, getAuthToken } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { NormalizedPerformanceCard } from './NormalizedPerformanceCard.jsx';
 import { SectorTreemap } from './SectorTreemap.jsx';
+import { useWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
 import { DEFAULT_SELECTED_KEYS, META_BY_KEY, MARKET_SERIES } from './marketSeriesRegistry.js';
 import { returnToSummaryTableHeatColor, summaryTableTextOnFill } from '../utils/heatmapColors.js';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
@@ -34,7 +35,7 @@ function groupRows(groupId) {
   return MARKET_SERIES.filter((s) => s.group === groupId);
 }
 
-async function fetchLatestForTicker(ticker) {
+async function fetchLatestForTicker(ticker, loadOhlcRows = null) {
   try {
     const r = await fetchJsonCached({
       path: '/api/market/ohlc?symbol=' + encodeURIComponent(ticker) + '&limit=8',
@@ -47,23 +48,16 @@ async function fetchLatestForTicker(ticker) {
   } catch {
     /* fall through to POST fallback */
   }
-  const end = new Date();
-  const { start, end: endIso } = tfRange('1D');
-  const res = await fetchWithAuth(apiUrl('/api/market/ohlc-signals-indicator'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ticker,
-      start_date: start,
-      end_date: endIso || end.toISOString().slice(0, 10)
-    })
-  });
-  const payload = await res.json().catch(() => ({}));
-  const rows = Array.isArray(payload?.data) ? payload.data : [];
-  return calcLatestDelta(rows);
+  if (typeof loadOhlcRows === 'function') {
+    const end = new Date();
+    const { start, end: endIso } = tfRange('1D');
+    const rows = await loadOhlcRows(ticker, start, endIso || end.toISOString().slice(0, 10));
+    return calcLatestDelta(rows);
+  }
+  return null;
 }
 
-function LeftSnapshotStack({ selectedKeys, onToggleSeries, onSelectGroupAll, onClearGroup }) {
+function LeftSnapshotStack({ selectedKeys, onToggleSeries, onSelectGroupAll, onClearGroup, loadOhlcRows }) {
   const [rowsByGroup, setRowsByGroup] = useState({});
 
   useEffect(() => {
@@ -73,7 +67,7 @@ function LeftSnapshotStack({ selectedKeys, onToggleSeries, onSelectGroupAll, onC
       const out = {};
       for (const g of LEFT_GROUPS) {
         const rows = groupRows(g.id);
-        const vals = await Promise.allSettled(rows.map((r) => fetchLatestForTicker(r.ticker)));
+        const vals = await Promise.allSettled(rows.map((r) => fetchLatestForTicker(r.ticker, loadOhlcRows)));
         out[g.id] = Object.fromEntries(
           rows.map((r, i) => [r.key, vals[i].status === 'fulfilled' ? vals[i].value : null])
         );
@@ -86,7 +80,7 @@ function LeftSnapshotStack({ selectedKeys, onToggleSeries, onSelectGroupAll, onC
       cancel = true;
       window.clearInterval(t);
     };
-  }, []);
+  }, [loadOhlcRows]);
 
   return (
     <aside className="mkt-left">
@@ -153,7 +147,7 @@ function fmtSummaryPct(v) {
   return Number(v).toFixed(1) + '%';
 }
 
-function SummaryReturnsCard({ refreshMs = 0 }) {
+function SummaryReturnsCard({ refreshMs = 0, loadOhlcRows = null }) {
   const [vals, setVals] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -192,13 +186,18 @@ function SummaryReturnsCard({ refreshMs = 0 }) {
             startDate.setDate(now.getDate() - tf.days);
             const start = startDate.toISOString().slice(0, 10);
             const ticker = META_BY_KEY[d.key]?.ticker;
-            const res = await fetchWithAuth(apiUrl('/api/market/ohlc-signals-indicator'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ticker, start_date: start, end_date: end })
-            });
-            const payload = await res.json();
-            const rows = Array.isArray(payload?.data) ? payload.data : [];
+            let rows = [];
+            if (typeof loadOhlcRows === 'function') {
+              rows = await loadOhlcRows(ticker, start, end);
+            } else {
+              const res = await fetchWithAuth(apiUrl('/api/market/ohlc-signals-indicator'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, start_date: start, end_date: end })
+              });
+              const payload = await res.json();
+              rows = Array.isArray(payload?.data) ? payload.data : [];
+            }
             out[d.key][tf.key] = calcRangeReturnPct(rows);
           }
         }
@@ -216,7 +215,7 @@ function SummaryReturnsCard({ refreshMs = 0 }) {
       cancel = true;
       if (timer) window.clearInterval(timer);
     };
-  }, [defs, tfs, refreshMs]);
+  }, [defs, tfs, refreshMs, loadOhlcRows]);
 
   return (
     <section className="mkt-summary-card mkt-summary-card--figma">
@@ -339,28 +338,8 @@ function MarketHeatmapThumbnail({ refreshMs = 0 }) {
 }
 
 function RightWatchlistCard({ refreshMs = 0 }) {
-  const [rows, setRows] = useState([]);
-
-  useEffect(() => {
-    let cancel = false;
-    async function load() {
-      try {
-        const res = await fetchJsonCached({ path: '/api/watchlists/defaults', auth: false, ttlMs: 2 * 60 * 1000 });
-        const groups = Array.isArray(res?.data) ? res.data : [];
-        const first = Array.isArray(groups[0]?.items) ? groups[0].items : [];
-        if (!cancel) setRows(first.slice(0, 9));
-      } catch {
-        if (!cancel) setRows([]);
-      }
-    }
-    load();
-    let timer = null;
-    if (refreshMs > 0) timer = window.setInterval(load, refreshMs);
-    return () => {
-      cancel = true;
-      if (timer) window.clearInterval(timer);
-    };
-  }, [refreshMs]);
+  const { items } = useWatchlistDefaults(2 * 60 * 1000, refreshMs);
+  const rows = items;
 
   return (
     <aside className="mkt-right">
@@ -402,6 +381,30 @@ export function MarketPageFigmaShell() {
   const [axisMode, setAxisMode] = useState(() => localStorage.getItem(LS_KEYS.axis) || 'auto');
   const [refreshMode, setRefreshMode] = useState(() => localStorage.getItem(LS_KEYS.refresh) || '60s');
   const refreshMs = REFRESH_MAP[refreshMode] ?? 60000;
+  const ohlcCacheRef = useRef(new Map());
+
+  const loadOhlcRows = useCallback(async (ticker, startDate, endDate) => {
+    const key = `${String(ticker).toUpperCase()}|${startDate}|${endDate}`;
+    const now = Date.now();
+    const hit = ohlcCacheRef.current.get(key);
+    if (hit && now - hit.ts < Math.max(1000, refreshMs || 60000)) return hit.rows;
+    const res = await fetchWithAuth(apiUrl('/api/market/ohlc-signals-indicator'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker, start_date: startDate, end_date: endDate })
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload?.success) {
+      throw new Error(payload?.error || `Failed loading ${ticker}`);
+    }
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    ohlcCacheRef.current.set(key, { ts: now, rows });
+    return rows;
+  }, [refreshMs]);
+
+  useEffect(() => {
+    ohlcCacheRef.current.clear();
+  }, [refreshMs, timeframe]);
 
   const onToggleSeries = (seriesKey) => {
     setSelectedSeries((prev) => {
@@ -445,6 +448,7 @@ export function MarketPageFigmaShell() {
         onToggleSeries={onToggleSeries}
         onSelectGroupAll={onSelectGroupAll}
         onClearGroup={onClearGroup}
+        loadOhlcRows={loadOhlcRows}
       />
       <main className="mkt-center">
         <div className="mkt-options">
@@ -473,9 +477,10 @@ export function MarketPageFigmaShell() {
           onTimeframeChange={setTimeframe}
           axisMode={axisMode}
           refreshMs={refreshMs}
+          loadSeriesRows={loadOhlcRows}
         />
         <div className="mkt-center-bottom">
-          <SummaryReturnsCard refreshMs={refreshMs} />
+          <SummaryReturnsCard refreshMs={refreshMs} loadOhlcRows={loadOhlcRows} />
           <MarketHeatmapThumbnail refreshMs={refreshMs} />
         </div>
       </main>
