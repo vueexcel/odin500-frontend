@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
+import TradingChartLoader from './TradingChartLoader.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 
@@ -179,7 +180,11 @@ export function TickerSection23Section24({
     return TF_ROWS.map((tf) => {
       const bench = pickDynamic(dynB, tf.period);
       const tick = pickDynamic(dynT, tf.period);
-      return { tf: tf.key, bench, tick };
+      const diff =
+        Number.isFinite(bench) && Number.isFinite(tick)
+          ? Number(tick) - Number(bench)
+          : null;
+      return { tf: tf.key, bench, tick, diff };
     });
   }, [tickerReturns, benchReturns]);
 
@@ -227,9 +232,10 @@ export function TickerSection23Section24({
         <table className="ticker-s23__table">
           <thead>
             <tr>
-              <th />
+              <th  style={{color: 'black'}}> Time</th>
               <th>{activeGroup.benchLabel}</th>
               <th>{ticker || 'Ticker'}</th>
+              <th>Difference</th>
             </tr>
           </thead>
           <tbody>
@@ -238,11 +244,11 @@ export function TickerSection23Section24({
                 <th scope="row">{r.tf}</th>
                 <td>{fmtPct(r.bench)}</td>
                 <td>{fmtPct(r.tick)}</td>
+                <td>{fmtPct(r.diff)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        {loadingGroup || loadingReturns ? <p className="ticker-s23s24__loading">Loading…</p> : null}
       </div>
 
       <div className="ticker-s23s24__card ticker-s24">
@@ -251,6 +257,15 @@ export function TickerSection23Section24({
           <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
         </div>
         <div className="ticker-s24__chart">
+          {loadingGroup || loadingReturns ? (
+            <div className="chart-viz-loading-wrap ticker-s24__viz-loading">
+              <TradingChartLoader
+                label="Loading benchmark comparison…"
+                sublabel={`${activeGroup.label} vs ${ticker || 'ticker'}`}
+              />
+            </div>
+          ) : (
+            <>
           <svg viewBox="0 0 860 320" preserveAspectRatio="none" className="ticker-s24__svg">
             {axis.ticks.map((t) => {
               const y = 270 - ((t - axis.min) / (axis.max - axis.min || 1)) * 220;
@@ -308,6 +323,8 @@ export function TickerSection23Section24({
               {ticker || 'Ticker'}
             </span>
           </div>
+            </>
+          )}
         </div>
       </div>
     </section>

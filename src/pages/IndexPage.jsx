@@ -7,10 +7,8 @@ import { TickerMonthlyReturnsChart } from '../components/TickerMonthlyReturnsCha
 import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyReturnsWaterfallDonut.jsx';
 import { TickerQuarterlyReturnsChart } from '../components/TickerQuarterlyReturnsChart.jsx';
 import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
-import { TickerSection23Section24 } from '../components/TickerSection23Section24.jsx';
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
-import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import {
   IconChartTypeDropdown,
   TICKER_CHART_TYPE_OPTIONS,
@@ -19,23 +17,20 @@ import {
 import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
-import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 
 const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
-/** Must stay ≤ backend `OHLC_SIGNALS_MAX_RANGE_DAYS` (default 40000). */
 const MAX_SIGNAL_RANGE_DAYS = 40000;
 const BENCHMARK = 'SPY';
 
-/** Persisted main-chart pixel height (drag resize). */
-const CHART_USER_H_KEY = 'odin_ticker_chart_h';
+const CHART_USER_H_KEY = 'odin_index_chart_h';
 const CHART_H_MIN = 200;
 const CHART_H_MAX = 1400;
 
-const RESIZE_KEY_ANNUAL_FIGMA = 'odin_ticker_resize_annual_figma';
-const RESIZE_KEY_ANNUAL_POSNEG = 'odin_ticker_resize_annual_posneg';
-const RESIZE_KEY_QUARTERLY = 'odin_ticker_resize_quarterly';
-const RESIZE_KEY_MONTHLY = 'odin_ticker_resize_monthly';
-const RESIZE_KEY_MONTHLY_ADV = 'odin_ticker_resize_monthly_waterfall';
+const RESIZE_KEY_ANNUAL_FIGMA = 'odin_index_resize_annual_figma';
+const RESIZE_KEY_ANNUAL_POSNEG = 'odin_index_resize_annual_posneg';
+const RESIZE_KEY_QUARTERLY = 'odin_index_resize_quarterly';
+const RESIZE_KEY_MONTHLY = 'odin_index_resize_monthly';
+const RESIZE_KEY_MONTHLY_ADV = 'odin_index_resize_monthly_waterfall';
 
 const MAX_NEWS_ITEMS = 120;
 const NEWS_PAGE_SIZE = 5;
@@ -47,7 +42,6 @@ const PERF_COLS = [
   { label: '1Y', period: 'Last 1 year' }
 ];
 
-/** Maps comparison table row → `dynamicPeriods[].period` name (null = computed from OHLC). */
 const COMPARE_ROWS = [
   { key: '1D', period: 'Last date' },
   { key: '5D', period: 'Week' },
@@ -64,6 +58,32 @@ const COMPARE_ROWS = [
   { key: '20Y', period: 'Last 20 years' }
 ];
 
+/** Route slug → backend `index` body + UI label */
+export const INDEX_ROUTE_CHOICES = [
+  { slug: 'sp500', apiIndex: 'sp500', label: 'S&P 500' },
+  { slug: 'dow-jones', apiIndex: 'Dow Jones', label: 'Dow Jones Industrial Average' },
+  { slug: 'nasdaq-composite', apiIndex: 'nasdaq composite', label: 'Nasdaq Composite' },
+  { slug: 'nasdaq-100', apiIndex: 'Nasdaq 100', label: 'Nasdaq 100' }
+];
+
+function sanitizeIndexSlug(raw) {
+  let s = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '');
+  if (!s) return '';
+  const aliases = {
+    dowjones: 'dow-jones',
+    djia: 'dow-jones',
+    nasdaq100: 'nasdaq-100',
+    nasdaq: 'nasdaq-100',
+    ixic: 'nasdaq-composite',
+    comp: 'nasdaq-composite'
+  };
+  if (aliases[s]) return aliases[s];
+  return s;
+}
+
 function pickNum(row, keys) {
   for (const key of keys) {
     if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
@@ -78,10 +98,6 @@ function toIso(d) {
   return d.toISOString().slice(0, 10);
 }
 
-/**
- * Cap how far `start` can be before `end` so inclusive calendar-day span ≤ `maxInclusiveDays`
- * (matches backend ohlc-signals-indicator: floor((end-start)/1d)+1 ≤ max).
- */
 function clampStartToMaxDays(start, end, maxInclusiveDays) {
   const maxDiffMs = (maxInclusiveDays - 1) * 86400000;
   const diff = end.getTime() - start.getTime();
@@ -89,10 +105,6 @@ function clampStartToMaxDays(start, end, maxInclusiveDays) {
   return new Date(end.getTime() - maxDiffMs);
 }
 
-/**
- * First calendar date in a backward walk from `endIso` until `sessionCount` Mon–Fri
- * sessions have been included (the end date counts if it is a weekday).
- */
 function startDateForLastTradingSessions(endIso, sessionCount) {
   const end = new Date(String(endIso).slice(0, 10) + 'T12:00:00');
   if (Number.isNaN(end.getTime()) || sessionCount < 1) return String(endIso).slice(0, 10);
@@ -107,11 +119,6 @@ function startDateForLastTradingSessions(endIso, sessionCount) {
   return toIso(d);
 }
 
-/**
- * @param {string} tf
- * @param {string} endIso as-of / chart end (YYYY-MM-DD)
- * @param {{ min: string, max: string } | null} [bounds] first/last OHLC dates from `/api/market/ohlc-ticker-bounds` (for ALL)
- */
 function rangeForTimeframe(tf, endIso, bounds = null) {
   const end = new Date(String(endIso).slice(0, 10) + 'T12:00:00');
   if (Number.isNaN(end.getTime())) {
@@ -191,7 +198,6 @@ function rangeForTimeframe(tf, endIso, bounds = null) {
   return { start: toIso(capped), end: endStr };
 }
 
-/** User custom chart range: validate, order, cap span, cap end to dataset as-of. */
 function normalizeCustomChartRange(startStr, endStr, asOfIso) {
   const ns = String(startStr || '').trim();
   const ne = String(endStr || '').trim();
@@ -236,8 +242,7 @@ function signalBucket(sig) {
 function formatPct(n) {
   if (n == null || !Number.isFinite(Number(n))) return '—';
   const v = Number(n);
-  const s = (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
-  return s;
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
 }
 
 function formatPx(n) {
@@ -316,42 +321,29 @@ function qtdFromRows(sortedAsc) {
   });
 }
 
-function pickCompetitors(detailRows, sym, mySector, limit = 6) {
-  const u = sym.toUpperCase();
-  const rows = Array.isArray(detailRows) ? detailRows : [];
-  const same = rows.filter(
-    (r) =>
-      String(r.Symbol || r.symbol || '')
-        .toUpperCase()
-        .trim() !== u &&
-      mySector &&
-      String(r.Sector || r.sector || '').trim() === mySector
-  );
-  const rest = rows.filter(
-    (r) =>
-      String(r.Symbol || r.symbol || '')
-        .toUpperCase()
-        .trim() !== u
-  );
-  const merged = [...same, ...rest];
-  const seen = new Set();
-  const out = [];
-  for (const r of merged) {
-    const s = String(r.Symbol || r.symbol || '')
-      .toUpperCase()
-      .trim();
-    if (!s || seen.has(s)) continue;
-    seen.add(s);
-    out.push(s);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
 function ohlcRowsFromPayload(payload) {
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload)) return payload;
   return [];
+}
+
+/** Map index-returns `syntheticCloseSeries` to OHLC-shaped rows for Lightweight Charts. */
+function closeSeriesToChartRows(series) {
+  if (!Array.isArray(series)) return [];
+  return series.map((pt) => {
+    const d = String(pt.date || '').slice(0, 10);
+    const c = Number(pt.close);
+    const v = Number.isFinite(c) ? c : null;
+    return {
+      Date: d,
+      Open: v,
+      High: v,
+      Low: v,
+      Close: v,
+      Volume: 0,
+      signal: 'N'
+    };
+  });
 }
 
 function IconFlagUs({ className }) {
@@ -394,7 +386,6 @@ function IconPencil({ className }) {
   );
 }
 
-/** Document / notes (Figma “My Notes”). */
 function IconDocument({ className }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
@@ -523,7 +514,6 @@ function pctClass(n) {
   return '';
 }
 
-/** Main chart pixel height by viewport (Lightweight Charts is not fluid vertically). */
 function useMediaChartHeight() {
   const [height, setHeight] = useState(320);
   useEffect(() => {
@@ -541,25 +531,29 @@ function useMediaChartHeight() {
   return height;
 }
 
-export default function TickerPage() {
-  const { symbol: symbolParam } = useParams();
+export default function IndexPage() {
+  const { indexSlug: indexSlugParam } = useParams();
   const navigate = useNavigate();
-  const sym = sanitizeTickerPageInput(symbolParam) || 'AAPL';
+  const slug = sanitizeIndexSlug(indexSlugParam) || 'sp500';
+  const activeMeta = useMemo(
+    () => INDEX_ROUTE_CHOICES.find((x) => x.slug === slug) || INDEX_ROUTE_CHOICES[0],
+    [slug]
+  );
 
   const [authVersion, setAuthVersion] = useState(0);
   const [timeframe, setTimeframe] = useState('1Y');
-  const [chartLoading, setChartLoading] = useState(false);
   const [metaBusy, setMetaBusy] = useState(true);
   const [error, setError] = useState('');
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const [ohlcRows, setOhlcRows] = useState([]);
-  const [returnsSym, setReturnsSym] = useState(null);
+  const [indexPayload, setIndexPayload] = useState(null);
+  const [fullCloseSeries, setFullCloseSeries] = useState([]);
   const [returnsSpy, setReturnsSpy] = useState(null);
-  const [detailRows, setDetailRows] = useState([]);
   const [statsRows, setStatsRows] = useState([]);
   const [statsRowsSpy, setStatsRowsSpy] = useState([]);
   const [tailRows, setTailRows] = useState([]);
+  const [ohlcTickerBounds, setOhlcTickerBounds] = useState(/** @type {{ min: string, max: string } | null} */ (null));
+
   const [newsPage, setNewsPage] = useState(1);
   const { busy: newsBusy, error: newsError, items: liveNewsAll } = useGeneralNewsFeed();
   const liveNews = useMemo(() => liveNewsAll.slice(0, MAX_NEWS_ITEMS), [liveNewsAll]);
@@ -567,7 +561,6 @@ export default function TickerPage() {
   const [draftChartStart, setDraftChartStart] = useState('');
   const [draftChartEnd, setDraftChartEnd] = useState('');
   const [mainChartType, setMainChartType] = useState('line');
-  const [ohlcTickerBounds, setOhlcTickerBounds] = useState(/** @type {{ min: string, max: string } | null} */ (null));
 
   const chartBodyRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const chartPlotHostRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -588,6 +581,15 @@ export default function TickerPage() {
   });
   const [chartFs, setChartFs] = useState(false);
   const [fsPlotH, setFsPlotH] = useState(0);
+
+  const ohlcSymbol = useMemo(() => {
+    if (!indexPayload) return null;
+    const o = indexPayload.officialIndexTicker;
+    const t = indexPayload.ticker;
+    if (o && String(o).trim()) return String(o).trim().toUpperCase();
+    if (t && String(t).trim()) return String(t).trim().toUpperCase();
+    return null;
+  }, [indexPayload]);
 
   const chartApiRange = useMemo(() => {
     if (appliedCustomRange?.start && appliedCustomRange?.end) {
@@ -610,11 +612,11 @@ export default function TickerPage() {
     return () => window.removeEventListener('odin-auth-updated', onAuth);
   }, []);
 
-  const onSymbolChange = useCallback(
-    (next) => {
-      const s = sanitizeTickerPageInput(next);
-      if (!s) navigate('/ticker');
-      else navigate('/ticker/' + encodeURIComponent(s));
+  const onIndexSlugChange = useCallback(
+    (nextSlug) => {
+      const s = sanitizeIndexSlug(nextSlug);
+      if (!s) navigate('/indices');
+      else navigate('/indices/' + encodeURIComponent(s));
     },
     [navigate]
   );
@@ -635,13 +637,11 @@ export default function TickerPage() {
   useEffect(() => {
     let cancelled = false;
     if (!getAuthToken()) {
-      setError('Sign in to load ticker data.');
-      setChartLoading(false);
+      setError('Sign in to load index data.');
       setMetaBusy(false);
-      setOhlcRows([]);
-      setReturnsSym(null);
+      setIndexPayload(null);
+      setFullCloseSeries([]);
       setReturnsSpy(null);
-      setDetailRows([]);
       setStatsRows([]);
       setStatsRowsSpy([]);
       setTailRows([]);
@@ -655,16 +655,19 @@ export default function TickerPage() {
       setMetaBusy(true);
       setError('');
       try {
-        const retSym = await fetchJsonCached({
-          path: '/api/market/ticker-returns',
+        const idxRes = await fetchJsonCached({
+          path: '/api/market/index-returns',
           method: 'POST',
-          body: { ticker: sym },
-          ttlMs: 5 * 60 * 1000
+          body: { index: activeMeta.apiIndex },
+          ttlMs: 10 * 60 * 1000
         });
         if (cancelled) return;
-        const asOf = retSym.data?.asOfDate || new Date().toISOString().slice(0, 10);
+        const d = idxRes.data;
+        setIndexPayload(d && typeof d === 'object' ? d : null);
+        const asOf = d?.asOfDate || new Date().toISOString().slice(0, 10);
         setAsOfDate(asOf);
-        setReturnsSym(retSym.data);
+        const series = Array.isArray(d?.syntheticCloseSeries) ? d.syntheticCloseSeries : [];
+        setFullCloseSeries(series);
 
         const asOfD = new Date(String(asOf).slice(0, 10) + 'T12:00:00');
         const start365 = new Date(asOfD);
@@ -672,37 +675,67 @@ export default function TickerPage() {
         const startIso = toIso(start365);
         const endIso = String(asOf).slice(0, 10);
 
-        const [retSpy, detailsRes, tailRes, statsSymRes, statsSpyRes] = await Promise.all([
-          fetchJsonCached({
-            path: '/api/market/ticker-returns',
-            method: 'POST',
-            body: { ticker: BENCHMARK },
-            ttlMs: 15 * 60 * 1000
-          }),
-          fetchJsonCached({
-            path: '/api/market/ticker-details',
-            method: 'POST',
-            body: { index: 'sp500', period: 'last-1-year' },
-            ttlMs: 30 * 60 * 1000
-          }),
-          fetchJsonCached({
-            path: '/api/market/ohlc?symbol=' + encodeURIComponent(sym) + '&limit=8',
-            method: 'GET',
-            ttlMs: 60 * 1000
-          }),
-          fetchJsonCached({
-            path:
-              '/api/market/ohlc?symbol=' +
-              encodeURIComponent(sym) +
-              '&start_date=' +
-              encodeURIComponent(startIso) +
-              '&end_date=' +
-              encodeURIComponent(endIso) +
-              '&limit=400',
-            method: 'GET',
-            ttlMs: 10 * 60 * 1000
-          }),
-          fetchJsonCached({
+        const symForOhlc =
+          (d?.officialIndexTicker && String(d.officialIndexTicker).trim()) ||
+          (d?.ticker && String(d.ticker).trim()) ||
+          '';
+
+        const retSpy = await fetchJsonCached({
+          path: '/api/market/ticker-returns',
+          method: 'POST',
+          body: { ticker: BENCHMARK },
+          ttlMs: 15 * 60 * 1000
+        });
+        if (cancelled) return;
+        setReturnsSpy(retSpy.data);
+
+        if (symForOhlc) {
+          const u = encodeURIComponent(symForOhlc);
+          const [tailRes, statsSymRes, statsSpyRes] = await Promise.all([
+            fetchJsonCached({
+              path: '/api/market/ohlc?symbol=' + u + '&limit=8',
+              method: 'GET',
+              ttlMs: 60 * 1000
+            }),
+            fetchJsonCached({
+              path:
+                '/api/market/ohlc?symbol=' +
+                u +
+                '&start_date=' +
+                encodeURIComponent(startIso) +
+                '&end_date=' +
+                encodeURIComponent(endIso) +
+                '&limit=400',
+              method: 'GET',
+              ttlMs: 10 * 60 * 1000
+            }),
+            fetchJsonCached({
+              path:
+                '/api/market/ohlc?symbol=' +
+                encodeURIComponent(BENCHMARK) +
+                '&start_date=' +
+                encodeURIComponent(startIso) +
+                '&end_date=' +
+                encodeURIComponent(endIso) +
+                '&limit=400',
+              method: 'GET',
+              ttlMs: 10 * 60 * 1000
+            })
+          ]);
+          setTailRows(sortRowsAsc(ohlcRowsFromPayload(tailRes.data)));
+          setStatsRows(sortRowsAsc(ohlcRowsFromPayload(statsSymRes.data)));
+          setStatsRowsSpy(sortRowsAsc(ohlcRowsFromPayload(statsSpyRes.data)));
+        } else {
+          const baseRows = sortRowsAsc(closeSeriesToChartRows(series));
+          const tail = baseRows.slice(-8);
+          setTailRows(tail);
+          const stats = baseRows.filter((r) => {
+            const iso = rowDateToTimeKey(r);
+            return iso && iso >= startIso && iso <= endIso;
+          });
+          setStatsRows(stats.length ? stats : baseRows.slice(-252));
+
+          const statsSpyRes = await fetchJsonCached({
             path:
               '/api/market/ohlc?symbol=' +
               encodeURIComponent(BENCHMARK) +
@@ -713,23 +746,16 @@ export default function TickerPage() {
               '&limit=400',
             method: 'GET',
             ttlMs: 10 * 60 * 1000
-          })
-        ]);
-
-        if (cancelled) return;
-        setReturnsSpy(retSpy.data);
-        const d = detailsRes.data;
-        setDetailRows(Array.isArray(d?.data) ? d.data : []);
-
-        setTailRows(sortRowsAsc(ohlcRowsFromPayload(tailRes.data)));
-        setStatsRows(sortRowsAsc(ohlcRowsFromPayload(statsSymRes.data)));
-        setStatsRowsSpy(sortRowsAsc(ohlcRowsFromPayload(statsSpyRes.data)));
+          });
+          if (cancelled) return;
+          setStatsRowsSpy(sortRowsAsc(ohlcRowsFromPayload(statsSpyRes.data)));
+        }
       } catch (e) {
         if (!cancelled) {
-          setError(e.message || 'Failed to load ticker');
-          setReturnsSym(null);
+          setError(e.message || 'Failed to load index');
+          setIndexPayload(null);
+          setFullCloseSeries([]);
           setReturnsSpy(null);
-          setDetailRows([]);
           setStatsRows([]);
           setStatsRowsSpy([]);
           setTailRows([]);
@@ -742,12 +768,26 @@ export default function TickerPage() {
     return () => {
       cancelled = true;
     };
-  }, [sym, authVersion]);
+  }, [activeMeta.apiIndex, authVersion]);
 
   useEffect(() => {
     let cancelled = false;
     if (!getAuthToken()) {
       setOhlcTickerBounds(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    const sym = ohlcSymbol;
+    if (!sym) {
+      const sorted = sortRowsAsc(closeSeriesToChartRows(fullCloseSeries));
+      if (sorted.length) {
+        const min = rowDateToTimeKey(sorted[0]);
+        const max = rowDateToTimeKey(sorted[sorted.length - 1]);
+        setOhlcTickerBounds(min && max ? { min, max } : null);
+      } else {
+        setOhlcTickerBounds(null);
+      }
       return () => {
         cancelled = true;
       };
@@ -772,44 +812,37 @@ export default function TickerPage() {
     return () => {
       cancelled = true;
     };
-  }, [sym, authVersion]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!getAuthToken()) return;
-    if (!returnsSym || String(returnsSym.ticker || '').toUpperCase() !== sym.toUpperCase()) return;
-
-    (async () => {
-      setChartLoading(true);
-      try {
-        const { start, end } = chartApiRange;
-        const ohlcRes = await fetchJsonCached({
-          path: '/api/market/ohlc-signals-indicator',
-          method: 'POST',
-          body: { ticker: sym, start_date: start, end_date: end },
-          ttlMs: 2 * 60 * 1000
-        });
-        if (cancelled) return;
-        const rows = Array.isArray(ohlcRes.data?.data) ? ohlcRes.data.data : [];
-        setOhlcRows(sortRowsAsc(rows));
-      } catch (e) {
-        if (!cancelled) {
-          setError(e.message || 'Failed to load chart');
-          setOhlcRows([]);
-        }
-      } finally {
-        if (!cancelled) setChartLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sym, timeframe, asOfDate, authVersion, returnsSym, chartApiRange.start, chartApiRange.end]);
+  }, [ohlcSymbol, fullCloseSeries, authVersion]);
 
   useEffect(() => {
     setNewsPage(1);
-  }, [sym]);
+  }, [slug]);
+
+  const allChartRows = useMemo(() => sortRowsAsc(closeSeriesToChartRows(fullCloseSeries)), [fullCloseSeries]);
+
+  const sortedChart = useMemo(() => {
+    const { start, end } = chartApiRange;
+    return allChartRows.filter((r) => {
+      const t = rowDateToTimeKey(r);
+      return t && t >= start && t <= end;
+    });
+  }, [allChartRows, chartApiRange.start, chartApiRange.end]);
+
+  const returnsSym = useMemo(() => {
+    if (!indexPayload?.performance) return null;
+    const tk =
+      (indexPayload.officialIndexTicker && String(indexPayload.officialIndexTicker).trim()) ||
+      (indexPayload.ticker && String(indexPayload.ticker).trim()) ||
+      activeMeta.label;
+    return {
+      success: true,
+      ticker: String(tk).toUpperCase(),
+      asOfDate: indexPayload.asOfDate,
+      performance: indexPayload.performance
+    };
+  }, [indexPayload, activeMeta.label]);
+
+  const displaySym = returnsSym?.ticker || activeMeta.label;
 
   const newsTotalPages = useMemo(
     () => Math.max(1, Math.ceil(liveNews.length / NEWS_PAGE_SIZE)),
@@ -821,26 +854,9 @@ export default function TickerPage() {
     return liveNews.slice(start, start + NEWS_PAGE_SIZE);
   }, [liveNews, newsPageSafe]);
 
-  const myDetail = useMemo(() => {
-    const u = sym.toUpperCase();
-    for (const r of detailRows) {
-      const s = String(r.Symbol || r.symbol || '')
-        .toUpperCase()
-        .trim();
-      if (s === u) return r;
-    }
-    return null;
-  }, [detailRows, sym]);
-
-  const company =
-    String(myDetail?.Security || myDetail?.security || '').trim() || `${sym} — company name unavailable`;
-  const sector = String(myDetail?.Sector || myDetail?.sector || '').trim();
-  const industry = String(myDetail?.Industry || myDetail?.industry || '').trim();
-  const indexLabel = String(myDetail?.Index || myDetail?.index || '').trim() || 'US';
-
-  const competitors = useMemo(
-    () => pickCompetitors(detailRows, sym, sector, 6),
-    [detailRows, sym, sector]
+  const relatedIndexLinks = useMemo(
+    () => INDEX_ROUTE_CHOICES.filter((x) => x.slug !== slug),
+    [slug]
   );
 
   const dynamicSym = returnsSym?.performance?.dynamicPeriods || [];
@@ -849,13 +865,11 @@ export default function TickerPage() {
   const quarterlyReturnsRaw = returnsSym?.performance?.quarterlyReturns;
   const monthlyReturnsRaw = returnsSym?.performance?.monthlyReturns;
 
-  const sortedChart = useMemo(() => sortRowsAsc(ohlcRows), [ohlcRows]);
-
   useEffect(() => {
     const sync = () => {
       const el = chartBodyRef.current;
-      const d = /** @type {Document & { webkitFullscreenElement?: Element | null }} */ (document);
-      setChartFs(!!el && (document.fullscreenElement === el || d.webkitFullscreenElement === el));
+      const doc = /** @type {Document & { webkitFullscreenElement?: Element | null }} */ (document);
+      setChartFs(!!el && (document.fullscreenElement === el || doc.webkitFullscreenElement === el));
     };
     document.addEventListener('fullscreenchange', sync);
     document.addEventListener('webkitfullscreenchange', sync);
@@ -881,7 +895,7 @@ export default function TickerPage() {
     ro.observe(el);
     apply();
     return () => ro.disconnect();
-  }, [chartFs, sortedChart.length, mainChartType, chartLoading]);
+  }, [chartFs, sortedChart.length, mainChartType]);
 
   const onChartResizePointerDown = useCallback(
     (e) => {
@@ -929,14 +943,14 @@ export default function TickerPage() {
   const toggleChartFullscreen = useCallback(async () => {
     const el = chartBodyRef.current;
     if (!el) return;
-    const d = /** @type {Document & { webkitExitFullscreen?: () => Promise<void> | void; webkitFullscreenElement?: Element | null }} */ (
+    const doc = /** @type {Document & { webkitExitFullscreen?: () => Promise<void> | void; webkitFullscreenElement?: Element | null }} */ (
       document
     );
-    const fsEl = d.fullscreenElement ?? d.webkitFullscreenElement;
+    const fsEl = doc.fullscreenElement ?? doc.webkitFullscreenElement;
     try {
       if (fsEl === el) {
-        if (d.exitFullscreen) await d.exitFullscreen();
-        else d.webkitExitFullscreen?.();
+        if (doc.exitFullscreen) await doc.exitFullscreen();
+        else doc.webkitExitFullscreen?.();
       } else if (el.requestFullscreen) {
         await el.requestFullscreen();
       } else {
@@ -1052,21 +1066,43 @@ export default function TickerPage() {
     ? 'Using your custom start/end (overrides the pill timeframe until you reset).'
     : `Using pill timeframe “${timeframe}”, anchored to as-of ${asOfDate}.`;
 
+  const seriesModeLabel = indexPayload?.seriesMode || '—';
+  const apiIndexLabel = activeMeta.apiIndex;
+
   return (
     <div className="ticker-page">
       <div className="ticker-page__search-row">
-        <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId="ticker-dash-symbol" />
+        <label className="ticker-page__label" htmlFor="index-dash-select" style={{ marginRight: 8 }}>
+          Index
+        </label>
+        <select
+          id="index-dash-select"
+          className="ticker-page__date-inp"
+          style={{ minWidth: 220, maxWidth: '100%' }}
+          value={slug}
+          onChange={(e) => onIndexSlugChange(e.target.value)}
+        >
+          {INDEX_ROUTE_CHOICES.map((opt) => (
+            <option key={opt.slug} value={opt.slug}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
         <DataInfoTip align="start">
           <p className="ticker-data-tip__p">
-            <strong>Ticker selection</strong> drives every request on this page for one symbol.
+            <strong>Index dashboard</strong> loads returns and the main chart from{' '}
+            <code className="ticker-data-tip__code">POST /api/market/index-returns</code> with body{' '}
+            <code className="ticker-data-tip__code">index</code> set to this route’s universe (e.g.{' '}
+            <code className="ticker-data-tip__code">sp500</code>, <code className="ticker-data-tip__code">Dow Jones</code>
+            ).
           </p>
           <p className="ticker-data-tip__p">
-            Search uses <code className="ticker-data-tip__code">GET /api/tickers/search</code> (Supabase{' '}
-            <code className="ticker-data-tip__code">tickers</code>). Picking a symbol reloads chart, returns, OHLC
-            tail, and index metadata for that symbol.
+            Official benchmarks use table tickers like <strong>SPX</strong>, <strong>DJI</strong>, <strong>IXIC</strong> when the API reports{' '}
+            <code className="ticker-data-tip__code">seriesMode: official-index-ticker</code>. Synthetic universes use the weighted constituent
+            path.
           </p>
         </DataInfoTip>
-        {metaBusy || chartLoading ? <span className="ticker-page__loading-pill">Loading…</span> : null}
+        {metaBusy ? <span className="ticker-page__loading-pill">Loading…</span> : null}
       </div>
 
       {error ? (
@@ -1078,20 +1114,16 @@ export default function TickerPage() {
       <header className="ticker-page__header ticker-page__header--figma">
         <div className="ticker-page__header-top">
           <div className="ticker-page__header-identity">
-            <h1 className="ticker-page__company ticker-page__company--hero">{company}</h1>
+            <h1 className="ticker-page__company ticker-page__company--hero">{activeMeta.label}</h1>
             <span className="ticker-page__header-identity-meta">
               <IconFlagUs className="ticker-page__flag" />
-              <span className="ticker-page__exchange">{indexLabel || '—'}</span>
+              <span className="ticker-page__exchange">{displaySym}</span>
             </span>
             <DataInfoTip align="start">
               <p className="ticker-data-tip__p">
-                <strong>Header price</strong> prefers the last two sessions from{' '}
-                <code className="ticker-data-tip__code">GET /api/market/ohlc?symbol=…&amp;limit=8</code> (daily table:
-                Open, High, Low, <strong>Close</strong>, Volume when present).
-              </p>
-              <p className="ticker-data-tip__p">
-                Day change is the latest <strong>Close</strong> minus the previous session <strong>Close</strong>. If
-                that tail is missing, the last two rows inside the loaded chart range are used instead.
+                <strong>Header price</strong> uses the last two sessions from{' '}
+                <code className="ticker-data-tip__code">GET /api/market/ohlc</code> when an official index ticker exists; otherwise the last two
+                points from the index-returns close series.
               </p>
             </DataInfoTip>
           </div>
@@ -1114,7 +1146,7 @@ export default function TickerPage() {
         <div className="ticker-page__header-metrics" role="presentation">
           <div className="ticker-page__header-metric">
             <div className="ticker-page__metric-price-line">
-              <span className="ticker-page__sym">{sym}</span>
+              <span className="ticker-page__sym">{displaySym}</span>
               <span className="ticker-page__px ticker-page__px--hero">{formatPx(headerClose)}</span>
               <span className="ticker-page__ccy">USD</span>
             </div>
@@ -1148,34 +1180,26 @@ export default function TickerPage() {
 
           <div className="ticker-page__header-metric">
             <div className="ticker-page__metric-value-row">
-              <span className="ticker-page__metric-value">Not available from API</span>
+              <span className="ticker-page__metric-value">{seriesModeLabel}</span>
               <DataInfoTip align="start">
                 <p className="ticker-data-tip__p">
-                  <strong>Earnings</strong> dates are not returned by the current ticker-details payload on this page.
+                  <strong>seriesMode</strong> from index-returns: official single-ticker path vs synthetic constituents.
                 </p>
               </DataInfoTip>
             </div>
-            <p className="ticker-page__metric-label">Next Earnings Date</p>
+            <p className="ticker-page__metric-label">Data mode</p>
           </div>
 
           <div className="ticker-page__header-metric">
             <div className="ticker-page__metric-value-row">
-              <span className="ticker-page__metric-value">{sector || '—'}</span>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  <strong>Sector / industry</strong> come from <code className="ticker-data-tip__code">POST /api/market/ticker-details</code> with index{' '}
-                  <code className="ticker-data-tip__code">sp500</code> / period <code className="ticker-data-tip__code">last-1-year</code>, merged from the
-                  TickerDetails-style BigQuery view plus Supabase company-name backfill when needed.
-                </p>
-                <p className="ticker-data-tip__p">These are classification fields, not live market quotes.</p>
-              </DataInfoTip>
+              <span className="ticker-page__metric-value">{apiIndexLabel}</span>
             </div>
-            <p className="ticker-page__metric-label">Sector</p>
+            <p className="ticker-page__metric-label">API index</p>
           </div>
 
           <div className="ticker-page__header-metric">
-            <p className="ticker-page__metric-value ticker-page__metric-value--multiline">{industry || '—'}</p>
-            <p className="ticker-page__metric-label">Industry</p>
+            <p className="ticker-page__metric-value ticker-page__metric-value--multiline">—</p>
+            <p className="ticker-page__metric-label">Sector / industry</p>
           </div>
 
           <div className="ticker-page__header-metric ticker-page__header-metric--mcap">
@@ -1194,7 +1218,7 @@ export default function TickerPage() {
 
       <div className="ticker-page__grid">
         <div className="ticker-page__main">
-          <section className="ticker-card ticker-card--main-chart" aria-labelledby="snapshot-chart-title">
+          <section className="ticker-card ticker-card--main-chart" aria-labelledby="index-snapshot-chart-title">
             <div className="ticker-chart-toolbar">
               <ChartToolbarIcons />
               <ChartTypeToolbarDropdown chartType={mainChartType} onChartTypeChange={setMainChartType} />
@@ -1217,38 +1241,21 @@ export default function TickerPage() {
                 Replay
               </button>
               <span className="ticker-chart-toolbar__grow" />
-              <button type="button" className="ticker-chart-toolbar__iconbtn" aria-label="Undo">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M9 14L4 9l5-5M4 9h11a4 4 0 0 1 4 4v1" />
-                </svg>
-              </button>
-              <button type="button" className="ticker-chart-toolbar__iconbtn" aria-label="Redo">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M15 14l5-5-5-5M20 9H9a4 4 0 0 0-4 4v1" />
-                </svg>
-              </button>
             </div>
 
             <div className="ticker-card__head">
               <div className="ticker-card__title-with-tip">
-                <button type="button" className="ticker-card__title-btn" id="snapshot-chart-title">
+                <button type="button" className="ticker-card__title-btn" id="index-snapshot-chart-title">
                   Snapshot Chart
                   <IconChevronDown className="ticker-card__title-chev" />
                 </button>
                 <DataInfoTip align="end">
                   <p className="ticker-data-tip__p">
-                    <strong>Chart</strong>: TradingView <strong>Lightweight Charts™</strong> (open-source, Apache-2.0) —
-                    main series is <strong>user-selectable</strong> (trend icon in the chart toolbar): <strong>Line</strong> / <strong>Area</strong> (Close),{' '}
-                    <strong>Candles</strong>, or <strong>Bars</strong> (OHLC), plus volume histogram. Pan / zoom as usual.
+                    <strong>Chart</strong>: from <code className="ticker-data-tip__code">index-returns.syntheticCloseSeries</code> (close level),
+                    filtered client-side to the selected window. No separate OHLC+signals call for indices.
                   </p>
                   <p className="ticker-data-tip__p">
-                    <strong>API:</strong> <code className="ticker-data-tip__code">POST /api/market/ohlc-signals-indicator</code>. Line &amp; area plot{' '}
-                    <strong>Close</strong>; candles &amp; bars use full OHLC. Crosshair reads the same row. <strong>Volume</strong> when present;{' '}
-                    <strong>signal</strong> joined on <strong>Date</strong> on the server.
-                  </p>
-                  <p className="ticker-data-tip__p">
-                    <strong>Window:</strong> {chartRangeLabel}. {chartModeHelp} Long ranges are clipped to {MAX_SIGNAL_RANGE_DAYS} calendar days to satisfy the API
-                    guard.
+                    <strong>Window:</strong> {chartRangeLabel}. {chartModeHelp}
                   </p>
                 </DataInfoTip>
               </div>
@@ -1259,8 +1266,7 @@ export default function TickerPage() {
                       key={tf}
                       type="button"
                       className={
-                        'ticker-tf' +
-                        (!appliedCustomRange && tf === timeframe ? ' ticker-tf--active' : '')
+                        'ticker-tf' + (!appliedCustomRange && tf === timeframe ? ' ticker-tf--active' : '')
                       }
                       onClick={() => {
                         setAppliedCustomRange(null);
@@ -1272,16 +1278,7 @@ export default function TickerPage() {
                   ))}
                 </div>
                 <DataInfoTip align="end">
-                  <p className="ticker-data-tip__p">
-                    <strong>Timeframe pills</strong> only change the chart when you are not using an applied custom date
-                    range.
-                  </p>
-                  <p className="ticker-data-tip__p">
-                    Each pill maps to an inclusive <code className="ticker-data-tip__code">[start_date, end_date]</code>{' '}
-                    ending on returns <strong>asOfDate</strong>. <strong>1D</strong> = last <strong>3</strong> Mon–Fri sessions;{' '}
-                    <strong>5D</strong> = last <strong>5</strong> Mon–Fri sessions (not 3+ weeks of calendar days). Other
-                    ranges use calendar rules as before.
-                  </p>
+                  <p className="ticker-data-tip__p">Timeframe pills map to calendar ranges ending on index-returns as-of date.</p>
                 </DataInfoTip>
               </div>
               <div className="ticker-page__custom-range">
@@ -1308,26 +1305,13 @@ export default function TickerPage() {
                 <button type="button" className="ticker-outline-btn ticker-outline-btn--sm" onClick={resetCustomChartRange}>
                   Use timeframe
                 </button>
-                <DataInfoTip align="start">
-                  <p className="ticker-data-tip__p">
-                    <strong>Custom range</strong> sends your dates as <code className="ticker-data-tip__code">start_date</code> and{' '}
-                    <code className="ticker-data-tip__code">end_date</code> on the same OHLC+signals endpoint as the chart.
-                  </p>
-                  <p className="ticker-data-tip__p">
-                    End date is clamped to <strong>{asOfDate}</strong> (latest available close from returns). If start
-                    &gt; end they are swapped. The span is clipped to the backend maximum ({MAX_SIGNAL_RANGE_DAYS} days).
-                  </p>
-                  <p className="ticker-data-tip__p">
-                    <strong>Submit</strong> locks this window; <strong>Use timeframe</strong> clears the lock and returns to the pill mapping.
-                  </p>
-                </DataInfoTip>
               </div>
             </div>
 
             <div ref={chartBodyRef} className="ticker-chart-body">
               <div className="ticker-chart-legend">
-                <span className="ticker-chart-legend__sym">{sym}</span>
-                <span className="ticker-chart-legend__name">{company}</span>
+                <span className="ticker-chart-legend__sym">{displaySym}</span>
+                <span className="ticker-chart-legend__name">{activeMeta.label}</span>
                 <span>{formatPx(headerClose)} USD</span>
                 {headerChgPct != null && Number.isFinite(headerChgPct) ? (
                   <span className={'ticker-num ' + pctClass(headerChgPct)}>{formatPct(headerChgPct)}</span>
@@ -1339,7 +1323,7 @@ export default function TickerPage() {
                 className={'ticker-chart-plot-host' + (chartFs ? ' ticker-chart-plot-host--fs' : '')}
                 style={chartFs ? undefined : { height: basePixelHeight }}
               >
-                {chartLoading && sortedChart.length === 0 ? (
+                {metaBusy && sortedChart.length === 0 ? (
                   <div
                     className="chart-viz-loading-wrap"
                     style={{
@@ -1349,21 +1333,18 @@ export default function TickerPage() {
                       )
                     }}
                   >
-                    <TradingChartLoader label="Loading chart…" sublabel={`${sym} · OHLC & signals`} />
+                    <TradingChartLoader
+                      label="Loading chart…"
+                      sublabel={`${displaySym} · ${activeMeta.label}`}
+                    />
                   </div>
                 ) : sortedChart.length ? (
                   <TickerLightweightChart rows={sortedChart} height={plotHeight} chartType={mainChartType} />
                 ) : (
-                  <div className="ticker-sparkline ticker-sparkline--empty">No OHLC rows in this range.</div>
+                  <div className="ticker-sparkline ticker-sparkline--empty">No rows in this range.</div>
                 )}
               </div>
               <div className="ticker-chart-footer-icons">
-                <button type="button" className="ticker-chart-footer-icons__btn" aria-label="Settings">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-                  </svg>
-                </button>
                 <button
                   type="button"
                   className="ticker-chart-footer-icons__btn"
@@ -1398,16 +1379,13 @@ export default function TickerPage() {
             </div>
           </section>
 
-          <section className="ticker-card ticker-card--news" aria-labelledby="ticker-news-h">
+          <section className="ticker-card ticker-card--news" aria-labelledby="index-news-h">
             <div className="ticker-card__h-with-tip">
-              <h2 className="ticker-card__h ticker-card__h--flex" id="ticker-news-h">
+              <h2 className="ticker-card__h ticker-card__h--flex" id="index-news-h">
                 News
               </h2>
               <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  <strong>News</strong> below comes from Finnhub general trading category via REST API.
-                </p>
-                <p className="ticker-data-tip__p">This list is market-wide and refreshes every 30 seconds.</p>
+                <p className="ticker-data-tip__p">General trading headlines (same feed as ticker page).</p>
               </DataInfoTip>
             </div>
             {newsBusy ? <p className="ticker-page__news-sample-note">Loading general trading news…</p> : null}
@@ -1420,7 +1398,7 @@ export default function TickerPage() {
                 <li key={n.id} className="ticker-news-list__li">
                   <a
                     className="ticker-news-list__a"
-                    href={n.url || '#ticker-news-h'}
+                    href={n.url || '#index-news-h'}
                     onClick={(e) => {
                       if (!n.url) e.preventDefault();
                     }}
@@ -1463,55 +1441,41 @@ export default function TickerPage() {
           </section>
 
           <TickerAnnualReturnsFigma
-            symbol={sym}
+            symbol={displaySym}
             annualReturns={annualReturnsRaw}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
-            <TickerAnnualReturnsPosNeg symbol={sym} annualReturns={annualReturnsRaw} asOfDate={asOfDate} />
+            <TickerAnnualReturnsPosNeg symbol={displaySym} annualReturns={annualReturnsRaw} asOfDate={asOfDate} />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_QUARTERLY} defaultHeight={288}>
-            <TickerQuarterlyReturnsChart symbol={sym} quarterlyReturns={quarterlyReturnsRaw} asOfDate={asOfDate} />
+            <TickerQuarterlyReturnsChart symbol={displaySym} quarterlyReturns={quarterlyReturnsRaw} asOfDate={asOfDate} />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
-            <TickerMonthlyReturnsChart symbol={sym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} />
+            <TickerMonthlyReturnsChart symbol={displaySym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY_ADV} defaultHeight={300}>
             <TickerMonthlyReturnsWaterfallDonut
-              key={sym}
-              symbol={sym}
+              key={slug}
+              symbol={displaySym}
               monthlyReturns={monthlyReturnsRaw}
               asOfDate={asOfDate}
             />
           </TickerChartResizeScope>
           <TickerSection16Section17 rows={section16Rows} compareRows={section17CompareRows} />
-          <TickerSection23Section24
-            initialTicker={sym}
-            initialTickerReturns={returnsSym}
-            initialBenchmarkReturns={returnsSpy}
-            initialSp500Rows={detailRows}
-          />
         </div>
 
         <aside className="ticker-page__aside">
-          <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h">
+          <section className="ticker-card ticker-card--signal" aria-labelledby="index-odin-signal-h">
             <div className="ticker-signal-head">
               <span className="ticker-signal-logo" aria-hidden />
-              <h2 className="ticker-card__h ticker-card__h--inline" id="odin-signal-h">
+              <h2 className="ticker-card__h ticker-card__h--inline" id="index-odin-signal-h">
                 Odin Signal
               </h2>
               <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  <strong>Highlighted ladder step</strong> is derived from the <strong>last row</strong> of the chart
-                  payload (same request as the sparkline).
-                </p>
-                <p className="ticker-data-tip__p">
-                  Field: <code className="ticker-data-tip__code">signal</code> on each day, normalized server-side and
-                  grouped visually into L1–L3, S1–S3, or N (e.g. L11 maps into the L1 bucket).
-                </p>
-                <p className="ticker-data-tip__p">As-of follows the last chart date shown below the title.</p>
+                <p className="ticker-data-tip__p">Index chart rows carry placeholder signal <strong>N</strong> (no signals feed on this page).</p>
               </DataInfoTip>
             </div>
             <p className="ticker-signal-asof">As of {lastUpdatedFmt}</p>
@@ -1544,25 +1508,15 @@ export default function TickerPage() {
             </div>
           </section>
 
-          <section className="ticker-card" aria-labelledby="key-data-h">
+          <section className="ticker-card" aria-labelledby="index-key-data-h">
             <div className="ticker-card__h-with-tip">
-              <h2 className="ticker-card__h ticker-card__h--flex" id="key-data-h">
+              <h2 className="ticker-card__h ticker-card__h--flex" id="index-key-data-h">
                 Key data &amp; performance
               </h2>
               <DataInfoTip align="start">
                 <p className="ticker-data-tip__p">
-                  <strong>52-week range</strong> uses <strong>High</strong> / <strong>Low</strong> across ~1 year of
-                  daily rows from <code className="ticker-data-tip__code">GET /api/market/ohlc</code> ending on{' '}
-                  <strong>{asOfDate}</strong>.
-                </p>
-                <p className="ticker-data-tip__p">
-                  <strong>Avg volume</strong> averages the <strong>Volume</strong> column over those same rows.{' '}
-                  <strong>Volatility</strong> is an annualized estimate from daily <strong>Close</strong> log-returns in
+                  <strong>52-week range</strong> from ~1y daily OHLC when an official index ticker exists; otherwise from the index close series in
                   that window.
-                </p>
-                <p className="ticker-data-tip__p">
-                  <strong>Related tickers</strong> are other symbols from the same ticker-details response (same sector
-                  first), not a live correlation API.
                 </p>
               </DataInfoTip>
             </div>
@@ -1574,9 +1528,7 @@ export default function TickerPage() {
                 </div>
                 <div className="ticker-kd-row">
                   <dt>52-week range</dt>
-                  <dd>
-                    {hi52 != null && lo52 != null ? `${formatPx(lo52)} – ${formatPx(hi52)}` : '—'}
-                  </dd>
+                  <dd>{hi52 != null && lo52 != null ? `${formatPx(lo52)} – ${formatPx(hi52)}` : '—'}</dd>
                 </div>
                 <div className="ticker-kd-row">
                   <dt>Beta</dt>
@@ -1590,7 +1542,7 @@ export default function TickerPage() {
               <dl className="ticker-kd-dl">
                 <div className="ticker-kd-row">
                   <dt>Avg volume (1y)</dt>
-                  <dd>{formatVolLong(avgVol)}</dd>
+                  <dd>{ohlcSymbol ? formatVolLong(avgVol) : '—'}</dd>
                 </div>
                 <div className="ticker-kd-row">
                   <dt>Market cap</dt>
@@ -1606,12 +1558,12 @@ export default function TickerPage() {
                 </div>
               </dl>
             </div>
-            <p className="ticker-page__label ticker-kd-comp-label">Related tickers (same index list)</p>
+            <p className="ticker-page__label ticker-kd-comp-label">Other indices</p>
             <p className="ticker-kd-comp">
-              {competitors.length ? (
-                competitors.map((t) => (
-                  <Link key={t} to={`/ticker/${encodeURIComponent(t)}`} className="ticker-kd-comp__a">
-                    {t}
+              {relatedIndexLinks.length ? (
+                relatedIndexLinks.map((x) => (
+                  <Link key={x.slug} to={`/indices/${encodeURIComponent(x.slug)}`} className="ticker-kd-comp__a">
+                    {x.label}
                   </Link>
                 ))
               ) : (
@@ -1623,13 +1575,9 @@ export default function TickerPage() {
               <h3 className="ticker-subh ticker-subh--flex">Performance returns</h3>
               <DataInfoTip align="start">
                 <p className="ticker-data-tip__p">
-                  Rows use <code className="ticker-data-tip__code">POST /api/market/ticker-returns</code> →{' '}
-                  <code className="ticker-data-tip__code">performance.dynamicPeriods</code>.
-                </p>
-                <p className="ticker-data-tip__p">
-                  Each cell is <strong>totalReturn</strong> (percent price change from the period’s first applicable
-                  close to the last close the server found inside the window). Benchmark row repeats the same logic for{' '}
-                  <strong>{BENCHMARK}</strong>.
+                  From <code className="ticker-data-tip__code">POST /api/market/index-returns</code> →{' '}
+                  <code className="ticker-data-tip__code">performance.dynamicPeriods</code>. Benchmark uses{' '}
+                  <code className="ticker-data-tip__code">POST /api/market/ticker-returns</code> for {BENCHMARK}.
                 </p>
               </DataInfoTip>
             </div>
@@ -1676,35 +1624,26 @@ export default function TickerPage() {
               </h3>
               <DataInfoTip align="start">
                 <p className="ticker-data-tip__p">
-                  For rolling windows (1D, 5D, 1M, …) values come from the same <strong>dynamicPeriods</strong> arrays
-                  as the performance table, keyed by period label (e.g. “Last Month”, “Last 1 year”).
-                </p>
-                <p className="ticker-data-tip__p">
-                  <strong>MTD / QTD</strong> rows are computed in the browser from the ~1y daily OHLC samples: first
-                  close on/after month or quarter start vs latest <strong>Close</strong> for {sym} and for {BENCHMARK}{' '}
-                  separately.
-                </p>
-                <p className="ticker-data-tip__p">
-                  <strong>Diff</strong> = symbol total return minus benchmark total return for that row.
+                  <strong>MTD / QTD</strong> use the same ~1y OHLC samples as the ticker page when an official index OHLC symbol exists; otherwise MTD/QTD for the index may be limited.
                 </p>
               </DataInfoTip>
             </div>
             <div className="ticker-compare">
               <div className="ticker-compare__head">
                 <span />
-                <span>{sym}</span>
+                <span>{displaySym}</span>
                 <span>{BENCHMARK}</span>
                 <span>Diff</span>
               </div>
               {COMPARE_ROWS.map((row) => {
-                let symPct = row.period
+                const symPct = row.period
                   ? pickDynamic(dynamicSym, row.period)
                   : row.mtd
                     ? symMtd
                     : row.qtd
                       ? symQtd
                       : null;
-                let spyPct = row.period
+                const spyPct = row.period
                   ? pickDynamic(dynamicSpy, row.period)
                   : row.mtd
                     ? spyMtd

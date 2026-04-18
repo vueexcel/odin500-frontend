@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 
 const ROWS_MAIN = [
-  { id: 'russell', label: 'Russell2000', symbols: ['IWM'], tone: 'muted' },
   { id: 'nasdaq', label: 'Nasdaq 100', symbols: ['QQQ'], tone: 'purple' },
   { id: 'dow', label: 'Dow Jones', symbols: ['DIA'], tone: 'orange' },
   { id: 'sp500', label: 'S&P 500', symbols: ['SPY'], tone: 'blue' }

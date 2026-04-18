@@ -1,5 +1,4 @@
 export const MARKET_SERIES = [
-  { key: 'IWM', label: 'Russell 2000', ticker: 'IWM', color: '#94a3b8', badge: '#475569', tone: 'muted', group: 'us' },
   { key: 'NDX', label: 'Nasdaq 100', ticker: 'QQQ', color: '#7a2fff', badge: '#7a2fff', tone: 'purple', group: 'us' },
   { key: 'INDU', label: 'Dow Jones', ticker: 'DIA', color: '#ff7d36', badge: '#ff7d36', tone: 'orange', group: 'us' },
   { key: 'SPX', label: 'S&P 500', ticker: 'SPY', color: '#2f8cff', badge: '#2f8cff', tone: 'blue', group: 'us' },

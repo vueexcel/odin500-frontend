@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { PRODUCTION_API_ORIGIN } from './src/utils/apiOrigin.js';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -8,8 +9,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
-        changeOrigin: true
+        target: PRODUCTION_API_ORIGIN,
+        changeOrigin: true,
+        secure: true
       }
     }
   },

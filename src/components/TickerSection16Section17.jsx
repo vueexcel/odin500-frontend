@@ -31,25 +31,54 @@ function labelColor(bg) {
  */
 export function TickerSection16Section17({ rows, compareRows }) {
   const displayRows = useMemo(() => (Array.isArray(rows) ? rows.filter((r) => r && r.label).slice(0, 8) : []), [rows]);
-  const chartRows = useMemo(
-    () => (Array.isArray(compareRows) ? compareRows.filter((r) => r && r.label).slice(0, 8) : displayRows),
-    [compareRows, displayRows]
-  );
+  const chartRows = useMemo(() => {
+    if (displayRows.length) return displayRows;
+    // Backward-compat fallback if only compare rows are passed.
+    return Array.isArray(compareRows)
+      ? compareRows
+          .filter((r) => r && r.label)
+          .slice(0, 8)
+          .map((r) => ({ label: r.label, value: Number.isFinite(r.value) ? Number(r.value) : Number(r.diff) }))
+      : [];
+  }, [displayRows, compareRows]);
 
-  const bars = useMemo(() => {
+  const chart = useMemo(() => {
     if (!chartRows.length) return [];
-    const vals = chartRows.map((r) => (Number.isFinite(r.diff) ? Number(r.diff) : 0));
-    const maxAbs = Math.max(2, ...vals.map((v) => Math.abs(v)));
-    return chartRows.map((r, i) => {
-      const v = Number.isFinite(r.diff) ? Number(r.diff) : 0;
+    const vals = chartRows
+      .map((r) => (Number.isFinite(r.value) ? Number(r.value) : null))
+      .filter((v) => v != null);
+    const step = 0.5;
+    const rawMax = vals.length ? Math.max(...vals) : 0;
+    const rawMin = vals.length ? Math.min(...vals) : 0;
+    const axisMax = Math.max(step, Math.ceil((rawMax + step) / step) * step);
+    const axisMin = Math.min(-step, Math.floor((rawMin - step) / step) * step);
+    const range = Math.max(step * 2, axisMax - axisMin);
+    const zeroTopPct = ((axisMax - 0) / range) * 100;
+
+    const ticks = [];
+    for (let t = axisMax; t >= axisMin - 0.0001; t -= step) {
+      const v = Number(t.toFixed(1));
+      ticks.push({
+        value: v,
+        topPct: ((axisMax - v) / range) * 100
+      });
+    }
+
+    const bars = chartRows.map((r, i) => {
+      const hasValue = Number.isFinite(r.value);
+      const v = hasValue ? Number(r.value) : null;
+      const topPct = v == null ? zeroTopPct : v >= 0 ? ((axisMax - v) / range) * 100 : zeroTopPct;
+      const heightPct = v == null ? 0 : (Math.abs(v) / range) * 100;
       return {
         key: r.label + '-' + i,
         label: r.label,
         value: v,
-        hPct: Math.min(100, (Math.abs(v) / maxAbs) * 100),
+        topPct,
+        heightPct,
         tone: v > 0 ? 'up' : v < 0 ? 'down' : 'flat'
       };
     });
+    return { ticks, bars, zeroTopPct };
   }, [chartRows]);
 
   return (
@@ -85,25 +114,47 @@ export function TickerSection16Section17({ rows, compareRows }) {
 
       <div className="ticker-s16s17__card ticker-s17">
         <div className="ticker-card__h-with-tip">
-          <h3 className="ticker-subh ticker-subh--flex">Relative Strength Diff Bars</h3>
+          <h3 className="ticker-subh ticker-subh--flex">Relative Strength Bars</h3>
           <ChartInfoTip tip={CHART_INFO_TIPS.tickerRelativeStrength} align="start" />
         </div>
-        <div className="ticker-s17__plot">
-          <div className="ticker-s17__zero" />
-          {bars.map((b) => (
-            <div key={b.key} className="ticker-s17__col">
-              <div className="ticker-s17__bar-zone">
-                <div
-                  className={
-                    'ticker-s17__bar ticker-s17__bar--' + b.tone + (b.value >= 0 ? ' ticker-s17__bar--pos' : ' ticker-s17__bar--neg')
-                  }
-                  style={{ height: `${b.hPct / 2}%` }}
-                  title={`${b.label} diff: ${b.value.toFixed(2)}%`}
-                />
-              </div>
-              <span className="ticker-s17__lab">{b.label}</span>
+        <div className="ticker-s17__chart">
+          <div className="ticker-s17__yaxis">
+            <div className="ticker-s17__yaxis-area">
+              {chart.ticks?.map((t) => (
+                <span key={`y-${t.value}`} className="ticker-s17__yval" style={{ top: `${t.topPct}%` }}>
+                  {t.value.toFixed(1)}%
+                </span>
+              ))}
             </div>
-          ))}
+          </div>
+          <div className="ticker-s17__plot">
+            <div className="ticker-s17__plot-area">
+              {chart.ticks?.map((t) => (
+                <span key={`g-${t.value}`} className="ticker-s17__grid" style={{ top: `${t.topPct}%` }} />
+              ))}
+              <span className="ticker-s17__zero" style={{ top: `${chart.zeroTopPct || 50}%` }} />
+              <div className="ticker-s17__bars">
+                {chart.bars?.map((b) => (
+                  <div key={b.key} className="ticker-s17__col">
+                    <div className="ticker-s17__bar-zone">
+                      <div
+                        className={'ticker-s17__bar ticker-s17__bar--' + b.tone + (b.value == null ? ' ticker-s17__bar--empty' : '')}
+                        style={{ top: `${b.topPct}%`, height: `${b.heightPct}%` }}
+                        title={b.value == null ? `${b.label}: no data` : `${b.label}: ${b.value.toFixed(2)}%`}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="ticker-s17__xlabels">
+                {chart.bars?.map((b) => (
+                  <span key={`lab-${b.key}`} className="ticker-s17__lab">
+                    {b.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

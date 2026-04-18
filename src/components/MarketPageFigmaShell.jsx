@@ -5,6 +5,7 @@ import { fetchJsonCached, fetchWithAuth, getAuthToken } from '../store/apiStore.
 import { apiUrl } from '../utils/apiOrigin.js';
 import { NormalizedPerformanceCard } from './NormalizedPerformanceCard.jsx';
 import { SectorTreemap } from './SectorTreemap.jsx';
+import TradingChartLoader from './TradingChartLoader.jsx';
 import { useWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
 import { DEFAULT_SELECTED_KEYS, META_BY_KEY, MARKET_SERIES } from './marketSeriesRegistry.js';
 import { returnToSummaryTableHeatColor, summaryTableTextOnFill } from '../utils/heatmapColors.js';
@@ -330,7 +331,11 @@ function MarketHeatmapThumbnail({ refreshMs = 0 }) {
           ) : !error && !loading ? (
             <div className="mkt-treemap-thumb-host__empty">No data</div>
           ) : null}
-          {loading && !rows.length ? <div className="mkt-treemap-thumb-host__loading">Loading…</div> : null}
+          {loading && !rows.length ? (
+            <div className="mkt-treemap-thumb-host__loading" role="status" aria-live="polite">
+              <TradingChartLoader label="Loading heatmap…" sublabel={HEATMAP_THUMB_INDEX} />
+            </div>
+          ) : null}
         </Link>
       </div>
     </section>

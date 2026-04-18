@@ -24,10 +24,12 @@ function parseMonthRow(period) {
   return { year, month };
 }
 
-function parseYear(period) {
-  const mm = String(period || '').match(/(\d{4})/);
-  const y = mm ? parseInt(mm[1], 10) : NaN;
-  return Number.isFinite(y) ? y : NaN;
+/** API rows may use totalReturn, TotalReturn, or legacy shapes. */
+function pickTotalReturn(r) {
+  if (r == null) return NaN;
+  const v = r.totalReturn ?? r.TotalReturn ?? r.total_return;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
 }
 
 function yForValue(v, innerTop, innerH, yMin, yMax) {
@@ -55,13 +57,13 @@ function labelOnDonut(r, degMid) {
 }
 
 /**
- * Waterfall (cumulative monthly returns for selected year) + donut (# positive / negative years from annual returns).
+ * Waterfall (cumulative monthly returns for selected year) + donut (positive vs negative **months** in that year,
+ * same rows as the waterfall — updates when year or month date filter changes).
  * Renders below `TickerMonthlyReturnsChart`; does not replace it.
  */
-export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, annualReturns, asOfDate, plotHeight }) {
+export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asOfDate, plotHeight }) {
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const [monthRangeApplied, setMonthRangeApplied] = useState({ start: '', end: '' });
-  const [annualRangeApplied, setAnnualRangeApplied] = useState({ start: '', end: '' });
 
   const monthRows = useMemo(() => {
     if (!Array.isArray(monthlyReturns)) return [];
@@ -69,7 +71,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
     for (const r of monthlyReturns) {
       const meta = parseMonthRow(r.period);
       if (!meta) continue;
-      const tr = Number(r.totalReturn);
+      const tr = pickTotalReturn(r);
       if (!Number.isFinite(tr)) continue;
       out.push({
         period: r.period,
@@ -89,29 +91,6 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
     [monthRows, monthRangeApplied.start, monthRangeApplied.end]
   );
 
-  const annualRows = useMemo(() => {
-    if (!Array.isArray(annualReturns)) return [];
-    return [...annualReturns]
-      .map((r) => ({
-        startDate: r.startDate,
-        endDate: r.endDate,
-        totalReturn: Number(r.totalReturn),
-        year: parseYear(r.period)
-      }))
-      .filter((r) => Number.isFinite(r.year) && Number.isFinite(r.totalReturn));
-  }, [annualReturns]);
-
-  const displayAnnualRows = useMemo(
-    () => filterReturnsRows(annualRows, annualRangeApplied.start, annualRangeApplied.end),
-    [annualRows, annualRangeApplied.start, annualRangeApplied.end]
-  );
-
-  const yearStats = useMemo(() => {
-    const pos = displayAnnualRows.filter((r) => r.totalReturn > 0).length;
-    const neg = displayAnnualRows.filter((r) => r.totalReturn < 0).length;
-    return { pos, neg };
-  }, [displayAnnualRows]);
-
   const availableYears = useMemo(() => {
     const ys = [...new Set(displayMonthRows.map((r) => r.year))].sort((a, b) => b - a);
     return ys;
@@ -124,6 +103,18 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
     if (availableYears.includes(selectedYear)) return;
     setSelectedYear(availableYears.includes(DEFAULT_YEAR) ? DEFAULT_YEAR : availableYears[0]);
   }, [availableYears, selectedYear]);
+
+  /** Up vs down months in the selected waterfall year (same rows as bars; 0% excluded from both). */
+  const monthMixStats = useMemo(() => {
+    const rows = displayMonthRows.filter((r) => r.year === selectedYear);
+    let pos = 0;
+    let neg = 0;
+    for (const r of rows) {
+      if (r.totalReturn > 0) pos += 1;
+      else if (r.totalReturn < 0) neg += 1;
+    }
+    return { pos, neg };
+  }, [displayMonthRows, selectedYear]);
 
   const monthValues = useMemo(() => {
     const arr = Array.from({ length: 12 }, () => null);
@@ -268,7 +259,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
     const light = chartTheme === 'light';
     const ringStroke = light ? '#e2e8f0' : '#0d1520';
     const emptyFill = light ? '#64748b' : '#94a3b8';
-    const { pos, neg } = yearStats;
+    const { pos, neg } = monthMixStats;
     const total = pos + neg;
     const cx = 100;
     const cy = 100;
@@ -279,7 +270,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
       return (
         <svg className="ticker-annual-figma__donut-svg" viewBox="0 0 200 200" style={donutStyle}>
           <text x="100" y="104" textAnchor="middle" fill={emptyFill} fontSize="12" fontWeight="600">
-            No annual data
+            No ± months
           </text>
         </svg>
       );
@@ -342,23 +333,19 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
         </g>
       </svg>
     );
-  }, [yearStats, chartTheme, plotHeight]);
+  }, [monthMixStats, chartTheme, plotHeight]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
   const hasMonthlySource = monthRows.length > 0;
   const hasMonthly = displayMonthRows.length > 0;
-  const hasAnnualSource = annualRows.length > 0;
-  const hasAnnual = displayAnnualRows.length > 0;
   const monthlyFilteredEmpty = hasMonthlySource && !hasMonthly;
-  const annualFilteredEmpty = hasAnnualSource && !hasAnnual;
-
   return (
     <div className="ticker-monthly-adv">
       
       <div className="ticker-annual-figma__section">
         <div className="ticker-annual-figma__toolbar">
-          <span className="ticker-annual-figma__badge">Monthly returns — waterfall &amp; year mix</span>
+          <span className="ticker-annual-figma__badge">Monthly returns — waterfall &amp; month mix</span>
         </div>
 
         <div className="ticker-monthly-adv__split">
@@ -442,17 +429,16 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
           <div className="ticker-monthly-adv__panel ticker-annual-figma__chart-card ticker-monthly-adv__panel--donut">
             <div className="ticker-monthly-adv__panel-head ticker-monthly-adv__panel-head--donut">
               <span className="ticker-monthly-adv__panel-spacer" aria-hidden />
-              <span className="ticker-monthly-adv__panel-title">Year mix</span>
+              <span className="ticker-monthly-adv__panel-title">Month mix</span>
               <div className="ticker-monthly-adv__panel-tip">
                 <DataInfoTip align="end">
                   <p className="ticker-data-tip__p">
-                    <strong>Donut</strong>: counts <strong>calendar years</strong> in <code className="ticker-data-tip__code">performance.annualReturns</code>{' '}
-                    with <strong>totalReturn &gt; 0</strong> (navy segment) vs <strong>&lt; 0</strong> (orange). Years with exactly 0% are excluded from both
-                    counts.
+                    <strong>Donut</strong>: for the <strong>same year</strong> as the waterfall, counts months with <strong>totalReturn &gt; 0</strong> (navy)
+                    vs <strong>&lt; 0</strong> (orange) from <code className="ticker-data-tip__code">performance.monthlyReturns</code>. Months at exactly 0% are
+                    excluded from both counts.
                   </p>
                   <p className="ticker-data-tip__p">
-                    Use the panel’s <strong>Start date / End date</strong> row (Submit) to filter annual rows independently of the waterfall year
-                    dropdown. The waterfall has its own date filter.
+                    Changing the <strong>Year</strong> dropdown or the waterfall’s <strong>Start date / End date</strong> filter updates both panels.
                   </p>
                   {asOfDate ? (
                     <p className="ticker-data-tip__p">
@@ -462,24 +448,19 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, ann
                 </DataInfoTip>
               </div>
             </div>
-            <ChartDateApplyRow
-              idPrefix="monthly-donut-annual"
-              maxDate={asOfDate}
-              onApply={({ start, end }) => setAnnualRangeApplied({ start, end })}
-            />
-            {annualFilteredEmpty ? (
-              <div className="ticker-monthly-adv__empty">No annual rows overlap the selected date range.</div>
-            ) : hasAnnual ? (
+            {monthlyFilteredEmpty ? (
+              <div className="ticker-monthly-adv__empty">No monthly rows overlap the selected date range.</div>
+            ) : hasMonthly ? (
               donutSvg
             ) : (
-              <div className="ticker-monthly-adv__empty">No annual returns for this donut.</div>
+              <div className="ticker-monthly-adv__empty">No monthly returns to plot.</div>
             )}
             <div className="ticker-monthly-adv__legend-row">
               <span className="ticker-annual-figma__legend-item">
-                <span className="ticker-monthly-adv__sw donut-pos" aria-hidden /># positive years
+                <span className="ticker-monthly-adv__sw donut-pos" aria-hidden /># positive months
               </span>
               <span className="ticker-annual-figma__legend-item">
-                <span className="ticker-monthly-adv__sw donut-neg" aria-hidden /># negative years
+                <span className="ticker-monthly-adv__sw donut-neg" aria-hidden /># negative months
               </span>
             </div>
           </div>

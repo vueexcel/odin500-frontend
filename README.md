@@ -2,10 +2,6 @@
 
 React port of `trading-backend/public/ohlc-signals.html`.
 
-## Prerequisites
-
-Run the API on port **5000** (e.g. `npm run dev` in `trading-backend`).
-
 ## Development
 
 ```bash
@@ -13,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api/*` to `http://localhost:5000`.
+Open [http://localhost:5173](http://localhost:5173). In dev, Vite proxies `/api/*` to `PRODUCTION_API_ORIGIN` in `src/utils/apiOrigin.js` (same Render URL as production builds).
 
 ## Production build
 

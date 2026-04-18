@@ -8,6 +8,8 @@ import { clearApiCache, clearAuthToken } from '../store/apiStore.js';
 const NAV_ITEMS = [
   { to: '/market', label: 'Market' },
   { to: '/ticker', label: 'Ticker' },
+  { to: '/indices', label: 'Indices' },
+  { to: '/market-movers', label: 'Market Movers' },
   { to: '/heatmap', label: 'Heatmap' },
   { to: '/odin-signals', label: 'Odin Signals' },
   { to: '/accounts', label: 'Accounts' },

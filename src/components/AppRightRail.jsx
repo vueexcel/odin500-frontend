@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { NewsRailFlyout } from './NewsRailFlyout.jsx';
 import { WatchlistRailFlyout } from './WatchlistRailFlyout.jsx';
 
 /**
@@ -106,10 +108,22 @@ function IcoOdinSignals() {
 
 export function AppRightRail() {
   const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [newsOpen, setNewsOpen] = useState(false);
+
+  const toggleWatchlist = () => {
+    setNewsOpen(false);
+    setWatchlistOpen((o) => !o);
+  };
+
+  const toggleNews = () => {
+    setWatchlistOpen(false);
+    setNewsOpen((o) => !o);
+  };
 
   return (
     <>
       <WatchlistRailFlyout open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
+      <NewsRailFlyout open={newsOpen} onClose={() => setNewsOpen(false)} />
       <aside className="app-right-rail" aria-label="Quick navigation">
         <div className="app-right-rail__stack">
           <button type="button" className="app-right-rail__btn" title="User Silhouette" aria-label="User Silhouette">
@@ -121,17 +135,42 @@ export function AppRightRail() {
             title="Watch Lists"
             aria-label="Watch Lists"
             aria-expanded={watchlistOpen}
-            onClick={() => setWatchlistOpen((o) => !o)}
+            onClick={toggleWatchlist}
           >
             <IcoAnalytics />
           </button>
-          <button type="button" className="app-right-rail__btn" title="Odin Signals" aria-label="Odin Signals">
+          <Link
+            to="/odin-signals"
+            className="app-right-rail__btn"
+            title="Odin Signals"
+            aria-label="Odin Signals"
+            onClick={() => {
+              setWatchlistOpen(false);
+              setNewsOpen(false);
+            }}
+          >
             <IcoOdinSignals />
-          </button>
-          <button type="button" className="app-right-rail__btn" title="Top Movers" aria-label="Top Movers">
+          </Link>
+          <Link
+            to="/market-movers"
+            className="app-right-rail__btn"
+            title="Market Movers"
+            aria-label="Market Movers"
+            onClick={() => {
+              setWatchlistOpen(false);
+              setNewsOpen(false);
+            }}
+          >
             <IcoFlame />
-          </button>
-          <button type="button" className="app-right-rail__btn" title="News" aria-label="News">
+          </Link>
+          <button
+            type="button"
+            className={'app-right-rail__btn' + (newsOpen ? ' app-right-rail__btn--active' : '')}
+            title="Top news"
+            aria-label="Top news"
+            aria-expanded={newsOpen}
+            onClick={toggleNews}
+          >
             <IcoNews />
           </button>
           <button type="button" className="app-right-rail__btn" title="[Alerts]" aria-label="[Alerts]">

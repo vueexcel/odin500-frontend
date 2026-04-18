@@ -217,12 +217,12 @@ export function AppSidebar({ expanded, setExpanded }) {
           <div className="app-sidebar__scroll">
             <nav className="app-sidebar__nav" aria-label="Markets">
               <NavRow to="/market" icon={IconGlobe} label="Markets" />
-              <NavRow icon={IconGrid} label="[Default Screen]" onClick={() => {}} />
-              <NavRow icon={IconLineChart} label="Dow Jones" onClick={() => {}} />
-              <NavRow icon={IconLineChart} label="Nasdaq-100" onClick={() => {}} />
-              <NavRow icon={IconLineChart} label="SP 500" onClick={() => {}} />
+              <NavRow icon={IconGrid} label="Default Screen" onClick={() => {}} />
+              <NavRow to="/indices/dow-jones" icon={IconLineChart} label="Dow Jones" />
+              <NavRow to="/indices/nasdaq-100" icon={IconLineChart} label="Nasdaq-100" />
+              <NavRow to="/indices/sp500" icon={IconLineChart} label="SP 500" />
               <NavRow icon={IconNews} label="News" onClick={() => {}} />
-              <NavRow icon={IconFlame} label="Market Movers" onClick={() => {}} />
+              <NavRow to="/market-movers" icon={IconFlame} label="Market Movers" />
               <NavRow to="/heatmap" icon={IconGrid} label="Heatmaps" />
             </nav>
 

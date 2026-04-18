@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
 import { SectorTreemap } from '../components/SectorTreemap.jsx';
+import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
 import { returnToHeatColor } from '../utils/heatmapColors.js';
@@ -415,24 +416,34 @@ export default function MarketHeatmapPage() {
           </header>
 
           {error ? <div className="heatmap-main__error">{error}</div> : null}
-          {loading ? <div className="heatmap-main__loading">Loading…</div> : null}
 
           <div className="heatmap-treemap-outer" ref={treemapHostRef}>
-            <div
-              className="heatmap-treemap-zoom"
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: 'top left'
-              }}
-            >
-              <SectorTreemap
-                rows={filteredRows}
-                scaleMin={scaleMin}
-                scaleMax={scaleMax}
-                highlightSymbol={hoverSymbol}
-                finvizStrict
-              />
-            </div>
+            {loading ? (
+              <div className="chart-viz-loading-wrap heatmap-chart-viz-loading-wrap">
+                <TradingChartLoader
+                  label="Loading sector heatmap…"
+                  sublabel={`${activeMenu.label} · ${
+                    periodSelectOptions.find((o) => o.value === periodValue)?.label || periodValue
+                  }`}
+                />
+              </div>
+            ) : (
+              <div
+                className="heatmap-treemap-zoom"
+                style={{
+                  transform: `scale(${zoom})`,
+                  transformOrigin: 'top left'
+                }}
+              >
+                <SectorTreemap
+                  rows={filteredRows}
+                  scaleMin={scaleMin}
+                  scaleMax={scaleMax}
+                  highlightSymbol={hoverSymbol}
+                  finvizStrict
+                />
+              </div>
+            )}
           </div>
 
           <footer className="heatmap-scale-bar">

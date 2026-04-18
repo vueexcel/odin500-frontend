@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
 import { OdinFigmaSignalTreemap } from '../components/OdinFigmaSignalTreemap.jsx';
+import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import { ChartPanel } from '../components/ChartPanel.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { fetchJsonCached } from '../store/apiStore.js';
@@ -641,13 +642,16 @@ export default function OdinSignalsPage() {
                 </div>
               </header>
 
-              {indexLoading ? <div className="heatmap-main__loading">Loading heatmap…</div> : null}
               {!indexLoading && !odinTreemapRows.length ? (
                 <div className="heatmap-main__error">No tickers for this index.</div>
               ) : null}
 
               <div className="heatmap-treemap-outer odin-signals-heatmap__treemap" ref={odinTreemapHostRef}>
-                {odinTreemapRows.length > 0 ? (
+                {indexLoading ? (
+                  <div className="chart-viz-loading-wrap odin-signals-heatmap__chart-loading">
+                    <TradingChartLoader label="Loading signal heatmap…" sublabel={activeIndex.label} />
+                  </div>
+                ) : odinTreemapRows.length > 0 ? (
                   <div
                     className="heatmap-treemap-zoom"
                     style={{
