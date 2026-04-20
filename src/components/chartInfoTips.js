@@ -82,5 +82,13 @@ export const CHART_INFO_TIPS = {
       'Calculation: tiles are grouped by mapped signal code; color uses the Odin Figma palette and size follows the signal-weight tier configured for this view.',
     example:
       'Example: L1/S1 groups get larger weight than N, so they occupy more area when counts are similar.'
+  },
+  marketMoversScatter: {
+    data:
+      'Data shown: one point per ticker in the selected index (S&P 500, Dow Jones, or Nasdaq 100), from POST /api/market/index-market-movers using the current index menu and return-period tab (1D, 5D, MTD, …). The sector filter only limits which points are drawn.',
+    calculation:
+      'Calculation: the Y axis is total return % for the active return window (same window as the chart title). The X axis is relative volume — latest session volume relative to its 10-day average, as a multiple (×). Labels on some dots mark large price moves or extreme volume; hover any point for symbol, return, and rel. volume. Scroll the plot to zoom, drag to pan.',
+    example:
+      'Example: a point at +3.1% vertically and 2.0× horizontally is a ticker up ~3.1% over the selected period with about double its typical 10-day volume.'
   }
 };

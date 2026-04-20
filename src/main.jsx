@@ -4,14 +4,19 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import App from './App.jsx';
 import { ProtectedLayout } from './components/ProtectedLayout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import SimplePage from './pages/SimplePage.jsx';
 import SignupPage from './pages/SignupPage.jsx';
+import SignupVerifyEmailPage from './pages/SignupVerifyEmailPage.jsx';
+import SignupEnterCodePage from './pages/SignupEnterCodePage.jsx';
+import SignupUsernamePage from './pages/SignupUsernamePage.jsx';
 import MarketHeatmapPage from './pages/MarketHeatmapPage.jsx';
 import OdinSignalsPage from './pages/OdinSignalsPage.jsx';
 import TickerPage from './pages/TickerPage.jsx';
 import IndexPage from './pages/IndexPage.jsx';
 import MarketMoversPage from './pages/MarketMoversPage.jsx';
 import Pricing from './pages/Pricing.jsx';
+import AboutPage from './pages/AboutPage.jsx';
 import './index.css';
 import { initAuthSessionOnLoad } from './store/apiStore.js';
 
@@ -28,6 +33,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/signup/verify-email" element={<SignupVerifyEmailPage />} />
+        <Route path="/signup/enter-code" element={<SignupEnterCodePage />} />
+        <Route path="/signup/username" element={<SignupUsernamePage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route
           element={
             <ProtectedRoute>
@@ -44,7 +53,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/odin-signals" element={<OdinSignalsPage />} />
           <Route path="/accounts" element={<SimplePage title="Accounts" />} />
           <Route path="/premium" element={<Pricing />} />
-          <Route path="/about" element={<SimplePage title="About" />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path="/pricing"  />
         </Route>
         <Route

@@ -33,7 +33,7 @@ async function loadDefaults(ttlMs = 2 * 60 * 1000) {
     const res = await fetchJsonCached({ path: '/api/watchlists/defaults', auth: false, ttlMs });
     const groups = Array.isArray(res?.data) ? res.data : [];
     const first = Array.isArray(groups[0]?.items) ? groups[0].items : [];
-    store.items = first.slice(0, 9);
+    store.items = first.slice(0, 80);
     store.error = '';
     store.loaded = true;
   } catch (e) {

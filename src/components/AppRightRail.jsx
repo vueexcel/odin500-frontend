@@ -106,16 +106,30 @@ function IcoOdinSignals() {
   );
 }
 
-export function AppRightRail() {
+export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [newsOpen, setNewsOpen] = useState(false);
 
+  const closeAll = () => {
+    setWatchlistOpen(false);
+    setNewsOpen(false);
+    if (typeof onRequestClose === 'function') onRequestClose();
+  };
+
   const toggleWatchlist = () => {
+    if (mobileOpen) {
+      closeAll();
+      return;
+    }
     setNewsOpen(false);
     setWatchlistOpen((o) => !o);
   };
 
   const toggleNews = () => {
+    if (mobileOpen) {
+      closeAll();
+      return;
+    }
     setWatchlistOpen(false);
     setNewsOpen((o) => !o);
   };
@@ -124,9 +138,17 @@ export function AppRightRail() {
     <>
       <WatchlistRailFlyout open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
       <NewsRailFlyout open={newsOpen} onClose={() => setNewsOpen(false)} />
-      <aside className="app-right-rail" aria-label="Quick navigation">
+      <aside className={'app-right-rail' + (mobileOpen ? ' app-right-rail--mobile-open' : '')} aria-label="Quick navigation">
         <div className="app-right-rail__stack">
-          <button type="button" className="app-right-rail__btn" title="User Silhouette" aria-label="User Silhouette">
+          <button
+            type="button"
+            className="app-right-rail__btn"
+            title="User Silhouette"
+            aria-label="User Silhouette"
+            onClick={() => {
+              if (mobileOpen) closeAll();
+            }}
+          >
             <IcoUser />
           </button>
           <button
@@ -145,8 +167,7 @@ export function AppRightRail() {
             title="Odin Signals"
             aria-label="Odin Signals"
             onClick={() => {
-              setWatchlistOpen(false);
-              setNewsOpen(false);
+              closeAll();
             }}
           >
             <IcoOdinSignals />
@@ -157,8 +178,7 @@ export function AppRightRail() {
             title="Market Movers"
             aria-label="Market Movers"
             onClick={() => {
-              setWatchlistOpen(false);
-              setNewsOpen(false);
+              closeAll();
             }}
           >
             <IcoFlame />
@@ -173,7 +193,15 @@ export function AppRightRail() {
           >
             <IcoNews />
           </button>
-          <button type="button" className="app-right-rail__btn" title="[Alerts]" aria-label="[Alerts]">
+          <button
+            type="button"
+            className="app-right-rail__btn"
+            title="[Alerts]"
+            aria-label="[Alerts]"
+            onClick={() => {
+              if (mobileOpen) closeAll();
+            }}
+          >
             <IcoBell />
           </button>
         </div>

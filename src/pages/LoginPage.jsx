@@ -1,9 +1,10 @@
 import { useContext, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { KeyRound, Mail } from 'lucide-react';
-import { login } from '../services/authApi.js';
+import { login, updateDisplayName } from '../services/authApi.js';
 import { applyAuthSession } from '../store/apiStore.js';
 import { AuthField, AuthShellThemeContext, AuthSplitShell } from '../components/AuthSplitShell.jsx';
+import { PENDING_DISPLAY_NAME_KEY } from '../utils/signupSession.js';
 
 function LoginForm() {
   const [email, setEmail] = useState('');
@@ -33,6 +34,15 @@ function LoginForm() {
       }
       applyAuthSession(session);
       localStorage.setItem('market_api_email', em);
+      try {
+        const pending = sessionStorage.getItem(PENDING_DISPLAY_NAME_KEY);
+        if (pending && String(pending).trim().length >= 2) {
+          await updateDisplayName(String(pending).trim());
+          sessionStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
+        }
+      } catch {
+        /* Pending display name save failed — user can update profile later */
+      }
       if (remember) {
         try {
           localStorage.setItem('odin_login_remember', '1');
@@ -96,15 +106,14 @@ function LoginForm() {
             />
             Remember me
           </label>
-          <a
-            href="#"
+          <Link
+            to="/forgot-password"
             className={`text-[13px] font-semibold ${
               isDark ? 'text-[#60a5fa] hover:text-[#93c5fd]' : 'text-[#2b73fe] hover:text-[#1d5ee0]'
             }`}
-            onClick={(e) => e.preventDefault()}
           >
             Forgot password?
-          </a>
+          </Link>
         </div>
 
         <button

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Filter, Hexagon, Settings, Upload, Users } from 'lucide-react';
+import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
+import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
 
@@ -951,7 +953,6 @@ function MarketMoversScatter({ points, volumeNote, axisReturnTitle, tooltipRetur
           </div>
         ) : null}
       </div>
-      {volumeNote ? <p className="market-movers-page__volume-note">{volumeNote}</p> : null}
     </div>
   );
 }
@@ -1140,7 +1141,10 @@ export default function MarketMoversPage() {
         </div>
 
         <div className="market-movers-page__card-head">
-          <h2 className="market-movers-page__card-title">{activeMoverInterval.chartHeadline}</h2>
+          <div className="market-movers-page__card-title-row">
+            <h2 className="market-movers-page__card-title">{activeMoverInterval.chartHeadline}</h2>
+            <ChartInfoTip tip={CHART_INFO_TIPS.marketMoversScatter} align="start" />
+          </div>
           <button type="button" className="market-movers-page__export" onClick={exportCsv}>
             <Upload size={16} strokeWidth={2} aria-hidden />
             EXPORT

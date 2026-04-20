@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Eye, EyeOff, Moon, Sun } from 'lucide-react';
+import { Eye, EyeOff, Moon, Sun, X } from 'lucide-react';
 import odinLogo from '../assets/odin500-logo.svg';
 import heroImage from '../assets/Hero.png';
 
 export const AuthShellThemeContext = createContext('dark');
 
-function AuthHeroVisual() {
+export function AuthHeroVisual() {
   return (
     <div
       className="auth-split-hero__viz relative min-h-[260px] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#030b14] shadow-lg ring-1 ring-black/20 lg:h-[min(100vh-4rem,720px)] lg:min-h-[320px] lg:rounded-3xl lg:rounded-r-[2rem]"
@@ -126,7 +126,7 @@ export function AuthSplitShell({ title = 'Welcome Back!', children }) {
             isDark ? 'bg-[#051120] text-white' : 'bg-[#f0f4f8] text-slate-900'
           }`}
         >
-          <div className="relative mx-auto w-full max-w-[400px] flex-1 lg:flex-none">
+          <div className="auth-form-scope relative mx-auto w-full max-w-[400px] flex-1 lg:flex-none">
             <div className="relative mb-8 flex min-h-[40px] items-start justify-center pt-1">
               <img src={odinLogo} alt="Odin 500" className="auth-split-logo h-8 w-auto select-none" />
               <button
@@ -238,14 +238,72 @@ export function AuthField({
   icon: Icon,
   showPasswordToggle,
   showPassword,
-  onTogglePassword
+  onTogglePassword,
+  invalid,
+  clearable,
+  onClear,
+  inputClassName,
+  /** Light-mode only: outer grey shell + dark inner field + blue eye (Figma forgot/reset). */
+  appearance = 'default'
 }) {
   const theme = useContext(AuthShellThemeContext);
   const isDark = theme === 'dark';
 
-  const shellClass = isDark
-    ? 'border-white/[0.1] bg-[#0f1f33] ring-1 ring-white/[0.06] focus-within:border-[#3b82f6]/55 focus-within:ring-2 focus-within:ring-[#3b82f6]/22'
-    : 'border-transparent bg-[#e8ecf2] ring-0 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#2b73fe]/22';
+  const figmaNestedLight = appearance === 'figmaNestedLight' && !isDark && showPasswordToggle;
+
+  if (figmaNestedLight) {
+    const outerFocus = invalid
+      ? 'ring-2 ring-[#e53e3e]'
+      : 'ring-1 ring-slate-300/55 focus-within:ring-2 focus-within:ring-[#3b82f6]/35';
+
+    return (
+      <div
+        className={`auth-figma-password-row flex min-h-[56px] w-full items-center gap-2 rounded-xl bg-[#e8ecf2] p-2 transition-[box-shadow] ${outerFocus}`}
+      >
+        <span className="flex w-10 shrink-0 items-center justify-center text-slate-500" aria-hidden>
+          <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+        </span>
+        <div
+          className={`auth-figma-password-inner flex min-h-[44px] min-w-0 flex-1 items-center overflow-hidden rounded-lg  px-3 transition-[box-shadow] ${
+            invalid
+              ? 'ring-2 ring-[#e53e3e]'
+              : 'focus-within:shadow-[inset_0_-3px_0_0_#3b82f6]'
+          }`}
+        >
+          <input
+            id={id}
+            type={showPassword ? 'text' : 'password'}
+            autoComplete={autoComplete}
+            placeholder={placeholder}
+            value={value}
+            onChange={onChange}
+            className={`auth-figma-pw-input min-h-[44px] w-full border-0 bg-transparent py-2 text-[14px] font-medium outline-none placeholder:font-normal ${inputClassName || ''} text-white placeholder:text-slate-400`}
+          />
+        </div>
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={onTogglePassword}
+            className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#2b6cb0] text-[#121926] shadow-sm transition-colors hover:bg-[#2563ae]"
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? <EyeOff className="h-[17px] w-[17px]" strokeWidth={2.2} /> : <Eye className="h-[17px] w-[17px]" strokeWidth={2.2} />}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const shellClass = invalid
+    ? isDark
+      ? 'border-[#e53e3e] bg-[#0f1f33] ring-2 ring-red-500/25'
+      : 'border-[#e53e3e] bg-white ring-2 ring-red-500/20'
+    : isDark
+      ? 'border-white/[0.1] bg-[#0f1f33] ring-1 ring-white/[0.06] focus-within:border-[#3b82f6]/55 focus-within:ring-2 focus-within:ring-[#3b82f6]/22'
+      : 'border-transparent bg-[#e8ecf2] ring-0 focus-within:border-[#2b73fe] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#2b73fe]/22';
+
+  const showClear = Boolean(clearable && String(value || '').length > 0 && onClear);
 
   return (
     <div
@@ -266,10 +324,25 @@ export function AuthField({
         placeholder={placeholder}
         value={value}
         onChange={onChange}
-        className={`min-h-[52px] min-w-0 flex-1 border-0 bg-transparent py-3 pr-3 text-[14px] font-medium outline-none placeholder:font-normal ${
+        className={`auth-shell-native min-h-[52px] min-w-0 flex-1 border-0 bg-transparent py-3 pr-3 text-[14px] font-medium outline-none placeholder:font-normal ${
           isDark ? 'text-white placeholder:text-slate-500' : 'text-slate-900 placeholder:text-slate-500'
-        }`}
+        } ${inputClassName || ''}`}
       />
+      {showClear ? (
+        <div className="flex shrink-0 items-center pr-2">
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={onClear}
+            className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+              isDark ? 'text-slate-400 hover:bg-white/10 hover:text-white' : 'text-slate-500 hover:bg-slate-200/90 hover:text-slate-800'
+            }`}
+            aria-label="Clear"
+          >
+            <X className="h-[17px] w-[17px]" strokeWidth={2.2} />
+          </button>
+        </div>
+      ) : null}
       {showPasswordToggle ? (
         <div className="flex shrink-0 items-stretch py-2 pr-2 pl-1">
           <button

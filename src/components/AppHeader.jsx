@@ -3,7 +3,8 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import odinLogo from '../assets/odin500-logo.svg';
 import odinLogoLight from '../assets/odin500-logo-light.svg';
 import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
-import { clearApiCache, clearAuthToken } from '../store/apiStore.js';
+import { clearApiCache, clearAuthToken, fetchWithAuth } from '../store/apiStore.js';
+import { apiUrl } from '../utils/apiOrigin.js';
 
 const NAV_ITEMS = [
   { to: '/market', label: 'Market' },
@@ -72,11 +73,31 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
+  const [displayName, setDisplayName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
   const { busy: newsBusy, error: newsError, items: feedItems } = useGeneralNewsFeed();
   const newsItems = feedItems.slice(0, HEADER_NEWS_LIMIT);
   const profileWrapRef = useRef(null);
   const bellWrapRef = useRef(null);
   const headerLogo = theme === 'light' ? odinLogoLight : odinLogo;
+  const fallbackName = (() => {
+    try {
+      const em = String(localStorage.getItem('market_api_email') || '').trim();
+      if (!em) return 'Profile';
+      const at = em.indexOf('@');
+      return (at > 0 ? em.slice(0, at) : em) || 'Profile';
+    } catch {
+      return 'Profile';
+    }
+  })();
+  const profileName = (displayName || fallbackName || 'Profile').trim();
+  const initials = profileName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0])
+    .join('')
+    .toUpperCase() || 'P';
 
   const handleSignOut = () => {
     clearAuthToken();
@@ -92,6 +113,35 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadProfile = async () => {
+      try {
+        const res = await fetchWithAuth(apiUrl('/api/user/profile'), { method: 'GET' });
+        const payload = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        const apiName = payload?.userName || payload?.displayName || '';
+        if (res.ok && apiName) {
+          setDisplayName(String(apiName));
+        }
+        if (res.ok) {
+          setAvatarUrl(String(payload?.avatarUrl || ''));
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    void loadProfile();
+    const onAuth = () => {
+      void loadProfile();
+    };
+    window.addEventListener('odin-auth-updated', onAuth);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('odin-auth-updated', onAuth);
+    };
   }, []);
 
   if (compact) {
@@ -138,13 +188,21 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
                   setBellOpen(false);
                 }}
               >
-                <span className="header-avatar-placeholder" />
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="" className="header-avatar-image" aria-hidden />
+                ) : (
+                  <span className="header-avatar-placeholder">{initials}</span>
+                )}
               </button>
               {profileOpen ? (
                 <div className="header-pop header-pop--profile" role="menu" aria-label="Profile menu">
                   <div className="header-pop__profile-top">
-                    <span className="header-pop__profile-icon" aria-hidden />
-                    <span className="header-pop__profile-name">Profile</span>
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="header-pop__profile-image" aria-hidden />
+                    ) : (
+                      <span className="header-pop__profile-icon" aria-hidden>{initials}</span>
+                    )}
+                    <span className="header-pop__profile-name">{profileName}</span>
                   </div>
                   <button type="button" className="header-pop__item" onClick={() => setProfileOpen(false)}>
                     Your Profile

@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { SidebarToggleGlyph } from './SidebarToggleGlyph.jsx';
 import odinLogo from '../assets/odin500-logo.svg';
+import odinLogoLight from '../assets/odin500-logo-light.svg';
 
 function IconGlobe() {
   return (
@@ -178,14 +179,25 @@ function NavRow({ to, onClick, icon: Icon, label, badge, badgeTone }) {
   );
 }
 
-export function AppSidebar({ expanded, setExpanded }) {
+export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onRequestClose = null }) {
+  const isExpandedView = expanded || mobileOpen;
+
+  const handleAnyClick = () => {
+    if (mobileOpen && typeof onRequestClose === 'function') onRequestClose();
+  };
+
   return (
     <aside
       id="app-sidebar-main"
-      className={'app-sidebar ' + (expanded ? 'app-sidebar--expanded' : 'app-sidebar--collapsed')}
+      className={
+        'app-sidebar ' +
+        (isExpandedView ? 'app-sidebar--expanded' : 'app-sidebar--collapsed') +
+        (mobileOpen ? ' app-sidebar--mobile-open app-sidebar--expanded' : '')
+      }
       aria-label="Main navigation"
+      onClickCapture={handleAnyClick}
     >
-      {!expanded ? (
+      {!isExpandedView ? (
         <div className="app-sidebar__collapsed-only">
           <button
             type="button"
@@ -201,7 +213,7 @@ export function AppSidebar({ expanded, setExpanded }) {
         <>
           <div className="app-sidebar__topbar">
             <div className="app-sidebar__brand">
-              <img src={odinLogo} alt="Odin500" className="app-sidebar__logo" />
+              <img src={odinLogoLight} alt="Odin500" className="app-sidebar__logo" />
             </div>
             <button
               type="button"

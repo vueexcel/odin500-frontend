@@ -1252,6 +1252,20 @@ export default function TickerPage() {
                   </p>
                 </DataInfoTip>
               </div>
+              <div className="ticker-page__search-row">
+                <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId="ticker-chart-symbol" />
+                <DataInfoTip align="start">
+                  <p className="ticker-data-tip__p">
+                    <strong>Ticker selection</strong> drives every request on this page for one symbol.
+                  </p>
+                  <p className="ticker-data-tip__p">
+                    Search uses <code className="ticker-data-tip__code">GET /api/tickers/search</code> (Supabase{' '}
+                    <code className="ticker-data-tip__code">tickers</code>). Picking a symbol reloads chart, returns, OHLC
+                    tail, and index metadata for that symbol.
+                  </p>
+                </DataInfoTip>
+                {metaBusy || chartLoading ? <span className="ticker-page__loading-pill">Loading…</span> : null}
+              </div>
               <div className="ticker-tf-with-tip">
                 <div className="ticker-tf-row">
                   {TIMEFRAMES.map((tf) => (

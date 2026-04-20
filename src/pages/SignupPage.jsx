@@ -2,6 +2,8 @@ import { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KeyRound, Mail } from 'lucide-react';
 import { signup } from '../services/authApi.js';
+import { applyAuthSession } from '../store/apiStore.js';
+import { SIGNUP_EMAIL_KEY } from '../utils/signupSession.js';
 import { AuthField, AuthShellThemeContext, AuthSplitShell } from '../components/AuthSplitShell.jsx';
 
 function SignupForm() {
@@ -9,7 +11,6 @@ function SignupForm() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const theme = useContext(AuthShellThemeContext);
@@ -24,11 +25,18 @@ function SignupForm() {
     }
     setBusy(true);
     setError('');
-    setMessage('');
     try {
-      await signup(em, password);
-      setMessage('Signup successful. You can now sign in.');
-      setTimeout(() => navigate('/login', { replace: true }), 600);
+      const payload = await signup(em, password);
+      const session = payload?.data?.session;
+      if (session?.access_token) {
+        applyAuthSession(session);
+      }
+      try {
+        sessionStorage.setItem(SIGNUP_EMAIL_KEY, em);
+      } catch {
+        /* ignore */
+      }
+      navigate('/signup/verify-email', { replace: true });
     } catch (err) {
       setError(err.message || 'Signup failed');
     } finally {
@@ -80,16 +88,6 @@ function SignupForm() {
           role="alert"
         >
           {error}
-        </div>
-      ) : null}
-      {message ? (
-        <div
-          className={`rounded-lg px-3 py-2 text-center text-[13px] font-medium ${
-            isDark ? 'bg-emerald-950/40 text-emerald-200 ring-1 ring-emerald-500/25' : 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
-          }`}
-          role="status"
-        >
-          {message}
         </div>
       ) : null}
     </form>

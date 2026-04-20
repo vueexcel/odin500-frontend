@@ -9,6 +9,12 @@ import { SiteFooter } from './SiteFooter.jsx';
 
 export function ProtectedLayout() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
+  const [mobileRightOpen, setMobileRightOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 900;
+  });
   const [theme, setTheme] = useState(() => {
     try {
       const saved = localStorage.getItem('odin_theme');
@@ -45,6 +51,25 @@ export function ProtectedLayout() {
     return () => window.removeEventListener('odin-auth-updated', warmWatchlistCache);
   }, []);
 
+  useEffect(() => {
+    const onResize = () => {
+      setIsMobile(window.innerWidth <= 900);
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile && sidebarExpanded) {
+      setSidebarExpanded(false);
+    }
+    if (!isMobile) {
+      setMobileLeftOpen(false);
+      setMobileRightOpen(false);
+    }
+  }, [isMobile, sidebarExpanded]);
+
   const toggleTheme = () => {
     setTheme((curr) => (curr === 'dark' ? 'light' : 'dark'));
   };
@@ -53,14 +78,56 @@ export function ProtectedLayout() {
     <div className="app-shell">
       <AppHeader compact theme={theme} onToggleTheme={toggleTheme} />
       <div className="app-body">
-        <AppSidebar expanded={sidebarExpanded} setExpanded={setSidebarExpanded} />
+        {isMobile && (mobileLeftOpen || mobileRightOpen) ? (
+          <button
+            type="button"
+            className="app-mobile-overlay-backdrop"
+            aria-label="Close side panels"
+            onClick={() => {
+              setMobileLeftOpen(false);
+              setMobileRightOpen(false);
+            }}
+          />
+        ) : null}
+        <AppSidebar
+          expanded={sidebarExpanded}
+          setExpanded={setSidebarExpanded}
+          mobileOpen={isMobile && mobileLeftOpen}
+          onRequestClose={() => setMobileLeftOpen(false)}
+        />
         <div className="app-main-column">
           <div className="app-main-scroll">
             <Outlet />
             <SiteFooter />
           </div>
         </div>
-        <AppRightRail />
+        <AppRightRail mobileOpen={isMobile && mobileRightOpen} onRequestClose={() => setMobileRightOpen(false)} />
+        {isMobile ? (
+          <>
+            <button
+              type="button"
+              className="app-mobile-fab app-mobile-fab--left"
+              aria-label="Open menu"
+              onClick={() => {
+                setMobileRightOpen(false);
+                setMobileLeftOpen((v) => !v);
+              }}
+            >
+              <span className="app-mobile-fab__bars" aria-hidden>≡</span>
+            </button>
+            <button
+              type="button"
+              className="app-mobile-fab app-mobile-fab--right"
+              aria-label="Open quick tools"
+              onClick={() => {
+                setMobileLeftOpen(false);
+                setMobileRightOpen((v) => !v);
+              }}
+            >
+              <span className="app-mobile-fab__dots" aria-hidden>⋮</span>
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
   );
