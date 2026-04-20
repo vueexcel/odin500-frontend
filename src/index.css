@@ -4,9 +4,7 @@
 @custom-variant dark (html[data-theme="dark"] &);
 
 /* Auth split layout: wordmark reads navy on light form panels */
-html[data-theme="light"] .auth-split-logo {
-  filter: brightness(0) saturate(100%) invert(11%) sepia(22%) saturate(1200%) hue-rotate(175deg);
-}
+
 
 /*
  * Flat auth fields only (`auth-shell-native`). Do NOT blanket all `.auth-form-scope input`
@@ -40,9 +38,8 @@ html[data-theme="light"] .auth-split-logo {
 
 /* Light auth OTP — default (forgot reset): dark navy cells */
 html[data-theme='light'] .auth-form-scope input.auth-otp-digit:not(.signup-otp-cell) {
-  background-color: #121926 !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
-  color: #f8fafc !important;
+  border: 1px solid #121926 !important;
+  color: #121926 !important;
 }
 
 /* Sign up “enter code” step: light panels + dark digits (per light-mode mock) */

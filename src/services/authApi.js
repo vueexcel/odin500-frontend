@@ -49,6 +49,22 @@ export async function resendSignupOtp(email) {
   return payload;
 }
 
+export async function startForgotPassword(email, redirectTo = '') {
+  const response = await fetch(apiUrl('/api/auth/forgot-password/start'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: String(email || '').trim(),
+      redirectTo: String(redirectTo || '').trim()
+    })
+  });
+  const payload = await parseJsonSafe(response);
+  if (!response.ok) {
+    throw new Error(payload.error || payload.message || 'Could not start password reset');
+  }
+  return payload;
+}
+
 export async function updateDisplayName(displayName) {
   const response = await fetchWithAuth(apiUrl('/api/auth/me/display-name'), {
     method: 'PATCH',

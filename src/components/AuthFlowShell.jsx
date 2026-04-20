@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Moon, Sun } from 'lucide-react';
 import odinLogo from '../assets/odin500-logo.svg';
+import odinLogoLight from '../assets/odin500-logo-light.svg';
 import { AuthHeroVisual, AuthShellThemeContext } from './AuthSplitShell.jsx';
 
 /**
@@ -71,7 +72,7 @@ export function AuthFlowShell({ children, backTo = '/login', backAriaLabel = 'Go
               >
                 <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
               </button>
-              <img src={odinLogo} alt="Odin 500" className="auth-split-logo h-8 w-auto select-none" />
+              <img src={isDark ? odinLogo : odinLogoLight} alt="Odin 500" className="auth-split-logo h-8 w-auto select-none" />
               <button
                 type="button"
                 onClick={toggleTheme}

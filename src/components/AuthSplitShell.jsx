@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { NavLink } from 'react-router-dom';
 import { Eye, EyeOff, Moon, Sun, X } from 'lucide-react';
 import odinLogo from '../assets/odin500-logo.svg';
+import odinLogoLight from '../assets/odin500-logo-light.svg';
 import heroImage from '../assets/Hero.png';
 
 export const AuthShellThemeContext = createContext('dark');
@@ -128,7 +129,7 @@ export function AuthSplitShell({ title = 'Welcome Back!', children }) {
         >
           <div className="auth-form-scope relative mx-auto w-full max-w-[400px] flex-1 lg:flex-none">
             <div className="relative mb-8 flex min-h-[40px] items-start justify-center pt-1">
-              <img src={odinLogo} alt="Odin 500" className="auth-split-logo h-8 w-auto select-none" />
+              <img src={isDark ? odinLogo : odinLogoLight} alt="Odin 500" className="auth-split-logo h-8 w-auto select-none" />
               <button
                 type="button"
                 onClick={toggleTheme}

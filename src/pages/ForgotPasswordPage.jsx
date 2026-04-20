@@ -4,6 +4,7 @@ import { KeyRound, Mail } from 'lucide-react';
 import { AuthForgotShell } from '../components/AuthForgotShell.jsx';
 import { OtpSixBoxes } from '../components/OtpSixBoxes.jsx';
 import { AuthField, AuthShellThemeContext } from '../components/AuthSplitShell.jsx';
+import { startForgotPassword } from '../services/authApi.js';
 
 const TEXT_MUTED_LIGHT = '#718096';
 
@@ -31,6 +32,7 @@ function ForgotPasswordFlow() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   const titleColor = isDark ? 'text-white' : 'text-[#1a2b48]';
   const mutedColor = isDark ? 'text-slate-400' : '';
@@ -62,10 +64,16 @@ function ForgotPasswordFlow() {
   const sendCode = async (e) => {
     e.preventDefault();
     if (!emailOk) return;
+    setError('');
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 450));
-    setBusy(false);
-    setStep('reset');
+    try {
+      await startForgotPassword(String(email || '').trim(), `${window.location.origin}/forgot-password`);
+      setStep('reset');
+    } catch (e2) {
+      setError(e2.message || 'No account found for this email');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const resetPassword = async (e) => {
@@ -200,6 +208,11 @@ function ForgotPasswordFlow() {
         clearable
         onClear={() => setEmail('')}
       />
+      {error ? (
+        <p className="mt-[-8px] px-1 text-[12px] font-medium" style={{ color: '#e53e3e' }}>
+          {error}
+        </p>
+      ) : null}
 
       <button
         type="submit"
