@@ -84,23 +84,170 @@ const OdinPricingPage = () => {
   ];
 
   const faqs = [
-    { q: "What do I get with a subscription?" },
-    { q: "What are Odin Sample Portfolio Accounts?" },
-    { q: "How are Odin Signals generated?" },
-    { q: "What do the signals (L1, L2, L3, S1, S2, S3) mean?" },
-    { q: "Is this suitable for beginners?" },
-    { q: "Does this guarantee profits?" },
-    { q: "How often are signals updated?" },
-    { q: "Can I use this for long-term investing or only trading?" },
-    { q: "What markets are covered?" },
-    { q: "Can I cancel anytime?" },
-    { q: "Do you offer a free trial or preview?" },
-    { q: "How is this different from other signal providers?" },
-    { q: "Do I need to connect a broker?" },
-    { q: "Is there historical performance data?" },
-    { q: "Who is this built for?" },
-    { q: "Difference between Ticker Signals and Odin Signals?" }
+    {
+      q: "What do I get with a subscription?",
+      intro:
+        "You get full access to daily Odin Signals across all covered tickers (S&P 500, Nasdaq-100, Dow Jones, and leading ETFs), including:",
+      points: [
+        "Daily signals for covered tickers",
+        "Coverage across S&P 500, Nasdaq-100, Dow Jones, and major ETFs",
+        "Historical signal performance and return analytics",
+        "Advanced market data views and return analysis"
+      ]
+    },
+    {
+      q: "What's the difference between Ticker Signals and Odin Trading Signals?",
+      body: [
+        "Odin Ticker Signals are generated daily for each covered ticker using proprietary quantitative methodologies that analyze price action, trends, and statistical patterns.",
+        "Odin Trading Signals are separate signals used for Odin sample portfolio accounts. These sample accounts include a limited number of strategy-specific trading signals for each account."
+      ]
+    },
+    {
+      q: "What are Odin Sample Portfolio Accounts?",
+      body: [
+        "Odin Sample Portfolio Accounts are demo accounts that illustrate how Odin signals can be deployed under different trading strategies.",
+        "Some accounts are focused on ETF/index deployment, while others emphasize specific factor-sensitive strategies. Performance is compared against the most relevant underlying benchmark."
+      ]
+    },
+    {
+      q: "How are Odin Signals generated?",
+      body: [
+        "Odin Signals are generated using proprietary quantitative methodologies that evaluate price action, trends, and statistical patterns across each ticker.",
+        "The system is designed to identify, on a daily basis, higher-probability long and short opportunities."
+      ]
+    },
+    {
+      q: "What do the signals (L1, L2, L3, S1, S2, S3) mean?",
+      points: [
+        "L1 / S1: Strongest conviction signals",
+        "L2 / S2: Moderate signals",
+        "L3 / S3: Early or weaker signals",
+        "N (neutral): No clear edge"
+      ],
+      outro: "This structure helps you adjust position sizing and risk level."
+    },
+    {
+      q: "Is this suitable for beginners?",
+      intro: "Yes, but with context. Odin500 is best for:",
+      points: [
+        "Active traders who want structured signals as an additional decision-support tool",
+        "Investors looking to enhance returns versus buy-and-hold strategies"
+      ],
+      outro: "Market understanding and trading experience are highly recommended."
+    },
+    {
+      q: "Does this guarantee profits?",
+      body: [
+        "No. Like any trading methodology, there are no guarantees that signals will generate positive returns on every trade or over every period.",
+        "Odin signals are designed as an additional decision-support layer, not as a replacement for your own investment decisions or risk preferences."
+      ]
+    },
+    {
+      q: "How often are signals updated?",
+      body: [
+        "Signals are updated daily for every covered ticker.",
+        "You always have access to the latest signal state across the full universe."
+      ]
+    },
+    {
+      q: "Can I use this for long-term investing or only trading?",
+      intro: "Both.",
+      points: [
+        "Active traders can use signals for entry/exit timing",
+        "Long-term investors can use signals to optimize allocations and reduce drawdowns"
+      ],
+      outro: "Odin signals are not designed for day-trading or high-frequency strategies."
+    },
+    {
+      q: "What markets are covered?",
+      points: [
+        "S&P 500 stocks",
+        "Nasdaq-100 stocks",
+        "Dow Jones stocks",
+        "Major index ETFs (e.g., SPY, QQQ, DIA)",
+        "S&P 500 sector ETFs",
+        "Commodity ETFs (e.g., GLD, SLV, USO, UNG)"
+      ]
+    },
+    {
+      q: "Can I cancel anytime?",
+      body: ["Yes. You can cancel your subscription at any time. Access remains active until the end of your current billing cycle."]
+    },
+    {
+      q: "Do you offer a free trial or preview?",
+      body: ["Yes. Limited access preview is available so you can evaluate signal quality before subscribing."]
+    },
+    {
+      q: "How is this different from other signal providers?",
+      intro: "Odin500 is built around:",
+      points: [
+        "Full market coverage (not just a few picks)",
+        "Consistent daily signals for every ticker",
+        "Structured signal-strength system",
+        "Integrated data, analytics, ticker signals, and trading signals in one platform"
+      ]
+    },
+    {
+      q: "Do I need to connect a broker?",
+      body: [
+        "No. Odin500 is an independent decision-support platform.",
+        "You can execute trades using any broker you prefer."
+      ]
+    },
+    {
+      q: "Is there historical performance data?",
+      intro: "Yes. You can view:",
+      points: [
+        "Historical signal performance",
+        "Monthly and annual return analytics",
+        "Comparative performance versus buy-and-hold"
+      ]
+    },
+    {
+      q: "Who is this built for?",
+      points: [
+        "Active traders",
+        "Data-driven investors",
+        "Users who want systematic signals as an additional decision-support tool"
+      ]
+    }
   ];
+
+  const leftFaqs = faqs.filter((_, i) => i % 2 === 0);
+  const rightFaqs = faqs.filter((_, i) => i % 2 === 1);
+
+  const renderFaqCard = (faq, index) => (
+    <div
+      key={index}
+      className="bg-[#e8edf5]/80 hover:bg-[#e1e7f0]  backdrop-blur-sm transition-colors rounded-[14px] overflow-hidden dark:bg-slate-900/55 dark:hover:bg-slate-800/70"
+    >
+      <button onClick={() => toggleFaq(index)} className="w-full px-5 py-[18px] flex justify-between items-center text-left">
+        <span className="font-semibold text-[#334155] dark:text-slate-100 text-[13px] pr-4">{faq.q}</span>
+        <Plus className={`w-4 h-4 text-slate-400 dark:text-slate-500 flex-shrink-0 transition-transform ${openFaq === index ? 'rotate-45' : ''}`} />
+      </button>
+
+      {openFaq === index && (
+        <div className="px-5 pb-5 text-slate-500 dark:text-slate-400 text-[13px] leading-relaxed border-t border-slate-200/60 dark:border-white/[0.06] pt-3">
+          {faq.intro ? <p className="mb-2">{faq.intro}</p> : null}
+          {Array.isArray(faq.body)
+            ? faq.body.map((line, lineIdx) => (
+                <p key={lineIdx} className={lineIdx > 0 ? 'mt-2' : ''}>
+                  {line}
+                </p>
+              ))
+            : null}
+          {Array.isArray(faq.points) && faq.points.length ? (
+            <ul className="mt-2 list-disc pl-5 space-y-1">
+              {faq.points.map((point, pointIdx) => (
+                <li key={pointIdx}>{point}</li>
+              ))}
+            </ul>
+          ) : null}
+          {faq.outro ? <p className="mt-2">{faq.outro}</p> : null}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="relative min-h-screen bg-[#f4f7fb] dark:bg-[#020617] overflow-hidden font-sans pb-16 dark:pb-8">
@@ -270,27 +417,13 @@ const OdinPricingPage = () => {
             Frequently Asked Questions
           </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-3 relative z-10 px-4 md:px-0">
-            {faqs.map((faq, index) => (
-              <div 
-                key={index} 
-                className="bg-[#e8edf5]/80 hover:bg-[#e1e7f0] border border-white/50 backdrop-blur-sm transition-colors rounded-[14px] overflow-hidden dark:bg-slate-900/55 dark:hover:bg-slate-800/70 dark:border-white/[0.08]"
-              >
-                <button 
-                  onClick={() => toggleFaq(index)}
-                  className="w-full px-5 py-[18px] flex justify-between items-center text-left"
-                >
-                  <span className="font-semibold text-[#334155] dark:text-slate-100 text-[13px] pr-4">{faq.q}</span>
-                  <Plus className={`w-4 h-4 text-slate-400 dark:text-slate-500 flex-shrink-0 transition-transform ${openFaq === index ? 'rotate-45' : ''}`} />
-                </button>
-                
-                {openFaq === index && (
-                  <div className="px-5 pb-5 text-slate-500 dark:text-slate-400 text-[13px] leading-relaxed border-t border-slate-200/60 dark:border-white/[0.06] pt-3">
-                    This is where the detailed explanation for "{faq.q}" would go. 
-                  </div>
-                )}
-              </div>
-            ))}
+          <div className="grid items-start grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-3 relative z-10 px-4 md:px-0">
+            <div className="flex flex-col gap-3">
+              {leftFaqs.map((faq, localIdx) => renderFaqCard(faq, localIdx * 2))}
+            </div>
+            <div className="flex flex-col gap-3">
+              {rightFaqs.map((faq, localIdx) => renderFaqCard(faq, localIdx * 2 + 1))}
+            </div>
           </div>
         </div>
 

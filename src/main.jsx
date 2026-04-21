@@ -5,7 +5,6 @@ import App from './App.jsx';
 import { ProtectedLayout } from './components/ProtectedLayout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
-import SimplePage from './pages/SimplePage.jsx';
 import SignupPage from './pages/SignupPage.jsx';
 import SignupVerifyEmailPage from './pages/SignupVerifyEmailPage.jsx';
 import SignupEnterCodePage from './pages/SignupEnterCodePage.jsx';
@@ -17,6 +16,7 @@ import IndexPage from './pages/IndexPage.jsx';
 import MarketMoversPage from './pages/MarketMoversPage.jsx';
 import Pricing from './pages/Pricing.jsx';
 import AboutPage from './pages/AboutPage.jsx';
+import AccountsPage from './pages/AccountsPage.jsx';
 import './index.css';
 import { initAuthSessionOnLoad } from './store/apiStore.js';
 
@@ -51,7 +51,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/heatmap" element={<MarketHeatmapPage />} />
           <Route path="/market-movers" element={<MarketMoversPage />} />
           <Route path="/odin-signals" element={<OdinSignalsPage />} />
-          <Route path="/accounts" element={<SimplePage title="Accounts" />} />
+          <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/premium" element={<Pricing />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/pricing"  />
