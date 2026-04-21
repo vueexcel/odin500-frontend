@@ -64,6 +64,13 @@ const COMPARE_ROWS = [
   { key: '20Y', period: 'Last 20 years' }
 ];
 
+const RELATIVE_INDEX_OPTIONS = [
+  { key: 'sp500', label: 'S&P 500', apiIndex: 'sp500' },
+  { key: 'dow-jones', label: 'Dow Jones', apiIndex: 'Dow Jones' },
+  { key: 'nasdaq-composite', label: 'Nasdaq Composite', apiIndex: 'nasdaq composite' },
+  { key: 'nasdaq-100', label: 'Nasdaq 100', apiIndex: 'Nasdaq 100' }
+];
+
 function pickNum(row, keys) {
   for (const key of keys) {
     if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
@@ -559,6 +566,11 @@ export default function TickerPage() {
   const [detailRows, setDetailRows] = useState([]);
   const [statsRows, setStatsRows] = useState([]);
   const [statsRowsSpy, setStatsRowsSpy] = useState([]);
+  const [relativeIndexKey, setRelativeIndexKey] = useState('sp500');
+  const [relativeTickerSymbol, setRelativeTickerSymbol] = useState(sym);
+  const [relativeIndexSeriesByKey, setRelativeIndexSeriesByKey] = useState({});
+  const [relativeTickerSeriesBySymbol, setRelativeTickerSeriesBySymbol] = useState({});
+  const [relativeCompareBusy, setRelativeCompareBusy] = useState(false);
   const [tailRows, setTailRows] = useState([]);
   const [newsPage, setNewsPage] = useState(1);
   const { busy: newsBusy, error: newsError, items: liveNewsAll } = useGeneralNewsFeed();
@@ -848,6 +860,10 @@ export default function TickerPage() {
   const annualReturnsRaw = returnsSym?.performance?.annualReturns;
   const quarterlyReturnsRaw = returnsSym?.performance?.quarterlyReturns;
   const monthlyReturnsRaw = returnsSym?.performance?.monthlyReturns;
+  const tickerSelectOptions = useMemo(() => {
+    const base = [sym, BENCHMARK, ...(detailRows || []).map((r) => String(r.symbol || '').toUpperCase().trim())];
+    return [...new Set(base.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [sym, detailRows]);
 
   const sortedChart = useMemo(() => sortRowsAsc(ohlcRows), [ohlcRows]);
 
@@ -1005,36 +1021,194 @@ export default function TickerPage() {
   const symQtd = qtdFromRows(statsSorted);
   const spyQtd = qtdFromRows(statsSpySorted);
 
+  useEffect(() => {
+    setRelativeTickerSymbol(sym);
+  }, [sym]);
+
+  useEffect(() => {
+    setRelativeTickerSeriesBySymbol((prev) => ({
+      ...prev,
+      [sym]: { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd },
+      [BENCHMARK]: { dynamicPeriods: dynamicSpy, mtd: spyMtd, qtd: spyQtd }
+    }));
+  }, [sym, dynamicSym, symMtd, symQtd, dynamicSpy, spyMtd, spyQtd]);
+
+  const loadRelativeTickerSeries = useCallback(
+    async (tickerInput) => {
+      const ticker = String(tickerInput || '').toUpperCase().trim();
+      if (!ticker || !getAuthToken()) return null;
+      const ret = await fetchJsonCached({
+        path: '/api/market/ticker-returns',
+        method: 'POST',
+        body: { ticker },
+        ttlMs: 15 * 60 * 1000
+      });
+      const asOf = String(ret?.data?.asOfDate || asOfDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
+      const asOfD = new Date(asOf + 'T12:00:00');
+      const start = new Date(asOfD);
+      start.setFullYear(start.getFullYear() - 1);
+      const startIso = toIso(start);
+      const rowsRes = await fetchJsonCached({
+        path:
+          '/api/market/ohlc?symbol=' +
+          encodeURIComponent(ticker) +
+          '&start_date=' +
+          encodeURIComponent(startIso) +
+          '&end_date=' +
+          encodeURIComponent(asOf) +
+          '&limit=400',
+        method: 'GET',
+        ttlMs: 10 * 60 * 1000
+      });
+      const rows = sortRowsAsc(ohlcRowsFromPayload(rowsRes.data));
+      return {
+        dynamicPeriods: ret?.data?.performance?.dynamicPeriods || [],
+        mtd: mtdFromRows(rows),
+        qtd: qtdFromRows(rows)
+      };
+    },
+    [asOfDate]
+  );
+
+  const loadRelativeIndexSeries = useCallback(
+    async (indexKey) => {
+      if (!getAuthToken()) return null;
+      const opt = RELATIVE_INDEX_OPTIONS.find((x) => x.key === indexKey) || RELATIVE_INDEX_OPTIONS[0];
+      const idx = await fetchJsonCached({
+        path: '/api/market/index-returns',
+        method: 'POST',
+        body: { index: opt.apiIndex },
+        ttlMs: 10 * 60 * 1000
+      });
+      const d = idx?.data || {};
+      const asOf = String(d?.asOfDate || asOfDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
+      const asOfD = new Date(asOf + 'T12:00:00');
+      const start = new Date(asOfD);
+      start.setFullYear(start.getFullYear() - 1);
+      const startIso = toIso(start);
+      const symForOhlc =
+        (d?.officialIndexTicker && String(d.officialIndexTicker).trim()) ||
+        (d?.ticker && String(d.ticker).trim()) ||
+        '';
+      let rows = [];
+      if (symForOhlc) {
+        const rowsRes = await fetchJsonCached({
+          path:
+            '/api/market/ohlc?symbol=' +
+            encodeURIComponent(symForOhlc) +
+            '&start_date=' +
+            encodeURIComponent(startIso) +
+            '&end_date=' +
+            encodeURIComponent(asOf) +
+            '&limit=400',
+          method: 'GET',
+          ttlMs: 10 * 60 * 1000
+        });
+        rows = sortRowsAsc(ohlcRowsFromPayload(rowsRes.data));
+      } else {
+        const syntheticRows = sortRowsAsc(
+          closeSeriesToChartRows(Array.isArray(d?.syntheticCloseSeries) ? d.syntheticCloseSeries : [])
+        );
+        rows = syntheticRows.filter((r) => {
+          const iso = rowDateToTimeKey(r);
+          return iso && iso >= startIso && iso <= asOf;
+        });
+      }
+      return {
+        dynamicPeriods: d?.performance?.dynamicPeriods || [],
+        mtd: mtdFromRows(rows),
+        qtd: qtdFromRows(rows)
+      };
+    },
+    [asOfDate]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!getAuthToken()) return () => {};
+    const needsIndex = !relativeIndexSeriesByKey[relativeIndexKey];
+    const tickerKey = String(relativeTickerSymbol || '').toUpperCase().trim();
+    const needsTicker = !!tickerKey && !relativeTickerSeriesBySymbol[tickerKey];
+    if (!needsIndex && !needsTicker) return () => {};
+    (async () => {
+      setRelativeCompareBusy(true);
+      try {
+        if (needsIndex) {
+          const idxSeries = await loadRelativeIndexSeries(relativeIndexKey);
+          if (!cancelled && idxSeries) {
+            setRelativeIndexSeriesByKey((prev) => ({ ...prev, [relativeIndexKey]: idxSeries }));
+          }
+        }
+        if (needsTicker) {
+          const tkSeries = await loadRelativeTickerSeries(tickerKey);
+          if (!cancelled && tkSeries) {
+            setRelativeTickerSeriesBySymbol((prev) => ({ ...prev, [tickerKey]: tkSeries }));
+          }
+        }
+      } finally {
+        if (!cancelled) setRelativeCompareBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    relativeIndexKey,
+    relativeTickerSymbol,
+    relativeIndexSeriesByKey,
+    relativeTickerSeriesBySymbol,
+    loadRelativeIndexSeries,
+    loadRelativeTickerSeries
+  ]);
+
+  const selectedIndexSeries = relativeIndexSeriesByKey[relativeIndexKey] || { dynamicPeriods: [], mtd: null, qtd: null };
+  const selectedTickerKey = String(relativeTickerSymbol || '').toUpperCase().trim();
+  const selectedTickerSeries =
+    relativeTickerSeriesBySymbol[selectedTickerKey] || { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd };
+  const selectedIndexLabel =
+    RELATIVE_INDEX_OPTIONS.find((x) => x.key === relativeIndexKey)?.label || RELATIVE_INDEX_OPTIONS[0].label;
+
   const section16Rows = useMemo(() => {
     const compact = COMPARE_ROWS.filter((r) => ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD'].includes(r.key));
     return compact.map((row) => {
       const symPct = row.period
-        ? pickDynamic(dynamicSym, row.period)
+        ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period)
         : row.mtd
-          ? symMtd
+          ? selectedIndexSeries.mtd
           : row.qtd
-            ? symQtd
+            ? selectedIndexSeries.qtd
             : null;
-      return { label: row.key, value: symPct };
+      const tkPct = row.period
+        ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period)
+        : row.mtd
+          ? selectedTickerSeries.mtd
+          : row.qtd
+            ? selectedTickerSeries.qtd
+            : null;
+      const diff =
+        symPct != null && tkPct != null && Number.isFinite(symPct) && Number.isFinite(tkPct)
+          ? symPct - tkPct
+          : null;
+      return { label: row.key, value: diff, symPct, tkPct, diff };
     });
-  }, [dynamicSym, symMtd, symQtd]);
+  }, [selectedIndexSeries, selectedTickerSeries]);
 
   const section17CompareRows = useMemo(() => {
     const compact = COMPARE_ROWS.filter((r) => ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD'].includes(r.key));
     return compact.map((row) => {
       const symPct = row.period
-        ? pickDynamic(dynamicSym, row.period)
+        ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period)
         : row.mtd
-          ? symMtd
+          ? selectedIndexSeries.mtd
           : row.qtd
-            ? symQtd
+            ? selectedIndexSeries.qtd
             : null;
       const spyPct = row.period
-        ? pickDynamic(dynamicSpy, row.period)
+        ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period)
         : row.mtd
-          ? spyMtd
+          ? selectedTickerSeries.mtd
           : row.qtd
-            ? spyQtd
+            ? selectedTickerSeries.qtd
             : null;
       const diff =
         symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct)
@@ -1042,7 +1216,7 @@ export default function TickerPage() {
           : null;
       return { label: row.key, symPct, spyPct, diff };
     });
-  }, [dynamicSym, dynamicSpy, symMtd, spyMtd, symQtd, spyQtd]);
+  }, [selectedIndexSeries, selectedTickerSeries]);
 
   const basePixelHeight = userChartHeight ?? mediaChartHeight;
   const plotHeight = chartFs && fsPlotH >= CHART_H_MIN ? fsPlotH : basePixelHeight;
@@ -1500,7 +1674,47 @@ export default function TickerPage() {
               asOfDate={asOfDate}
             />
           </TickerChartResizeScope>
-          <TickerSection16Section17 rows={section16Rows} compareRows={section17CompareRows} />
+          <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>
+            <h3 className="ticker-subh ticker-subh--flex">Relative Strength selector</h3>
+            <DataInfoTip align="start">
+              <p className="ticker-data-tip__p">
+                Choose one index and one ticker; relative strength is shown as <strong>index return − ticker return</strong>.
+              </p>
+            </DataInfoTip>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+            <select
+              className="ticker-page__date-inp"
+              value={relativeIndexKey}
+              onChange={(e) => setRelativeIndexKey(e.target.value)}
+              style={{ minWidth: 220 }}
+            >
+              {RELATIVE_INDEX_OPTIONS.map((opt) => (
+                <option key={`rs-index-${opt.key}`} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="ticker-page__date-inp"
+              value={relativeTickerSymbol}
+              onChange={(e) => setRelativeTickerSymbol(e.target.value)}
+              style={{ minWidth: 220 }}
+            >
+              {tickerSelectOptions.map((opt) => (
+                <option key={`rs-ticker-${opt}`} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+            {relativeCompareBusy ? <span className="ticker-page__loading-pill">Loading relative strength…</span> : null}
+          </div>
+          <TickerSection16Section17
+            rows={section16Rows}
+            compareRows={section17CompareRows}
+            relativeStrengthTitle={`Relative Strength vs ${selectedTickerKey || relativeTickerSymbol}`}
+            relativeStrengthHeader={`Relative Strength (${selectedIndexLabel} - ${selectedTickerKey || relativeTickerSymbol})`}
+          />
           <TickerSection23Section24
             initialTicker={sym}
             initialTickerReturns={returnsSym}
@@ -1686,7 +1900,7 @@ export default function TickerPage() {
 
             <div className="ticker-subh-with-tip">
               <h3 className="ticker-subh ticker-subh--flex">
-                vs {BENCHMARK} (total return %, then difference)
+                vs {selectedTickerKey || relativeTickerSymbol} (total return %, then difference)
               </h3>
               <DataInfoTip align="start">
                 <p className="ticker-data-tip__p">
@@ -1695,7 +1909,8 @@ export default function TickerPage() {
                 </p>
                 <p className="ticker-data-tip__p">
                   <strong>MTD / QTD</strong> rows are computed in the browser from the ~1y daily OHLC samples: first
-                  close on/after month or quarter start vs latest <strong>Close</strong> for {sym} and for {BENCHMARK}{' '}
+                  close on/after month or quarter start vs latest <strong>Close</strong> for {selectedIndexLabel} and for{' '}
+                  {selectedTickerKey || relativeTickerSymbol}{' '}
                   separately.
                 </p>
                 <p className="ticker-data-tip__p">
@@ -1706,24 +1921,24 @@ export default function TickerPage() {
             <div className="ticker-compare">
               <div className="ticker-compare__head">
                 <span />
-                <span>{sym}</span>
-                <span>{BENCHMARK}</span>
+                <span>{selectedIndexLabel}</span>
+                <span>{selectedTickerKey || relativeTickerSymbol}</span>
                 <span>Diff</span>
               </div>
               {COMPARE_ROWS.map((row) => {
                 let symPct = row.period
-                  ? pickDynamic(dynamicSym, row.period)
+                  ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period)
                   : row.mtd
-                    ? symMtd
+                    ? selectedIndexSeries.mtd
                     : row.qtd
-                      ? symQtd
+                      ? selectedIndexSeries.qtd
                       : null;
                 let spyPct = row.period
-                  ? pickDynamic(dynamicSpy, row.period)
+                  ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period)
                   : row.mtd
-                    ? spyMtd
+                    ? selectedTickerSeries.mtd
                     : row.qtd
-                      ? spyQtd
+                      ? selectedTickerSeries.qtd
                       : null;
                 const diff =
                   symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct)
