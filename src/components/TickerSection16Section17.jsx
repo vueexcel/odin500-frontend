@@ -29,7 +29,12 @@ function labelColor(bg) {
  * Figma-like compact table + mini bar section using existing TickerPage returns data.
  * No extra API calls.
  */
-export function TickerSection16Section17({ rows, compareRows }) {
+export function TickerSection16Section17({
+  rows,
+  compareRows,
+  relativeStrengthTitle = 'Relative Strength (SP500)',
+  relativeStrengthHeader = 'Relative Strength (SP500)'
+}) {
   const displayRows = useMemo(() => (Array.isArray(rows) ? rows.filter((r) => r && r.label).slice(0, 8) : []), [rows]);
   const chartRows = useMemo(() => {
     if (displayRows.length) return displayRows;
@@ -85,14 +90,14 @@ export function TickerSection16Section17({ rows, compareRows }) {
     <section className="ticker-s16s17">
       <div className="ticker-s16s17__card ticker-s16">
         <div className="ticker-card__h-with-tip">
-          <h3 className="ticker-subh ticker-subh--flex">Relative Strength (SP500)</h3>
+          <h3 className="ticker-subh ticker-subh--flex">{relativeStrengthTitle}</h3>
           <ChartInfoTip tip={CHART_INFO_TIPS.tickerRelativeStrength} align="start" />
         </div>
         <table className="ticker-s16__table">
           <thead>
             <tr>
-              <th scope="col" >Relative Strength (SP500)</th>
-              <th scope="col">1D</th>
+              <th scope="col" >{relativeStrengthHeader}</th>
+              <th scope="col">Diff</th>
             </tr>
           </thead>
           <tbody>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
 import { OdinFigmaSignalTreemap } from '../components/OdinFigmaSignalTreemap.jsx';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
@@ -41,6 +41,11 @@ const INDEX_MENU = [
   { id: 'nasdaq', apiIndex: 'Nasdaq 100', label: 'Nasdaq 100' },
   { id: 'all', apiIndex: 'All Stocks', label: 'All Stocks' }
 ];
+const PERIOD_MENU = [
+  { id: 'last-date', label: 'Last date' },
+  { id: 'last-5-days', label: 'Last 5D' },
+  { id: 'mtd', label: 'MTD' }
+];
 
 const OMX_SIGNAL_SCORES = {
   L1: 100,
@@ -70,6 +75,11 @@ function signalFromReturn(v) {
   if (n >= 0) return 'L2';
   if (n <= -2) return 'S1';
   return 'S2';
+}
+
+function normalizeSignalCode(sig) {
+  const s = String(sig || '').trim().toUpperCase();
+  return ['L1', 'L2', 'L3', 'S1', 'S2', 'S3', 'N'].includes(s) ? s : '';
 }
 
 function polar(cx, cy, r, deg) {
@@ -102,6 +112,7 @@ function formatListDate(d) {
 
 export default function OdinSignalsPage() {
   const chartRef = useRef(null);
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const symbol = useMemo(() => resolveTickersPageSymbol(searchParams), [searchParams]);
   const [rangeKey, setRangeKey] = useState('3y');
@@ -109,6 +120,7 @@ export default function OdinSignalsPage() {
   const [loading, setLoading] = useState(false);
   const [meta, setMeta] = useState({ rowCount: 0, signalCount: 0, maPoints: 0 });
   const [indexId, setIndexId] = useState('sp500');
+  const [selectedPeriod, setSelectedPeriod] = useState('last-date');
   const [indexRows, setIndexRows] = useState([]);
   const [indexLoading, setIndexLoading] = useState(false);
   const [odinHeatmapZoom, setOdinHeatmapZoom] = useState(1);
@@ -139,6 +151,15 @@ export default function OdinSignalsPage() {
       );
     },
     [setSearchParams]
+  );
+
+  const openTickerPage = useCallback(
+    (sym) => {
+      const clean = sanitizeTickerPageInput(sym);
+      if (!clean) return;
+      navigate(`/ticker/${encodeURIComponent(clean)}?ticker=${encodeURIComponent(clean)}`);
+    },
+    [navigate]
   );
 
   useEffect(() => {
@@ -276,7 +297,7 @@ export default function OdinSignalsPage() {
           sector: String(r.sector || 'Other').trim() || 'Other',
           industry: String(r.industry || 'General').trim() || 'General',
           totalReturnPercentage: r.totalReturnPercentage,
-          signal: signalFromReturn(r.totalReturnPercentage),
+          signal: normalizeSignalCode(r.signal) || signalFromReturn(r.totalReturnPercentage),
           ret: Number(r.totalReturnPercentage)
         }))
         .filter((r) => r.symbol);
@@ -293,7 +314,7 @@ export default function OdinSignalsPage() {
               fetchJsonCached({
                 path: '/api/market/ticker-details',
                 method: 'POST',
-                body: { index: indexName, period: 'last-date' },
+                body: { index: indexName, period: selectedPeriod },
                 ttlMs: 5 * 60 * 1000
               })
             )
@@ -311,7 +332,7 @@ export default function OdinSignalsPage() {
           const { data } = await fetchJsonCached({
             path: '/api/market/ticker-details',
             method: 'POST',
-            body: { index: activeIndex.apiIndex, period: 'last-date' },
+            body: { index: activeIndex.apiIndex, period: selectedPeriod },
             ttlMs: 5 * 60 * 1000
           });
           list = Array.isArray(data?.data) ? data.data : [];
@@ -329,12 +350,13 @@ export default function OdinSignalsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeIndex.apiIndex]);
+  }, [activeIndex.apiIndex, selectedPeriod]);
 
   const odinTreemapRows = useMemo(
     () =>
       indexRows.map((r) => ({
         symbol: r.symbol,
+        signal: r.signal,
         security: r.security,
         price: r.price,
         sector: r.sector,
@@ -396,6 +418,20 @@ export default function OdinSignalsPage() {
                 </button>
               ))}
             </div>
+            <div className="odin-index-list__sub" style={{ marginTop: 12 }}>Period</div>
+            <div className="odin-index-list" style={{ gap: 6 }}>
+              {PERIOD_MENU.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={'odin-index-list__row' + (selectedPeriod === p.id ? ' odin-index-list__row--active' : '')}
+                  onClick={() => setSelectedPeriod(p.id)}
+                >
+                  <span>{p.label}</span>
+                  <span>{selectedPeriod === p.id ? '●' : ''}</span>
+                </button>
+              ))}
+            </div>
           </section>
 
           <section className="odin-side-card">
@@ -412,7 +448,7 @@ export default function OdinSignalsPage() {
                   key={r.symbol}
                   type="button"
                   className="odin-tickers-list__row"
-                  onClick={() => setSymbolInUrl(r.symbol)}
+                  onClick={() => openTickerPage(r.symbol)}
                   onMouseEnter={() => setOdinHeatmapHover(r.symbol)}
                   onMouseLeave={() => setOdinHeatmapHover('')}
                 >
@@ -665,6 +701,7 @@ export default function OdinSignalsPage() {
                       scaleMin={-3}
                       scaleMax={3}
                       highlightSymbol={odinHeatmapHover}
+                      onTickerClick={openTickerPage}
                     />
                   </div>
                 ) : null}

@@ -20,7 +20,7 @@ import { rowDateToTimeKey } from '../utils/chartData.js';
 
 const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
 const MAX_SIGNAL_RANGE_DAYS = 40000;
-const BENCHMARK = 'SPY';
+const BENCHMARK = 'SPX';
 
 const CHART_USER_H_KEY = 'odin_index_chart_h';
 const CHART_H_MIN = 200;
@@ -34,6 +34,7 @@ const RESIZE_KEY_MONTHLY_ADV = 'odin_index_resize_monthly_waterfall';
 
 const MAX_NEWS_ITEMS = 120;
 const NEWS_PAGE_SIZE = 5;
+const INDEX_TICKERS_PAGE_SIZE = 50;
 
 const PERF_COLS = [
   { label: '1M', period: 'Last Month' },
@@ -61,9 +62,17 @@ const COMPARE_ROWS = [
 /** Route slug → backend `index` body + UI label */
 export const INDEX_ROUTE_CHOICES = [
   { slug: 'sp500', apiIndex: 'sp500', label: 'S&P 500' },
-  { slug: 'dow-jones', apiIndex: 'Dow Jones', label: 'Dow Jones Industrial Average' },
-  { slug: 'nasdaq-composite', apiIndex: 'nasdaq composite', label: 'Nasdaq Composite' },
+  { slug: 'dow-jones', apiIndex: 'Dow Jones', label: 'Dow Jones' },
   { slug: 'nasdaq-100', apiIndex: 'Nasdaq 100', label: 'Nasdaq 100' }
+];
+const RELATIVE_STRENGTH_OPTIONS = [
+  
+  ...INDEX_ROUTE_CHOICES.map((opt) => ({
+    key: `IDX:${opt.slug}`,
+    label: opt.label,
+    kind: 'index',
+    apiIndex: opt.apiIndex
+  }))
 ];
 
 function sanitizeIndexSlug(raw) {
@@ -551,6 +560,13 @@ export default function IndexPage() {
   const [returnsSpy, setReturnsSpy] = useState(null);
   const [statsRows, setStatsRows] = useState([]);
   const [statsRowsSpy, setStatsRowsSpy] = useState([]);
+  const [relativeSeriesByKey, setRelativeSeriesByKey] = useState({});
+  const [relativeBusy, setRelativeBusy] = useState(false);
+  const [relativeLeftKey, setRelativeLeftKey] = useState(`IDX:${slug}`);
+  const [relativeRightKey, setRelativeRightKey] = useState('SPX');
+  const [indexTickersRows, setIndexTickersRows] = useState([]);
+  const [indexTickersBusy, setIndexTickersBusy] = useState(false);
+  const [indexTickersPage, setIndexTickersPage] = useState(1);
   const [tailRows, setTailRows] = useState([]);
   const [ohlcTickerBounds, setOhlcTickerBounds] = useState(/** @type {{ min: string, max: string } | null} */ (null));
 
@@ -859,11 +875,99 @@ export default function IndexPage() {
     [slug]
   );
 
+  useEffect(() => {
+    setRelativeLeftKey(`IDX:${slug}`);
+    setRelativeRightKey('SPX');
+    setIndexTickersPage(1);
+  }, [slug]);
+
   const dynamicSym = returnsSym?.performance?.dynamicPeriods || [];
   const dynamicSpy = returnsSpy?.performance?.dynamicPeriods || [];
   const annualReturnsRaw = returnsSym?.performance?.annualReturns;
   const quarterlyReturnsRaw = returnsSym?.performance?.quarterlyReturns;
   const monthlyReturnsRaw = returnsSym?.performance?.monthlyReturns;
+
+  const loadRelativeSeries = useCallback(
+    async (option) => {
+      if (!option || !getAuthToken()) return null;
+      if (option.kind === 'ticker') {
+        const ret = await fetchJsonCached({
+          path: '/api/market/ticker-returns',
+          method: 'POST',
+          body: { ticker: option.ticker },
+          ttlMs: 15 * 60 * 1000
+        });
+        const asOf = String(ret?.data?.asOfDate || asOfDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
+        const asOfD = new Date(asOf + 'T12:00:00');
+        const start = new Date(asOfD);
+        start.setFullYear(start.getFullYear() - 1);
+        const startIso = toIso(start);
+        const rowsRes = await fetchJsonCached({
+          path:
+            '/api/market/ohlc?symbol=' +
+            encodeURIComponent(option.ticker) +
+            '&start_date=' +
+            encodeURIComponent(startIso) +
+            '&end_date=' +
+            encodeURIComponent(asOf) +
+            '&limit=400',
+          method: 'GET',
+          ttlMs: 10 * 60 * 1000
+        });
+        const rows = sortRowsAsc(ohlcRowsFromPayload(rowsRes.data));
+        return {
+          dynamicPeriods: ret?.data?.performance?.dynamicPeriods || [],
+          mtd: mtdFromRows(rows),
+          qtd: qtdFromRows(rows)
+        };
+      }
+
+      const idx = await fetchJsonCached({
+        path: '/api/market/index-returns',
+        method: 'POST',
+        body: { index: option.apiIndex },
+        ttlMs: 10 * 60 * 1000
+      });
+      const d = idx?.data || {};
+      const asOf = String(d?.asOfDate || asOfDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
+      const asOfD = new Date(asOf + 'T12:00:00');
+      const start = new Date(asOfD);
+      start.setFullYear(start.getFullYear() - 1);
+      const startIso = toIso(start);
+      const symForOhlc =
+        (d?.officialIndexTicker && String(d.officialIndexTicker).trim()) ||
+        (d?.ticker && String(d.ticker).trim()) ||
+        '';
+      let rows = [];
+      if (symForOhlc) {
+        const rowsRes = await fetchJsonCached({
+          path:
+            '/api/market/ohlc?symbol=' +
+            encodeURIComponent(symForOhlc) +
+            '&start_date=' +
+            encodeURIComponent(startIso) +
+            '&end_date=' +
+            encodeURIComponent(asOf) +
+            '&limit=400',
+          method: 'GET',
+          ttlMs: 10 * 60 * 1000
+        });
+        rows = sortRowsAsc(ohlcRowsFromPayload(rowsRes.data));
+      } else {
+        const seriesRows = sortRowsAsc(closeSeriesToChartRows(Array.isArray(d?.syntheticCloseSeries) ? d.syntheticCloseSeries : []));
+        rows = seriesRows.filter((r) => {
+          const iso = rowDateToTimeKey(r);
+          return iso && iso >= startIso && iso <= asOf;
+        });
+      }
+      return {
+        dynamicPeriods: d?.performance?.dynamicPeriods || [],
+        mtd: mtdFromRows(rows),
+        qtd: qtdFromRows(rows)
+      };
+    },
+    [asOfDate]
+  );
 
   useEffect(() => {
     const sync = () => {
@@ -1019,19 +1123,124 @@ export default function IndexPage() {
   const symQtd = qtdFromRows(statsSorted);
   const spyQtd = qtdFromRows(statsSpySorted);
 
+  useEffect(() => {
+    const currentKey = `IDX:${slug}`;
+    setRelativeSeriesByKey((prev) => ({
+      ...prev,
+      [currentKey]: { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd },
+      SPX: { dynamicPeriods: dynamicSpy, mtd: spyMtd, qtd: spyQtd }
+    }));
+  }, [slug, dynamicSym, symMtd, symQtd, dynamicSpy, spyMtd, spyQtd]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!getAuthToken()) return () => {};
+    const keys = [relativeLeftKey, relativeRightKey].filter(Boolean);
+    const missing = keys.filter((k) => !relativeSeriesByKey[k]);
+    if (!missing.length) return () => {};
+    (async () => {
+      setRelativeBusy(true);
+      try {
+        for (const key of missing) {
+          const option = RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === key);
+          const payload = await loadRelativeSeries(option);
+          if (cancelled || !payload) continue;
+          setRelativeSeriesByKey((prev) => ({ ...prev, [key]: payload }));
+        }
+      } finally {
+        if (!cancelled) setRelativeBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [relativeLeftKey, relativeRightKey, relativeSeriesByKey, loadRelativeSeries]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!getAuthToken()) {
+      setIndexTickersRows([]);
+      setIndexTickersBusy(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    (async () => {
+      setIndexTickersBusy(true);
+      try {
+        const { data } = await fetchJsonCached({
+          path: '/api/market/ticker-details',
+          method: 'POST',
+          body: { index: activeMeta.apiIndex, period: 'last-date' },
+          ttlMs: 5 * 60 * 1000
+        });
+        if (cancelled) return;
+        const rows = Array.isArray(data?.data) ? data.data : [];
+        const mapped = rows
+          .map((r) => ({
+            symbol: String(r.symbol || '').toUpperCase().trim(),
+            close: Number(r.price),
+            ret1d: Number(r.totalReturnPercentage)
+          }))
+          .filter((r) => r.symbol);
+        setIndexTickersRows(mapped);
+      } catch {
+        if (!cancelled) setIndexTickersRows([]);
+      } finally {
+        if (!cancelled) setIndexTickersBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMeta.apiIndex, authVersion]);
+
+  const relativeLeftSeries =
+    relativeSeriesByKey[relativeLeftKey] || { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd };
+  const relativeRightSeries =
+    relativeSeriesByKey[relativeRightKey] || { dynamicPeriods: dynamicSpy, mtd: spyMtd, qtd: spyQtd };
+  const relativeLeftLabel =
+    RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeLeftKey)?.label || displaySym;
+  const relativeRightLabel =
+    RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeRightKey)?.label || BENCHMARK;
+  const indexTickersTotalPages = Math.max(1, Math.ceil(indexTickersRows.length / INDEX_TICKERS_PAGE_SIZE));
+  const indexTickersPageSafe = Math.min(Math.max(1, indexTickersPage), indexTickersTotalPages);
+  const indexTickersPageRows = useMemo(() => {
+    const start = (indexTickersPageSafe - 1) * INDEX_TICKERS_PAGE_SIZE;
+    return indexTickersRows.slice(start, start + INDEX_TICKERS_PAGE_SIZE);
+  }, [indexTickersRows, indexTickersPageSafe]);
+  const indexTickersPageButtons = useMemo(() => {
+    if (indexTickersTotalPages <= 1) return [1];
+    if (indexTickersTotalPages <= 4) return Array.from({ length: indexTickersTotalPages }, (_, i) => i + 1);
+    let start = Math.max(1, indexTickersPageSafe - 1);
+    if (start + 3 > indexTickersTotalPages) start = indexTickersTotalPages - 3;
+    return [start, start + 1, start + 2, start + 3];
+  }, [indexTickersPageSafe, indexTickersTotalPages]);
+
   const section16Rows = useMemo(() => {
     const compact = COMPARE_ROWS.filter((r) => ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD'].includes(r.key));
     return compact.map((row) => {
       const symPct = row.period
-        ? pickDynamic(dynamicSym, row.period)
+        ? pickDynamic(relativeLeftSeries.dynamicPeriods, row.period)
         : row.mtd
-          ? symMtd
+          ? relativeLeftSeries.mtd
           : row.qtd
-            ? symQtd
+            ? relativeLeftSeries.qtd
             : null;
-      return { label: row.key, value: symPct };
+      const basePct = row.period
+        ? pickDynamic(relativeRightSeries.dynamicPeriods, row.period)
+        : row.mtd
+          ? relativeRightSeries.mtd
+          : row.qtd
+            ? relativeRightSeries.qtd
+            : null;
+      const diff =
+        symPct != null && basePct != null && Number.isFinite(symPct) && Number.isFinite(basePct)
+          ? symPct - basePct
+          : null;
+      return { label: row.key, value: diff, symPct, basePct, diff };
     });
-  }, [dynamicSym, symMtd, symQtd]);
+  }, [relativeLeftSeries, relativeRightSeries]);
 
   const section17CompareRows = useMemo(() => {
     const compact = COMPARE_ROWS.filter((r) => ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD'].includes(r.key));
@@ -1464,7 +1673,45 @@ export default function IndexPage() {
               asOfDate={asOfDate}
             />
           </TickerChartResizeScope>
-          <TickerSection16Section17 rows={section16Rows} compareRows={section17CompareRows} />
+          <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>
+            <h3 className="ticker-subh ticker-subh--flex">Relative Strength selector</h3>
+            <DataInfoTip align="start">
+              <p className="ticker-data-tip__p">Choose two indices; table and bars show return% difference (left minus right).</p>
+            </DataInfoTip>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+            <select
+              className="ticker-page__date-inp"
+              value={relativeLeftKey}
+              onChange={(e) => setRelativeLeftKey(e.target.value)}
+              style={{ minWidth: 220 }}
+            >
+              {RELATIVE_STRENGTH_OPTIONS.map((opt) => (
+                <option key={`left-${opt.key}`} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="ticker-page__date-inp"
+              value={relativeRightKey}
+              onChange={(e) => setRelativeRightKey(e.target.value)}
+              style={{ minWidth: 220 }}
+            >
+              {RELATIVE_STRENGTH_OPTIONS.map((opt) => (
+                <option key={`right-${opt.key}`} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            {relativeBusy ? <span className="ticker-page__loading-pill">Loading relative strength…</span> : null}
+          </div>
+          <TickerSection16Section17
+            rows={section16Rows}
+            compareRows={section17CompareRows}
+            relativeStrengthTitle={`Relative Strength vs ${relativeRightLabel}`}
+            relativeStrengthHeader={`Relative Strength (${relativeLeftLabel} - ${relativeRightLabel})`}
+          />
         </div>
 
         <aside className="ticker-page__aside">
@@ -1663,6 +1910,86 @@ export default function IndexPage() {
                   </div>
                 );
               })}
+            </div>
+
+            <div className="ticker-subh-with-tip" style={{ marginTop: 14 }}>
+              <h3 className="ticker-subh ticker-subh--flex">{activeMeta.label} Constituents</h3>
+              <DataInfoTip align="start">
+                <p className="ticker-data-tip__p">
+                  Source: <code className="ticker-data-tip__code">POST /api/market/ticker-details</code> with period{' '}
+                  <code className="ticker-data-tip__code">last-date</code>. Return % is 1D.
+                </p>
+              </DataInfoTip>
+            </div>
+            <div className="index-constituents-card">
+              <div className="index-constituents-table-wrap">
+                <table className="index-constituents-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Close</th>
+                      <th>Return %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {indexTickersPageRows.map((row) => (
+                      <tr key={row.symbol}>
+                        <td>
+                          <button
+                            type="button"
+                            className="index-constituents-link"
+                            onClick={() => navigate(`/ticker/${encodeURIComponent(row.symbol)}?ticker=${encodeURIComponent(row.symbol)}`)}
+                          >
+                            {row.symbol}
+                          </button>
+                        </td>
+                        <td>{formatPx(row.close)}</td>
+                        <td className={pctClass(row.ret1d)}>{formatPct(row.ret1d)}</td>
+                      </tr>
+                    ))}
+                    {!indexTickersBusy && !indexTickersPageRows.length ? (
+                      <tr>
+                        <td colSpan={3} className="index-constituents-empty">No constituents found.</td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+                {indexTickersBusy ? <p className="ticker-page__news-sample-note">Loading constituents…</p> : null}
+              </div>
+              <div className="index-constituents-pagination" aria-label="Constituents pagination">
+                <button
+                  type="button"
+                  className="index-constituents-page-btn index-constituents-page-btn--nav"
+                  disabled={indexTickersPageSafe <= 1}
+                  onClick={() => setIndexTickersPage((p) => Math.max(1, p - 1))}
+                  aria-label="Previous page"
+                >
+                  ‹
+                </button>
+                {indexTickersPageButtons.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={
+                      'index-constituents-page-btn' +
+                      (p === indexTickersPageSafe ? ' index-constituents-page-btn--active' : '')
+                    }
+                    onClick={() => setIndexTickersPage(p)}
+                    aria-current={p === indexTickersPageSafe ? 'page' : undefined}
+                  >
+                    {p}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="index-constituents-page-btn index-constituents-page-btn--nav"
+                  disabled={indexTickersPageSafe >= indexTickersTotalPages}
+                  onClick={() => setIndexTickersPage((p) => Math.min(indexTickersTotalPages, p + 1))}
+                  aria-label="Next page"
+                >
+                  ›
+                </button>
+              </div>
             </div>
           </section>
         </aside>

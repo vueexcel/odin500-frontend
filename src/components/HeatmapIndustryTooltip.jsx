@@ -59,6 +59,7 @@ export function HeatmapIndustryTooltip({
   peers,
   scaleMin,
   scaleMax,
+  onTickerClick,
   onMouseEnter,
   onMouseLeave
 }) {
@@ -114,7 +115,24 @@ export function HeatmapIndustryTooltip({
                 key={p.symbol + '-' + (p.security || '')}
                 className={isFeat ? 'heatmap-tooltip__li heatmap-tooltip__li--feat' : 'heatmap-tooltip__li'}
               >
-                <span className="heatmap-tooltip__li-sym">{p.symbol}</span>
+                <span className="heatmap-tooltip__li-sym">
+                  {typeof onTickerClick === 'function' ? (
+                    <button
+                      type="button"
+                      onClick={() => onTickerClick(p.symbol)}
+                      style={{
+                        all: 'unset',
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        textUnderlineOffset: '2px'
+                      }}
+                    >
+                      {p.symbol}
+                    </button>
+                  ) : (
+                    p.symbol
+                  )}
+                </span>
                 <span className="heatmap-tooltip__li-spark">
                   <MiniSparkline up={rowUp} seed={hashSeed(p.symbol + p.changePct)} compact />
                 </span>

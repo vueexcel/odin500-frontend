@@ -2562,6 +2562,15 @@ a.app-right-rail__btn {
   background: #1e2227;
 }
 
+.app-sidebar__row--placeholder {
+  color: #8b97ab;
+}
+
+.app-sidebar__row--placeholder .app-sidebar__row-icon {
+  color: #95a2b8;
+  opacity: 0.9;
+}
+
 .app-sidebar__row-icon {
   flex-shrink: 0;
   display: flex;
@@ -2727,6 +2736,14 @@ a.app-right-rail__btn {
 [data-theme="light"] .app-sidebar__row--active {
   background: rgba(37, 99, 235, 0.1);
   color: #1e40af;
+}
+
+[data-theme="light"] .app-sidebar__row--placeholder {
+  color: #7b8798;
+}
+
+[data-theme="light"] .app-sidebar__row--placeholder .app-sidebar__row-icon {
+  color: #8b98ab;
 }
 
 [data-theme="light"] .app-sidebar__row-icon {
@@ -8340,6 +8357,129 @@ button:disabled {
   color: #6b7280;
 }
 
+.index-constituents-card {
+  margin-top: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+  padding: 12px 10px 12px;
+}
+
+.index-constituents-table-wrap {
+  max-height: 470px;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.index-constituents-table-wrap::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.index-constituents-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 320px;
+}
+
+.index-constituents-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #171717;
+  color: #d1d5db;
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.index-constituents-table tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.84rem;
+  color: #e5e7eb;
+}
+
+.index-constituents-table tbody tr:hover td {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.index-constituents-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: #93c5fd;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.index-constituents-empty {
+  text-align: center;
+  color: #9ca3af;
+}
+
+.index-constituents-pagination {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.index-constituents-page-btn {
+  width: 37px;
+  height: 37px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: transparent;
+  color: #d1d5db;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s ease;
+}
+
+.index-constituents-page-btn--active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.index-constituents-page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .index-constituents-card {
+    margin-top: 14px;
+  }
+
+  .index-constituents-table-wrap {
+    max-height: 420px;
+  }
+
+  .index-constituents-page-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+  }
+}
+
 [data-theme="light"] .ticker-page {
   --ticker-bg: #f3f6fa;
   --ticker-panel: #ffffff;
@@ -8507,6 +8647,51 @@ button:disabled {
   background: #f8fafc;
   border-color: #e2e8f0;
   color: #64748b;
+}
+
+[data-theme="light"] .index-constituents-card {
+  border-color: #dbe3ef;
+  border-top-color: #c9d7ea;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+}
+
+[data-theme="light"] .index-constituents-table-wrap {
+  border-color: #dbe3ef;
+  background: #ffffff;
+}
+
+[data-theme="light"] .index-constituents-table thead th {
+  background: #f8fafc;
+  color: #334155;
+  border-bottom-color: #e2e8f0;
+}
+
+[data-theme="light"] .index-constituents-table tbody td {
+  color: #1e293b;
+  border-bottom-color: #e2e8f0;
+}
+
+[data-theme="light"] .index-constituents-table tbody tr:hover td {
+  background: #eff6ff;
+}
+
+[data-theme="light"] .index-constituents-link {
+  color: #2563eb;
+}
+
+[data-theme="light"] .index-constituents-empty {
+  color: #64748b;
+}
+
+[data-theme="light"] .index-constituents-page-btn {
+  border-color: #cbd5e1;
+  color: #64748b;
+  background: #ffffff;
+}
+
+[data-theme="light"] .index-constituents-page-btn:hover:not(:disabled) {
+  border-color: #94a3b8;
+  color: #334155;
 }
 
 [data-theme="light"] .ticker-data-tip__float {

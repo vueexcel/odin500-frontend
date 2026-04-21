@@ -173,7 +173,7 @@ function NavRow({ to, onClick, icon: Icon, label, badge, badgeTone }) {
   }
 
   return (
-    <button type="button" className="app-sidebar__row app-sidebar__row--btn" onClick={onClick}>
+    <button type="button" className="app-sidebar__row app-sidebar__row--btn app-sidebar__row--placeholder" onClick={onClick}>
       {content}
     </button>
   );

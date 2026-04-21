@@ -192,7 +192,8 @@ export function OdinFigmaSignalTreemap({
   highlightSymbol = '',
   disableTooltip = false,
   scaleMin = -3,
-  scaleMax = 3
+  scaleMax = 3,
+  onTickerClick
 }) {
   const wrapRef = useRef(null);
   const hideTimerRef = useRef(null);
@@ -290,6 +291,7 @@ export function OdinFigmaSignalTreemap({
         peers={peerList}
         scaleMin={scaleMin}
         scaleMax={scaleMax}
+        onTickerClick={onTickerClick}
         onMouseEnter={clearHideTimer}
         onMouseLeave={scheduleHide}
       />,

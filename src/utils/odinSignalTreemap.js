@@ -47,6 +47,11 @@ export function readChangePct(row) {
   return null;
 }
 
+function normalizeSignalCode(sig) {
+  const s = String(sig || '').trim().toUpperCase();
+  return ['L1', 'L2', 'L3', 'S1', 'S2', 'S3', 'N'].includes(s) ? s : '';
+}
+
 /**
  * Bucket total return into chart numbers -3 … +3 (maps to S3…L3 labels).
  * `span` is half-range in %-points: [-span, +span] maps to S3…L3.
@@ -77,8 +82,9 @@ export function resolveOdinSignalTreemapRows(rows, binSpan = 15) {
   const list = Array.isArray(rows) ? rows : [];
   return list.map((r) => {
     const ret = readChangePct(r);
+    const apiCode = normalizeSignalCode(r.signal);
     const chartNum = returnToChartNumber(ret, binSpan);
-    const code = chartNumberToSignalCode(chartNum);
+    const code = apiCode || chartNumberToSignalCode(chartNum);
     const w = SIGNAL_TREEMAP_WEIGHT[code] ?? SIGNAL_TREEMAP_WEIGHT.N;
     return { ...r, __tmw: Math.max(w, 0.01), __chartNum: chartNum, __signalCode: code };
   });
