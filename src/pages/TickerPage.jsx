@@ -39,6 +39,10 @@ const RESIZE_KEY_QUARTERLY = 'odin_ticker_resize_quarterly';
 const RESIZE_KEY_MONTHLY = 'odin_ticker_resize_monthly';
 const RESIZE_KEY_MONTHLY_ADV = 'odin_ticker_resize_monthly_waterfall';
 const RETURNS_DEFAULT_START = '2018-01-01';
+/** Long-window returns for Benchmark vs Ticker section (matches section table range). */
+const TABLE_LONG_START_DATE = '2005-01-01';
+/** Default section benchmark ticker when group is S&P 500 (`TickerSection23Section24` GROUPS[0]). */
+const SECTION_LONG_DEFAULT_BENCHMARK = 'SPX';
 
 const MAX_NEWS_ITEMS = 120;
 const NEWS_PAGE_SIZE = 5;
@@ -78,6 +82,25 @@ const RELATED_INDEX_LINKS = [
   { slug: 'sp500', label: 'S&P 500' },
   { slug: 'nasdaq-100', label: 'Nasdaq' }
 ];
+
+function yesterdayIsoForLongTable() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return toDateInput(d);
+}
+
+/** Resolve one ticker payload from single or batched `/ticker-returns` response. */
+function pickTickerReturnsFromPayload(payload, ticker) {
+  const u = String(ticker || '').toUpperCase().trim();
+  if (!payload || !u) return null;
+  if (payload.batch === true && payload.byTicker && payload.byTicker[u] != null) {
+    const row = payload.byTicker[u];
+    if (row && row.success === false) return null;
+    return row;
+  }
+  if (!payload.batch && String(payload.ticker || '').toUpperCase() === u) return payload;
+  return null;
+}
 
 function describeTickerIndex(rawIndex) {
   const s = String(rawIndex || '').trim();
@@ -593,6 +616,11 @@ export default function TickerPage() {
   const [relativeIndexSeriesByKey, setRelativeIndexSeriesByKey] = useState({});
   const [relativeTickerSeriesBySymbol, setRelativeTickerSeriesBySymbol] = useState({});
   const [relativeCompareBusy, setRelativeCompareBusy] = useState(false);
+  /** Benchmark symbol for long-range table section; synced from `TickerSection23Section24` group. */
+  const [benchForLongTable, setBenchForLongTable] = useState(SECTION_LONG_DEFAULT_BENCHMARK);
+  const [longRangeTickerReturns, setLongRangeTickerReturns] = useState(null);
+  const [longRangeBenchReturns, setLongRangeBenchReturns] = useState(null);
+  const [longRangeBusy, setLongRangeBusy] = useState(false);
   const [tailRows, setTailRows] = useState([]);
   const [newsPage, setNewsPage] = useState(1);
   const { busy: newsBusy, error: newsError, items: liveNewsAll } = useGeneralNewsFeed();
@@ -666,6 +694,10 @@ export default function TickerPage() {
     setDraftChartEnd(r.end);
   }, [timeframe, asOfDate, ohlcTickerBounds]);
 
+  const onSectionBenchmarkSymbolChange = useCallback((b) => {
+    setBenchForLongTable(String(b || SECTION_LONG_DEFAULT_BENCHMARK).toUpperCase().trim());
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     if (!getAuthToken()) {
@@ -675,6 +707,8 @@ export default function TickerPage() {
       setOhlcRows([]);
       setReturnsSym(null);
       setReturnsSpy(null);
+      setLongRangeTickerReturns(null);
+      setLongRangeBenchReturns(null);
       setDetailRows([]);
       setStatsRows([]);
       setStatsRowsSpy([]);
@@ -690,28 +724,24 @@ export default function TickerPage() {
       setError('');
       try {
         const returnsDefaultEnd = toDateInput(new Date());
-        const [retSym, retSpy] = await Promise.all([
-          fetchJsonCached({
-            path: '/api/market/ticker-returns',
-            method: 'POST',
-            body: { ticker: sym, customStartDate: RETURNS_DEFAULT_START, customEndDate: returnsDefaultEnd },
-            ttlMs: 5 * 60 * 1000
-          }),
-          fetchJsonCached({
-            path: '/api/market/ticker-returns',
-            method: 'POST',
-            body: {
-              ticker: BENCHMARK,
-              customStartDate: RETURNS_DEFAULT_START,
-              customEndDate: returnsDefaultEnd
-            },
-            ttlMs: 15 * 60 * 1000
-          })
-        ]);
+        const symU = String(sym || '').toUpperCase().trim();
+        const res2018 = await fetchJsonCached({
+          path: '/api/market/ticker-returns',
+          method: 'POST',
+          body: {
+            tickers: [symU, BENCHMARK],
+            customStartDate: RETURNS_DEFAULT_START,
+            customEndDate: returnsDefaultEnd
+          },
+          ttlMs: 5 * 60 * 1000
+        });
         if (cancelled) return;
-        const asOf = retSym.data?.asOfDate || new Date().toISOString().slice(0, 10);
+        const d18 = res2018.data;
+        const retSymData = pickTickerReturnsFromPayload(d18, symU);
+        const retSpyData = pickTickerReturnsFromPayload(d18, BENCHMARK);
+        const asOf = retSymData?.asOfDate || new Date().toISOString().slice(0, 10);
         setAsOfDate(asOf);
-        setReturnsSym(retSym.data);
+        setReturnsSym(retSymData);
 
         const asOfD = new Date(String(asOf).slice(0, 10) + 'T12:00:00');
         const start365 = new Date(asOfD);
@@ -758,7 +788,7 @@ export default function TickerPage() {
         ]);
 
         if (cancelled) return;
-        setReturnsSpy(retSpy?.data ?? null);
+        setReturnsSpy(retSpyData);
         const d = detailsRes.data;
         setDetailRows(Array.isArray(d?.data) ? d.data : []);
 
@@ -784,6 +814,57 @@ export default function TickerPage() {
       cancelled = true;
     };
   }, [sym, authVersion]);
+
+  /** Second (and final) ticker-returns request on load: long table window for page symbol + active section benchmark. */
+  useEffect(() => {
+    let cancelled = false;
+    if (!getAuthToken()) {
+      setLongRangeTickerReturns(null);
+      setLongRangeBenchReturns(null);
+      setLongRangeBusy(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    const symU = String(sym || '').toUpperCase().trim();
+    const benchU = String(benchForLongTable || '').toUpperCase().trim();
+    if (!symU || !benchU) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      setLongRangeBusy(true);
+      try {
+        const res = await fetchJsonCached({
+          path: '/api/market/ticker-returns',
+          method: 'POST',
+          body: {
+            tickers: [symU, benchU],
+            customStartDate: TABLE_LONG_START_DATE,
+            customEndDate: yesterdayIsoForLongTable()
+          },
+          ttlMs: 5 * 60 * 1000
+        });
+        if (cancelled) return;
+        const d = res.data;
+        setLongRangeTickerReturns(pickTickerReturnsFromPayload(d, symU));
+        setLongRangeBenchReturns(pickTickerReturnsFromPayload(d, benchU));
+      } catch {
+        if (!cancelled) {
+          setLongRangeTickerReturns(null);
+          setLongRangeBenchReturns(null);
+        }
+      } finally {
+        if (!cancelled) setLongRangeBusy(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sym, benchForLongTable, authVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1772,9 +1853,12 @@ export default function TickerPage() {
             relativeStrengthHeader={`Relative Strength (${selectedIndexLabel} - ${selectedTickerKey || relativeTickerSymbol})`}
           />
           <TickerSection23Section24
-            initialTicker={sym}
-            initialTickerReturns={returnsSym}
-            initialBenchmarkReturns={returnsSpy}
+            pageSymbol={sym}
+            prefetchedLongTickerReturns={longRangeTickerReturns}
+            prefetchedLongBenchReturns={longRangeBenchReturns}
+            prefetchedLongBenchSymbol={benchForLongTable}
+            prefetchedLongBusy={longRangeBusy}
+            onSectionBenchmarkSymbolChange={onSectionBenchmarkSymbolChange}
             initialSp500Rows={detailRows}
           />
         </div>

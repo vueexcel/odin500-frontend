@@ -49,6 +49,18 @@ function fmtPct(v) {
   return (n >= 0 ? '' : '-') + Math.abs(n).toFixed(2) + '%';
 }
 
+function pickTickerReturnsFromPayload(payload, tickerSym) {
+  const u = String(tickerSym || '').toUpperCase().trim();
+  if (!payload || !u) return null;
+  if (payload.batch === true && payload.byTicker && payload.byTicker[u] != null) {
+    const row = payload.byTicker[u];
+    if (row && row.success === false) return null;
+    return row;
+  }
+  if (!payload.batch && String(payload.ticker || '').toUpperCase() === u) return payload;
+  return null;
+}
+
 function niceAxisBounds(rows) {
   const vals = rows.flatMap((r) => [r.bench, r.tick]).filter((v) => Number.isFinite(v));
   if (!vals.length) return { min: -5, max: 25, ticks: [-5, 0, 5, 10, 15, 20, 25] };
@@ -70,20 +82,44 @@ function niceAxisBounds(rows) {
 }
 
 export function TickerSection23Section24({
-  initialTicker = '',
-  initialTickerReturns = null,
-  initialBenchmarkReturns = null,
+  pageSymbol = '',
+  prefetchedLongTickerReturns = null,
+  prefetchedLongBenchReturns = null,
+  prefetchedLongBenchSymbol = '',
+  prefetchedLongBusy = false,
+  onSectionBenchmarkSymbolChange,
   initialSp500Rows = []
 }) {
   const [groupId, setGroupId] = useState('sp500');
   const [groupRows, setGroupRows] = useState([]);
-  const [ticker, setTicker] = useState(String(initialTicker || '').toUpperCase());
-  const [tickerReturns, setTickerReturns] = useState(initialTickerReturns);
-  const [benchReturns, setBenchReturns] = useState(initialBenchmarkReturns);
+  const [ticker, setTicker] = useState(String(pageSymbol || '').toUpperCase());
+  const [localTickerReturns, setLocalTickerReturns] = useState(null);
+  const [localBenchReturns, setLocalBenchReturns] = useState(null);
+  const [localReturnsBusy, setLocalReturnsBusy] = useState(false);
   const [loadingGroup, setLoadingGroup] = useState(false);
-  const [loadingReturns, setLoadingReturns] = useState(false);
 
   const activeGroup = useMemo(() => GROUPS.find((g) => g.id === groupId) || GROUPS[0], [groupId]);
+
+  useEffect(() => {
+    setTicker(String(pageSymbol || '').toUpperCase());
+  }, [pageSymbol]);
+
+  const usePrefetchLong = useMemo(() => {
+    const symPage = String(pageSymbol || '').toUpperCase().trim();
+    const tick = String(ticker || '').toUpperCase().trim();
+    const bench = String(activeGroup.benchmark || '').toUpperCase().trim();
+    const prefB = String(prefetchedLongBenchSymbol || '').toUpperCase().trim();
+    return tick === symPage && bench === prefB;
+  }, [pageSymbol, ticker, activeGroup.benchmark, prefetchedLongBenchSymbol]);
+
+  const tickerReturns = usePrefetchLong ? prefetchedLongTickerReturns : localTickerReturns;
+  const benchReturns = usePrefetchLong ? prefetchedLongBenchReturns : localBenchReturns;
+  const loadingReturns =
+    loadingGroup || (usePrefetchLong ? prefetchedLongBusy : localReturnsBusy);
+
+  useEffect(() => {
+    onSectionBenchmarkSymbolChange?.(activeGroup.benchmark);
+  }, [groupId, activeGroup.benchmark, onSectionBenchmarkSymbolChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,59 +160,65 @@ export function TickerSection23Section24({
     };
   }, [activeGroup.apiIndex, activeGroup.id, initialSp500Rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (
-      initialTickerReturns &&
-      String(initialTickerReturns?.ticker || '').toUpperCase() === String(ticker || '').toUpperCase()
-    ) {
-      setTickerReturns(initialTickerReturns);
-    }
-  }, [initialTickerReturns, ticker]);
-
-  useEffect(() => {
-    if (activeGroup.benchmark === 'SPY' && initialBenchmarkReturns) {
-      setBenchReturns(initialBenchmarkReturns);
-    }
-  }, [activeGroup.benchmark, initialBenchmarkReturns]);
-
+  /** When the peer ticker differs from the page symbol, one batched long-window request (ticker + benchmark). */
   useEffect(() => {
     let cancelled = false;
-    async function loadReturns() {
-      if (!getAuthToken() || !ticker) return;
-      setLoadingReturns(true);
+    const symPage = String(pageSymbol || '').toUpperCase().trim();
+    const tick = String(ticker || '').toUpperCase().trim();
+    const bench = String(activeGroup.benchmark || '').toUpperCase().trim();
+    const prefB = String(prefetchedLongBenchSymbol || '').toUpperCase().trim();
+    const usePrefetch = tick === symPage && bench === prefB;
+
+    if (!getAuthToken() || !tick || !bench) {
+      setLocalTickerReturns(null);
+      setLocalBenchReturns(null);
+      setLocalReturnsBusy(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (usePrefetch) {
+      setLocalTickerReturns(null);
+      setLocalBenchReturns(null);
+      setLocalReturnsBusy(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      setLocalReturnsBusy(true);
       try {
         const customEndDate = yesterdayIso();
-        const [tRes, bRes] = await Promise.all([
-          fetchJsonCached({
-            path: '/api/market/ticker-returns',
-            method: 'POST',
-            body: { ticker, customStartDate: TABLE_ONLY_START_DATE, customEndDate },
-            ttlMs: 5 * 60 * 1000
-          }),
-          fetchJsonCached({
-            path: '/api/market/ticker-returns',
-            method: 'POST',
-            body: { ticker: activeGroup.benchmark, customStartDate: TABLE_ONLY_START_DATE, customEndDate },
-            ttlMs: 10 * 60 * 1000
-          })
-        ]);
+        const res = await fetchJsonCached({
+          path: '/api/market/ticker-returns',
+          method: 'POST',
+          body: {
+            tickers: [tick, bench],
+            customStartDate: TABLE_ONLY_START_DATE,
+            customEndDate
+          },
+          ttlMs: 5 * 60 * 1000
+        });
         if (cancelled) return;
-        setTickerReturns(tRes.data || null);
-        setBenchReturns(bRes.data || null);
+        const d = res.data;
+        setLocalTickerReturns(pickTickerReturnsFromPayload(d, tick));
+        setLocalBenchReturns(pickTickerReturnsFromPayload(d, bench));
       } catch {
         if (!cancelled) {
-          setTickerReturns(null);
-          setBenchReturns(null);
+          setLocalTickerReturns(null);
+          setLocalBenchReturns(null);
         }
       } finally {
-        if (!cancelled) setLoadingReturns(false);
+        if (!cancelled) setLocalReturnsBusy(false);
       }
-    }
-    loadReturns();
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [ticker, activeGroup.benchmark]);
+  }, [ticker, activeGroup.benchmark, pageSymbol, prefetchedLongBenchSymbol]);
 
   const rows = useMemo(() => {
     const dynT = tickerReturns?.performance?.dynamicPeriods || [];
@@ -261,7 +303,7 @@ export function TickerSection23Section24({
           <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
         </div>
         <div className="ticker-s24__chart">
-          {loadingGroup || loadingReturns ? (
+          {loadingReturns ? (
             <div className="chart-viz-loading-wrap ticker-s24__viz-loading">
               <TradingChartLoader
                 label="Loading benchmark comparison…"
