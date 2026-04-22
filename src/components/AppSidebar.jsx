@@ -259,9 +259,9 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
 
             <div className="app-sidebar__section-label">Data</div>
             <nav className="app-sidebar__nav" aria-label="Data">
-              <NavRow icon={IconDocSearch} label="Historical data" onClick={() => {}} />
+              <NavRow to="/historical-data" icon={IconDocSearch} label="Historical data" />
               <NavRow icon={IconLineChart} label="Returns" onClick={() => {}} />
-              <NavRow icon={IconCamera} label="Statistic tables" onClick={() => {}} />
+              <NavRow to="/statistic-data" icon={IconCamera} label="Statistic Table" />
             </nav>
 
             <div className="app-sidebar__section-label">Premium</div>

@@ -5,10 +5,10 @@ import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 
 const GROUPS = [
-  { id: 'sp500', apiIndex: 'SP500', label: 'S&P 500', benchmark: 'SPY', benchLabel: 'S&P 500' },
-  { id: 'dow', apiIndex: 'Dow Jones', label: 'Dow Jones', benchmark: 'DIA', benchLabel: 'Dow Jones' },
-  { id: 'nasdaq', apiIndex: 'Nasdaq 100', label: 'Nasdaq 100', benchmark: 'QQQ', benchLabel: 'Nasdaq 100' },
-  { id: 'etf', apiIndex: 'ETF', label: 'ETF', benchmark: 'SPY', benchLabel: 'ETF' },
+  { id: 'sp500', apiIndex: 'SP500', label: 'S&P 500', benchmark: 'SPX', benchLabel: 'S&P 500' },
+  { id: 'dow', apiIndex: 'Dow Jones', label: 'Dow Jones', benchmark: 'DJI', benchLabel: 'Dow Jones' },
+  { id: 'nasdaq', apiIndex: 'Nasdaq 100', label: 'Nasdaq 100', benchmark: 'IXIC', benchLabel: 'Nasdaq 100' },
+  { id: 'etf', apiIndex: 'ETF', label: 'ETF', benchmark: 'QQQ', benchLabel: 'ETF' },
   { id: 'other', apiIndex: 'Other', label: 'Other', benchmark: 'IWM', benchLabel: 'Other' }
 ];
 
@@ -25,6 +25,16 @@ const TF_ROWS = [
   { key: '10Y', period: 'Last 10 years' },
   { key: '20Y', period: 'Last 20 years' }
 ];
+const TABLE_ONLY_START_DATE = '2005-01-01';
+
+function yesterdayIso() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 function pickDynamic(dynamicPeriods, periodName) {
   if (!periodName || !Array.isArray(dynamicPeriods)) return null;
@@ -133,26 +143,20 @@ export function TickerSection23Section24({
     let cancelled = false;
     async function loadReturns() {
       if (!getAuthToken() || !ticker) return;
-      const hasTicker =
-        tickerReturns &&
-        String(tickerReturns?.ticker || '').toUpperCase() === String(ticker).toUpperCase();
-      const hasBench =
-        benchReturns &&
-        String(benchReturns?.ticker || '').toUpperCase() === String(activeGroup.benchmark).toUpperCase();
-      if (hasTicker && hasBench) return;
       setLoadingReturns(true);
       try {
+        const customEndDate = yesterdayIso();
         const [tRes, bRes] = await Promise.all([
           fetchJsonCached({
             path: '/api/market/ticker-returns',
             method: 'POST',
-            body: { ticker },
+            body: { ticker, customStartDate: TABLE_ONLY_START_DATE, customEndDate },
             ttlMs: 5 * 60 * 1000
           }),
           fetchJsonCached({
             path: '/api/market/ticker-returns',
             method: 'POST',
-            body: { ticker: activeGroup.benchmark },
+            body: { ticker: activeGroup.benchmark, customStartDate: TABLE_ONLY_START_DATE, customEndDate },
             ttlMs: 10 * 60 * 1000
           })
         ]);

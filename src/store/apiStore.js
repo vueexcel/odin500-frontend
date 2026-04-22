@@ -14,6 +14,7 @@ const memoryStore = {
   cache: new Map(),
   inFlight: new Map()
 };
+let cachePersistWarned = false;
 
 let refreshInFlight = null;
 let proactiveTimerId = null;
@@ -41,11 +42,35 @@ function loadCacheFromSessionStorage() {
 
 function persistCacheToSessionStorage() {
   if (typeof window === 'undefined') return;
-  const obj = {};
-  for (const [key, value] of memoryStore.cache.entries()) {
-    obj[key] = value;
+  const entries = Array.from(memoryStore.cache.entries());
+  const writeEntries = (pairs) => {
+    const obj = {};
+    for (const [key, value] of pairs) {
+      obj[key] = value;
+    }
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(obj));
+  };
+  try {
+    writeEntries(entries);
+  } catch (err) {
+    // Session storage can exceed quota with large API payloads.
+    // Keep the newest 25% entries and retry once; if that fails, skip persistence.
+    const sorted = [...entries].sort((a, b) => {
+      const ta = Number(a?.[1]?.ts) || 0;
+      const tb = Number(b?.[1]?.ts) || 0;
+      return tb - ta;
+    });
+    const keep = Math.max(8, Math.ceil(sorted.length * 0.25));
+    memoryStore.cache = new Map(sorted.slice(0, keep));
+    try {
+      writeEntries(Array.from(memoryStore.cache.entries()));
+    } catch {
+      if (!cachePersistWarned) {
+        cachePersistWarned = true;
+        console.warn('API cache persistence disabled: sessionStorage quota exceeded.');
+      }
+    }
   }
-  sessionStorage.setItem(CACHE_KEY, JSON.stringify(obj));
 }
 
 function getBodyKey(body) {

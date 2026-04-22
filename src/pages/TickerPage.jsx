@@ -19,6 +19,8 @@ import {
 import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
+import { toDateInput } from '../utils/misc.js';
+import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 
 const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
@@ -36,6 +38,7 @@ const RESIZE_KEY_ANNUAL_POSNEG = 'odin_ticker_resize_annual_posneg';
 const RESIZE_KEY_QUARTERLY = 'odin_ticker_resize_quarterly';
 const RESIZE_KEY_MONTHLY = 'odin_ticker_resize_monthly';
 const RESIZE_KEY_MONTHLY_ADV = 'odin_ticker_resize_monthly_waterfall';
+const RETURNS_DEFAULT_START = '2018-01-01';
 
 const MAX_NEWS_ITEMS = 120;
 const NEWS_PAGE_SIZE = 5;
@@ -70,6 +73,25 @@ const RELATIVE_INDEX_OPTIONS = [
   { key: 'nasdaq-composite', label: 'Nasdaq Composite', apiIndex: 'nasdaq composite' },
   { key: 'nasdaq-100', label: 'Nasdaq 100', apiIndex: 'Nasdaq 100' }
 ];
+const RELATED_INDEX_LINKS = [
+  { slug: 'dow-jones', label: 'Dow Jones' },
+  { slug: 'sp500', label: 'S&P 500' },
+  { slug: 'nasdaq-100', label: 'Nasdaq' }
+];
+
+function describeTickerIndex(rawIndex) {
+  const s = String(rawIndex || '').trim();
+  if (!s) return 'Other';
+  const lower = s.toLowerCase();
+  if (lower.includes('s&p') || lower.includes('sp500') || lower.includes('snp') || lower.includes('sp 500')) {
+    return 'S&P 500';
+  }
+  if (lower.includes('dow')) return 'Dow Jones';
+  if (lower.includes('nasdaq')) return 'Nasdaq';
+  if (lower.includes('etf')) return 'ETF';
+  if (lower === 'us') return 'Other';
+  return s;
+}
 
 function pickNum(row, keys) {
   for (const key of keys) {
@@ -667,10 +689,11 @@ export default function TickerPage() {
       setMetaBusy(true);
       setError('');
       try {
+        const returnsDefaultEnd = toDateInput(new Date());
         const retSym = await fetchJsonCached({
           path: '/api/market/ticker-returns',
           method: 'POST',
-          body: { ticker: sym },
+          body: { ticker: sym, customStartDate: RETURNS_DEFAULT_START, customEndDate: returnsDefaultEnd },
           ttlMs: 5 * 60 * 1000
         });
         if (cancelled) return;
@@ -688,7 +711,11 @@ export default function TickerPage() {
           fetchJsonCached({
             path: '/api/market/ticker-returns',
             method: 'POST',
-            body: { ticker: BENCHMARK },
+            body: {
+              ticker: BENCHMARK,
+              customStartDate: RETURNS_DEFAULT_START,
+              customEndDate: returnsDefaultEnd
+            },
             ttlMs: 15 * 60 * 1000
           }),
           fetchJsonCached({
@@ -849,6 +876,7 @@ export default function TickerPage() {
   const sector = String(myDetail?.Sector || myDetail?.sector || '').trim();
   const industry = String(myDetail?.Industry || myDetail?.industry || '').trim();
   const indexLabel = String(myDetail?.Index || myDetail?.index || '').trim() || 'US';
+  const relatedTickersSourceLabel = describeTickerIndex(indexLabel);
 
   const competitors = useMemo(
     () => pickCompetitors(detailRows, sym, sector, 6),
@@ -860,6 +888,18 @@ export default function TickerPage() {
   const annualReturnsRaw = returnsSym?.performance?.annualReturns;
   const quarterlyReturnsRaw = returnsSym?.performance?.quarterlyReturns;
   const monthlyReturnsRaw = returnsSym?.performance?.monthlyReturns;
+  const annualQuarterlyRange = useMemo(
+    () => appliedCustomRange || { start: '2018-01-01', end: asOfDate },
+    [appliedCustomRange, asOfDate]
+  );
+  const annualReturnsView = useMemo(
+    () => filterReturnsRows(annualReturnsRaw || [], annualQuarterlyRange.start, annualQuarterlyRange.end),
+    [annualReturnsRaw, annualQuarterlyRange.start, annualQuarterlyRange.end]
+  );
+  const quarterlyReturnsView = useMemo(
+    () => filterReturnsRows(quarterlyReturnsRaw || [], annualQuarterlyRange.start, annualQuarterlyRange.end),
+    [quarterlyReturnsRaw, annualQuarterlyRange.start, annualQuarterlyRange.end]
+  );
   const tickerSelectOptions = useMemo(() => {
     const base = [sym, BENCHMARK, ...(detailRows || []).map((r) => String(r.symbol || '').toUpperCase().trim())];
     return [...new Set(base.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
@@ -1037,10 +1077,11 @@ export default function TickerPage() {
     async (tickerInput) => {
       const ticker = String(tickerInput || '').toUpperCase().trim();
       if (!ticker || !getAuthToken()) return null;
+      const returnsDefaultEnd = toDateInput(new Date());
       const ret = await fetchJsonCached({
         path: '/api/market/ticker-returns',
         method: 'POST',
-        body: { ticker },
+        body: { ticker, customStartDate: RETURNS_DEFAULT_START, customEndDate: returnsDefaultEnd },
         ttlMs: 15 * 60 * 1000
       });
       const asOf = String(ret?.data?.asOfDate || asOfDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
@@ -1652,16 +1693,16 @@ export default function TickerPage() {
 
           <TickerAnnualReturnsFigma
             symbol={sym}
-            annualReturns={annualReturnsRaw}
+            annualReturns={annualReturnsView}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
-            <TickerAnnualReturnsPosNeg symbol={sym} annualReturns={annualReturnsRaw} asOfDate={asOfDate} />
+            <TickerAnnualReturnsPosNeg symbol={sym} annualReturns={annualReturnsView} asOfDate={asOfDate} />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_QUARTERLY} defaultHeight={288}>
-            <TickerQuarterlyReturnsChart symbol={sym} quarterlyReturns={quarterlyReturnsRaw} asOfDate={asOfDate} />
+            <TickerQuarterlyReturnsChart symbol={sym} quarterlyReturns={quarterlyReturnsView} asOfDate={asOfDate} />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
             <TickerMonthlyReturnsChart symbol={sym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} />
@@ -1834,7 +1875,16 @@ export default function TickerPage() {
                 </div>
               </dl>
             </div>
-            <p className="ticker-page__label ticker-kd-comp-label">Related tickers (same index list)</p>
+            <p className="ticker-page__label ticker-kd-comp-label">
+              <span>More from {relatedTickersSourceLabel}</span>
+              <span className="ticker-kd-comp-label__links">
+                {RELATED_INDEX_LINKS.map((idx) => (
+                  <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">
+                    {idx.label}
+                  </Link>
+                ))}
+              </span>
+            </p>
             <p className="ticker-kd-comp">
               {competitors.length ? (
                 competitors.map((t) => (

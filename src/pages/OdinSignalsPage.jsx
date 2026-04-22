@@ -5,6 +5,7 @@ import { OdinFigmaSignalTreemap } from '../components/OdinFigmaSignalTreemap.jsx
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import { ChartPanel } from '../components/ChartPanel.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
+import { useTickerPlotResize } from '../hooks/useTickerPlotResize.js';
 import { fetchJsonCached } from '../store/apiStore.js';
 import { fetchWithAuth, getAuthToken } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
@@ -43,9 +44,8 @@ const INDEX_MENU = [
 ];
 const PERIOD_MENU = [
   { id: 'last-date', label: 'Last date' },
-  { id: 'last-5-days', label: 'Last 5D' },
-  { id: 'mtd', label: 'MTD' }
 ];
+const ODIN_HEATMAP_RESIZE_KEY = 'odin_signals_heatmap_treemap_h';
 
 const OMX_SIGNAL_SCORES = {
   L1: 100,
@@ -128,6 +128,14 @@ export default function OdinSignalsPage() {
   const [odinHeatmapHover, setOdinHeatmapHover] = useState('');
   const odinHeatmapMainRef = useRef(null);
   const odinTreemapHostRef = useRef(null);
+  const {
+    plotHeight: odinHeatmapPlotHeight,
+    onPointerDown: onOdinHeatmapResizePointerDown,
+    onDoubleClick: onOdinHeatmapResizeDoubleClick,
+    ariaMin: odinHeatmapResizeMin,
+    ariaMax: odinHeatmapResizeMax,
+    ariaNow: odinHeatmapResizeNow
+  } = useTickerPlotResize(ODIN_HEATMAP_RESIZE_KEY, 440, 280, 1200);
 
   const { startDate, endDate } = useMemo(() => {
     const end = toDateInput(new Date());
@@ -559,7 +567,7 @@ export default function OdinSignalsPage() {
                           <path d={d} fill={p.color} />
                           {p.value > 0 ? (
                             <text x={lp.x} y={lp.y} textAnchor="middle" fill="#4b5563" fontSize="11" fontWeight="700">
-                              {p.key}, {p.value}, {pct}%
+                               {p.value}, {pct}%
                             </text>
                           ) : null}
                         </g>
@@ -682,29 +690,46 @@ export default function OdinSignalsPage() {
                 <div className="heatmap-main__error">No tickers for this index.</div>
               ) : null}
 
-              <div className="heatmap-treemap-outer odin-signals-heatmap__treemap" ref={odinTreemapHostRef}>
-                {indexLoading ? (
-                  <div className="chart-viz-loading-wrap odin-signals-heatmap__chart-loading">
-                    <TradingChartLoader label="Loading signal heatmap…" sublabel={activeIndex.label} />
-                  </div>
-                ) : odinTreemapRows.length > 0 ? (
-                  <div
-                    className="heatmap-treemap-zoom"
-                    style={{
-                      transform: `scale(${odinHeatmapZoom})`,
-                      transformOrigin: 'top left'
-                    }}
-                  >
-                    <OdinFigmaSignalTreemap
-                      rows={odinTreemapRows}
-                      signalBinSpan={odinSignalBinSpan}
-                      scaleMin={-3}
-                      scaleMax={3}
-                      highlightSymbol={odinHeatmapHover}
-                      onTickerClick={openTickerPage}
-                    />
-                  </div>
-                ) : null}
+              <div className="odin-signals-heatmap__treemap-resize-scope">
+                <div
+                  className="heatmap-treemap-outer odin-signals-heatmap__treemap"
+                  ref={odinTreemapHostRef}
+                  style={odinHeatmapPlotHeight != null ? { height: `${odinHeatmapPlotHeight}px` } : undefined}
+                >
+                  {indexLoading ? (
+                    <div className="chart-viz-loading-wrap odin-signals-heatmap__chart-loading">
+                      <TradingChartLoader label="Loading signal heatmap…" sublabel={activeIndex.label} />
+                    </div>
+                  ) : odinTreemapRows.length > 0 ? (
+                    <div
+                      className="heatmap-treemap-zoom"
+                      style={{
+                        transform: `scale(${odinHeatmapZoom})`,
+                        transformOrigin: 'top left'
+                      }}
+                    >
+                      <OdinFigmaSignalTreemap
+                        rows={odinTreemapRows}
+                        signalBinSpan={odinSignalBinSpan}
+                        scaleMin={-3}
+                        scaleMax={3}
+                        highlightSymbol={odinHeatmapHover}
+                        onTickerClick={openTickerPage}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <div
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-valuemin={odinHeatmapResizeMin}
+                  aria-valuemax={odinHeatmapResizeMax}
+                  aria-valuenow={odinHeatmapResizeNow}
+                  className="ticker-chart-resize odin-signals-heatmap__resize-handle"
+                  title="Drag to resize heatmap height. Double-click to reset."
+                  onPointerDown={onOdinHeatmapResizePointerDown}
+                  onDoubleClick={onOdinHeatmapResizeDoubleClick}
+                />
               </div>
 
               <footer className="heatmap-scale-bar odin-signals-heatmap__scale">
