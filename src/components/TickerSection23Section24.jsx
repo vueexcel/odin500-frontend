@@ -176,7 +176,7 @@ export function TickerSection23Section24({
     return () => {
       cancelled = true;
     };
-  }, [ticker, activeGroup.benchmark, tickerReturns, benchReturns]);
+  }, [ticker, activeGroup.benchmark]);
 
   const rows = useMemo(() => {
     const dynT = tickerReturns?.performance?.dynamicPeriods || [];

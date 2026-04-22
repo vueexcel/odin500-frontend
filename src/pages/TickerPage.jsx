@@ -690,12 +690,24 @@ export default function TickerPage() {
       setError('');
       try {
         const returnsDefaultEnd = toDateInput(new Date());
-        const retSym = await fetchJsonCached({
-          path: '/api/market/ticker-returns',
-          method: 'POST',
-          body: { ticker: sym, customStartDate: RETURNS_DEFAULT_START, customEndDate: returnsDefaultEnd },
-          ttlMs: 5 * 60 * 1000
-        });
+        const [retSym, retSpy] = await Promise.all([
+          fetchJsonCached({
+            path: '/api/market/ticker-returns',
+            method: 'POST',
+            body: { ticker: sym, customStartDate: RETURNS_DEFAULT_START, customEndDate: returnsDefaultEnd },
+            ttlMs: 5 * 60 * 1000
+          }),
+          fetchJsonCached({
+            path: '/api/market/ticker-returns',
+            method: 'POST',
+            body: {
+              ticker: BENCHMARK,
+              customStartDate: RETURNS_DEFAULT_START,
+              customEndDate: returnsDefaultEnd
+            },
+            ttlMs: 15 * 60 * 1000
+          })
+        ]);
         if (cancelled) return;
         const asOf = retSym.data?.asOfDate || new Date().toISOString().slice(0, 10);
         setAsOfDate(asOf);
@@ -707,17 +719,7 @@ export default function TickerPage() {
         const startIso = toIso(start365);
         const endIso = String(asOf).slice(0, 10);
 
-        const [retSpy, detailsRes, tailRes, statsSymRes, statsSpyRes] = await Promise.all([
-          fetchJsonCached({
-            path: '/api/market/ticker-returns',
-            method: 'POST',
-            body: {
-              ticker: BENCHMARK,
-              customStartDate: RETURNS_DEFAULT_START,
-              customEndDate: returnsDefaultEnd
-            },
-            ttlMs: 15 * 60 * 1000
-          }),
+        const [detailsRes, tailRes, statsSymRes, statsSpyRes] = await Promise.all([
           fetchJsonCached({
             path: '/api/market/ticker-details',
             method: 'POST',
@@ -756,7 +758,7 @@ export default function TickerPage() {
         ]);
 
         if (cancelled) return;
-        setReturnsSpy(retSpy.data);
+        setReturnsSpy(retSpy?.data ?? null);
         const d = detailsRes.data;
         setDetailRows(Array.isArray(d?.data) ? d.data : []);
 
@@ -1066,9 +1068,10 @@ export default function TickerPage() {
   }, [sym]);
 
   useEffect(() => {
+    const symKey = String(sym || '').toUpperCase().trim();
     setRelativeTickerSeriesBySymbol((prev) => ({
       ...prev,
-      [sym]: { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd },
+      [symKey]: { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd },
       [BENCHMARK]: { dynamicPeriods: dynamicSpy, mtd: spyMtd, qtd: spyQtd }
     }));
   }, [sym, dynamicSym, symMtd, symQtd, dynamicSpy, spyMtd, spyQtd]);
@@ -1076,7 +1079,15 @@ export default function TickerPage() {
   const loadRelativeTickerSeries = useCallback(
     async (tickerInput) => {
       const ticker = String(tickerInput || '').toUpperCase().trim();
+      const symU = String(sym || '').toUpperCase().trim();
       if (!ticker || !getAuthToken()) return null;
+      if (ticker === symU && returnsSym?.performance) {
+        return {
+          dynamicPeriods: returnsSym.performance.dynamicPeriods || [],
+          mtd: symMtd,
+          qtd: symQtd
+        };
+      }
       const returnsDefaultEnd = toDateInput(new Date());
       const ret = await fetchJsonCached({
         path: '/api/market/ticker-returns',
@@ -1108,7 +1119,7 @@ export default function TickerPage() {
         qtd: qtdFromRows(rows)
       };
     },
-    [asOfDate]
+    [asOfDate, sym, returnsSym, symMtd, symQtd]
   );
 
   const loadRelativeIndexSeries = useCallback(
@@ -1169,8 +1180,10 @@ export default function TickerPage() {
     if (!getAuthToken()) return () => {};
     const needsIndex = !relativeIndexSeriesByKey[relativeIndexKey];
     const tickerKey = String(relativeTickerSymbol || '').toUpperCase().trim();
+    const symKey = String(sym || '').toUpperCase().trim();
     const needsTicker = !!tickerKey && !relativeTickerSeriesBySymbol[tickerKey];
-    if (!needsIndex && !needsTicker) return () => {};
+    const deferTickerUntilMainReturns = tickerKey !== '' && tickerKey === symKey && !returnsSym;
+    if (!needsIndex && (!needsTicker || deferTickerUntilMainReturns)) return () => {};
     (async () => {
       setRelativeCompareBusy(true);
       try {
@@ -1180,7 +1193,7 @@ export default function TickerPage() {
             setRelativeIndexSeriesByKey((prev) => ({ ...prev, [relativeIndexKey]: idxSeries }));
           }
         }
-        if (needsTicker) {
+        if (needsTicker && !deferTickerUntilMainReturns) {
           const tkSeries = await loadRelativeTickerSeries(tickerKey);
           if (!cancelled && tkSeries) {
             setRelativeTickerSeriesBySymbol((prev) => ({ ...prev, [tickerKey]: tkSeries }));
@@ -1199,7 +1212,9 @@ export default function TickerPage() {
     relativeIndexSeriesByKey,
     relativeTickerSeriesBySymbol,
     loadRelativeIndexSeries,
-    loadRelativeTickerSeries
+    loadRelativeTickerSeries,
+    sym,
+    returnsSym
   ]);
 
   const selectedIndexSeries = relativeIndexSeriesByKey[relativeIndexKey] || { dynamicPeriods: [], mtd: null, qtd: null };
