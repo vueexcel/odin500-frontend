@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
@@ -200,7 +201,16 @@ function computePredefinedRangeRows(rows) {
   });
 }
 
-function ReturnTable({ title, rows, rangeValue, onRangeChange, showRangeSelector = true }) {
+function ReturnTable({
+  title,
+  rows,
+  rangeValue,
+  onRangeChange,
+  showRangeSelector = true,
+  sectionKey = '',
+  sectionRef = null,
+  highlighted = false
+}) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
@@ -237,7 +247,11 @@ function ReturnTable({ title, rows, rangeValue, onRangeChange, showRangeSelector
   };
 
   return (
-    <section className="statistic-data__card">
+    <section
+      id={sectionKey ? `stat-section-${sectionKey}` : undefined}
+      ref={sectionRef}
+      className={'statistic-data__card' + (highlighted ? ' statistic-data__card--target' : '')}
+    >
       <div className="statistic-data__table-head">
         <h2 className="statistic-data__table-title">{title}</h2>
         <div className="statistic-data__head-actions">
@@ -314,6 +328,7 @@ function ReturnTable({ title, rows, rangeValue, onRangeChange, showRangeSelector
 }
 
 export default function StatisticDataPage() {
+  const location = useLocation();
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -324,6 +339,30 @@ export default function StatisticDataPage() {
   const [monthlyRange, setMonthlyRange] = useState('5');
   const [quarterlyRange, setQuarterlyRange] = useState('10');
   const [annualRange, setAnnualRange] = useState('max');
+  const [activeSection, setActiveSection] = useState('');
+  const predefinedRef = useRef(null);
+  const dailyRef = useRef(null);
+  const weeklyRef = useRef(null);
+  const monthlyRef = useRef(null);
+  const quarterlyRef = useRef(null);
+  const annualRef = useRef(null);
+
+  useEffect(() => {
+    const section = new URLSearchParams(location.search).get('section') || '';
+    const map = {
+      predefined: predefinedRef,
+      daily: dailyRef,
+      weekly: weeklyRef,
+      monthly: monthlyRef,
+      quarterly: quarterlyRef,
+      annual: annualRef
+    };
+    const targetRef = map[section];
+    setActiveSection(targetRef ? section : '');
+    if (targetRef?.current) {
+      targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [location.search]);
 
   useEffect(() => {
     const clean = sanitizeTickerPageInput(symbol) || DEFAULT_SYMBOL;
@@ -421,17 +460,59 @@ export default function StatisticDataPage() {
       </section>
 
       <div className="statistic-data__grid">
-        <ReturnTable title="Predefined Range Returns" rows={predefinedRows} showRangeSelector={false} />
-        <ReturnTable title="Daily Returns" rows={dailyRows} rangeValue={dailyRange} onRangeChange={setDailyRange} />
-        <ReturnTable title="Weekly Returns" rows={weeklyRows} rangeValue={weeklyRange} onRangeChange={setWeeklyRange} />
-        <ReturnTable title="Monthly Returns" rows={monthlyRows} rangeValue={monthlyRange} onRangeChange={setMonthlyRange} />
+        <ReturnTable
+          title="Predefined Range Returns"
+          rows={predefinedRows}
+          showRangeSelector={false}
+          sectionKey="predefined"
+          sectionRef={predefinedRef}
+          highlighted={activeSection === 'predefined'}
+        />
+        <ReturnTable
+          title="Daily Returns"
+          rows={dailyRows}
+          rangeValue={dailyRange}
+          onRangeChange={setDailyRange}
+          sectionKey="daily"
+          sectionRef={dailyRef}
+          highlighted={activeSection === 'daily'}
+        />
+        <ReturnTable
+          title="Weekly Returns"
+          rows={weeklyRows}
+          rangeValue={weeklyRange}
+          onRangeChange={setWeeklyRange}
+          sectionKey="weekly"
+          sectionRef={weeklyRef}
+          highlighted={activeSection === 'weekly'}
+        />
+        <ReturnTable
+          title="Monthly Returns"
+          rows={monthlyRows}
+          rangeValue={monthlyRange}
+          onRangeChange={setMonthlyRange}
+          sectionKey="monthly"
+          sectionRef={monthlyRef}
+          highlighted={activeSection === 'monthly'}
+        />
         <ReturnTable
           title="Quarterly Returns"
           rows={quarterlyRows}
           rangeValue={quarterlyRange}
           onRangeChange={setQuarterlyRange}
+          sectionKey="quarterly"
+          sectionRef={quarterlyRef}
+          highlighted={activeSection === 'quarterly'}
         />
-        <ReturnTable title="Annual Returns" rows={annualRows} rangeValue={annualRange} onRangeChange={setAnnualRange} />
+        <ReturnTable
+          title="Annual Returns"
+          rows={annualRows}
+          rangeValue={annualRange}
+          onRangeChange={setAnnualRange}
+          sectionKey="annual"
+          sectionRef={annualRef}
+          highlighted={activeSection === 'annual'}
+        />
       </div>
     </div>
   );

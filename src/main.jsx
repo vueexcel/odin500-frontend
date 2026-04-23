@@ -16,6 +16,7 @@ import IndexPage from './pages/IndexPage.jsx';
 import MarketMoversPage from './pages/MarketMoversPage.jsx';
 import StatisticDataPage from './pages/StatisticDataPage.jsx';
 import HistoricalDataPage from './pages/HistoricalDataPage.jsx';
+import NewsPage from './pages/NewsPage.jsx';
 import Pricing from './pages/Pricing.jsx';
 import AboutPage from './pages/AboutPage.jsx';
 import AccountsPage from './pages/AccountsPage.jsx';
@@ -52,6 +53,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/indices/:indexSlug?" element={<IndexPage />} />
           <Route path="/heatmap" element={<MarketHeatmapPage />} />
           <Route path="/market-movers" element={<MarketMoversPage />} />
+          <Route path="/news" element={<NewsPage />} />
           <Route path="/odin-signals" element={<OdinSignalsPage />} />
           <Route path="/statistic-data" element={<StatisticDataPage />} />
           <Route path="/historical-data" element={<HistoricalDataPage />} />
