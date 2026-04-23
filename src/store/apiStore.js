@@ -429,7 +429,7 @@ export async function fetchJsonCached({
   if (!force && !skipAppCache) {
     const cached = memoryStore.cache.get(reqKey);
     if (cached && now - cached.ts < ttlMs) {
-      return { data: cached.data, fromCache: true };
+      return { data: cached.data, fromCache: true, headers: null, status: 200 };
     }
   }
 
@@ -486,7 +486,15 @@ export async function fetchJsonCached({
       memoryStore.cache.set(reqKey, { ts: Date.now(), data: payload });
       persistCacheToSessionStorage();
     }
-    return { data: payload, fromCache: false };
+    const headerObj = {};
+    try {
+      response.headers.forEach((value, key) => {
+        headerObj[String(key || '').toLowerCase()] = value;
+      });
+    } catch {
+      // ignore header extraction issues
+    }
+    return { data: payload, fromCache: false, headers: headerObj, status: response.status };
   })();
 
   memoryStore.inFlight.set(reqKey, promise);

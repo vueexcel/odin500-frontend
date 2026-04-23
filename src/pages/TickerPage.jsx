@@ -625,6 +625,7 @@ export default function TickerPage() {
   const [error, setError] = useState('');
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [symbolRefreshToken, setSymbolRefreshToken] = useState(0);
+  const [tickerReturnsDebug, setTickerReturnsDebug] = useState(null);
 
   const [ohlcRows, setOhlcRows] = useState([]);
   const [returnsSym, setReturnsSym] = useState(null);
@@ -741,6 +742,7 @@ export default function TickerPage() {
       setStatsRowsSpy([]);
       setTailRows([]);
       setOhlcTickerBounds(null);
+      setTickerReturnsDebug(null);
       return () => {
         cancelled = true;
       };
@@ -778,6 +780,15 @@ export default function TickerPage() {
         })
           .then(async (res2018) => {
             if (cancelled) return;
+            const h = res2018?.headers || null;
+            setTickerReturnsDebug({
+              source: h?.['x-ticker-returns-source'] || (res2018?.fromCache ? 'frontend-cache' : 'unknown'),
+              cacheHit: h?.['x-cache-hit'] || (res2018?.fromCache ? '1' : '0'),
+              computeMs: h?.['x-compute-ms'] || '',
+              cacheKey: h?.['x-cache-key'] || '',
+              mode: 'default-range',
+              symbol: symU
+            });
             const d18 = res2018.data;
             const retSymData = pickTickerReturnsFromPayload(d18, symU);
             const retSpyData = pickTickerReturnsFromPayload(d18, BENCHMARK);
@@ -954,6 +965,15 @@ export default function TickerPage() {
           ttlMs: 5 * 60 * 1000
         });
         if (cancelled) return;
+        const h = res?.headers || null;
+        setTickerReturnsDebug({
+          source: h?.['x-ticker-returns-source'] || (res?.fromCache ? 'frontend-cache' : 'unknown'),
+          cacheHit: h?.['x-cache-hit'] || (res?.fromCache ? '1' : '0'),
+          computeMs: h?.['x-compute-ms'] || '',
+          cacheKey: h?.['x-cache-key'] || '',
+          mode: 'long-range-table',
+          symbol: symU
+        });
         const d = res.data;
         setLongRangeTickerReturns(pickTickerReturnsFromPayload(d, symU));
         setLongRangeBenchReturns(pickTickerReturnsFromPayload(d, benchU));
@@ -1479,6 +1499,12 @@ export default function TickerPage() {
           {error}
         </div>
       ) : null}
+      {/* {tickerReturnsDebug ? (
+        <div className="ticker-page__error" role="status" style={{ marginTop: 8, marginBottom: 8 }}>
+          ticker-returns debug: source={tickerReturnsDebug.source || '—'} | cache_hit={tickerReturnsDebug.cacheHit || '—'} | compute_ms=
+          {tickerReturnsDebug.computeMs || '—'} | mode={tickerReturnsDebug.mode || '—'} | symbol={tickerReturnsDebug.symbol || '—'}
+        </div>
+      ) : null} */}
 
       <header className="ticker-page__header ticker-page__header--figma">
         <div className="ticker-page__header-top">
