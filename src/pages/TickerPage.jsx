@@ -597,8 +597,14 @@ export default function TickerPage() {
   const location = useLocation();
   const { symbol: symbolParam } = useParams();
   const navigate = useNavigate();
-  const sym = sanitizeTickerPageInput(symbolParam) || 'AAPL';
+  const [activeSymbol, setActiveSymbol] = useState(() => sanitizeTickerPageInput(symbolParam) || 'AAPL');
+  const sym = activeSymbol;
   const canonicalSym = String(sym || 'AAPL').toLowerCase();
+
+  useEffect(() => {
+    const next = sanitizeTickerPageInput(symbolParam) || 'AAPL';
+    setActiveSymbol((prev) => (prev === next ? prev : next));
+  }, [symbolParam]);
 
   usePageSeo({
     title: `${String(sym).toUpperCase()} Odin500 Signal, Returns & Market Statistics`,
@@ -618,6 +624,7 @@ export default function TickerPage() {
   const [metaBusy, setMetaBusy] = useState(true);
   const [error, setError] = useState('');
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [symbolRefreshToken, setSymbolRefreshToken] = useState(0);
 
   const [ohlcRows, setOhlcRows] = useState([]);
   const [returnsSym, setReturnsSym] = useState(null);
@@ -689,10 +696,16 @@ export default function TickerPage() {
   const onSymbolChange = useCallback(
     (next) => {
       const s = sanitizeTickerPageInput(next);
-      if (!s) navigate('/ticker');
-      else navigate('/ticker/' + encodeURIComponent(s));
+      setSymbolRefreshToken((v) => v + 1);
+      setActiveSymbol(s || 'AAPL');
+      if (!s) {
+        navigate('/ticker');
+        return;
+      }
+      if (s === sym) return;
+      navigate('/ticker/' + encodeURIComponent(s));
     },
-    [navigate]
+    [navigate, sym]
   );
 
   const applyCustomChartRange = useCallback(() => {
@@ -906,7 +919,7 @@ export default function TickerPage() {
     return () => {
       cancelled = true;
     };
-  }, [sym, authVersion]);
+  }, [sym, authVersion, symbolRefreshToken]);
 
   /** Second (and final) ticker-returns request on load: long table window for page symbol + active section benchmark. */
   useEffect(() => {
@@ -957,7 +970,7 @@ export default function TickerPage() {
     return () => {
       cancelled = true;
     };
-  }, [sym, benchForLongTable, authVersion]);
+  }, [sym, benchForLongTable, authVersion, symbolRefreshToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -987,7 +1000,7 @@ export default function TickerPage() {
     return () => {
       cancelled = true;
     };
-  }, [sym, authVersion]);
+  }, [sym, authVersion, symbolRefreshToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1020,7 +1033,7 @@ export default function TickerPage() {
     return () => {
       cancelled = true;
     };
-  }, [sym, timeframe, asOfDate, authVersion, returnsSym, chartApiRange.start, chartApiRange.end]);
+  }, [sym, timeframe, asOfDate, authVersion, returnsSym, chartApiRange.start, chartApiRange.end, symbolRefreshToken]);
 
   useEffect(() => {
     setNewsPage(1);
