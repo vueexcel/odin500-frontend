@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
+import { usePageSeo } from '../seo/usePageSeo.js';
 
 const FINNHUB_BASE = 'https://finnhub.io/api/v1/company-news';
 const FINNHUB_TOKEN =
@@ -139,6 +140,12 @@ function NewsList({ title, subtitle, busy, error, items }) {
 }
 
 export default function NewsPage() {
+  usePageSeo({
+    title: 'Market News, Index News, and Ticker News | Odin500',
+    description:
+      'Read general market headlines plus index-specific and ticker-specific news streams in Odin500.',
+    canonicalPath: '/news'
+  });
   const { busy: generalBusy, error: generalError, items: generalItemsAll } = useGeneralNewsFeed();
   const generalItems = useMemo(
     () => (generalItemsAll.length ? generalItemsAll.slice(0, 24) : FALLBACK_GENERAL),

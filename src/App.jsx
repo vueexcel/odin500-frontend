@@ -12,6 +12,7 @@ import {
   normalizeTradeMarkers,
   extractOdinMarkersByTicker
 } from './utils/chartData.js';
+import { usePageSeo } from './seo/usePageSeo.js';
 
 function clampRange(start, end, setEnd) {
   if (!start || !end) return;
@@ -19,6 +20,12 @@ function clampRange(start, end, setEnd) {
 }
 
 export default function App() {
+  usePageSeo({
+    title: 'Odin500 Market Dashboard — Quant Signals, Heatmap, and Snapshots',
+    description:
+      'Daily market dashboard with Odin500 quant signals, charts, and index-level snapshots for U.S. equities and ETFs.',
+    canonicalPath: '/market'
+  });
   const today = new Date();
   const prior = new Date();
   prior.setDate(today.getDate() - 100);

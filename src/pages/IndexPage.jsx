@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
 import { TickerAnnualReturnsPosNeg } from '../components/TickerAnnualReturnsPosNeg.jsx';
@@ -17,6 +17,7 @@ import {
 import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
+import { usePageSeo } from '../seo/usePageSeo.js';
 
 const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
 const MAX_SIGNAL_RANGE_DAYS = 40000;
@@ -541,6 +542,7 @@ function useMediaChartHeight() {
 }
 
 export default function IndexPage() {
+  const location = useLocation();
   const { indexSlug: indexSlugParam } = useParams();
   const navigate = useNavigate();
   const slug = sanitizeIndexSlug(indexSlugParam) || 'sp500';
@@ -548,6 +550,18 @@ export default function IndexPage() {
     () => INDEX_ROUTE_CHOICES.find((x) => x.slug === slug) || INDEX_ROUTE_CHOICES[0],
     [slug]
   );
+
+  usePageSeo({
+    title: `${activeMeta.label} Signals & Heatmap | Odin500`,
+    description: `Daily Odin500 signal distribution, heatmap views, and constituent analytics for ${activeMeta.label}.`,
+    canonicalPath: `/indices/${slug}`,
+    noindex: Boolean(location.search),
+    breadcrumbItems: [
+      { name: 'Market', path: '/market' },
+      { name: 'Indices', path: '/indices/sp500' },
+      { name: activeMeta.label, path: `/indices/${slug}` }
+    ]
+  });
 
   const [authVersion, setAuthVersion] = useState(0);
   const [timeframe, setTimeframe] = useState('1Y');

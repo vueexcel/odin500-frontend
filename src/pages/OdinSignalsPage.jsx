@@ -19,6 +19,7 @@ import {
 } from '../utils/tickerUrlSync.js';
 import { ODIN_FIGMA_LEGEND_ITEMS, figmaFillForSignal } from '../utils/odinSignalTreemap.js';
 import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
+import { usePageSeo } from '../seo/usePageSeo.js';
 
 const RANGE_PRESETS = [
   { key: '1y', label: '1Y', years: 1 },
@@ -114,6 +115,14 @@ export default function OdinSignalsPage() {
   const chartRef = useRef(null);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const hasQuery = String(searchParams || '').length > 0;
+  usePageSeo({
+    title: 'Today’s Odin500 Signals Dashboard',
+    description:
+      'Daily Odin500 quant signals across covered stocks and ETFs with filters, rankings, and chart context.',
+    canonicalPath: '/odin-signals',
+    noindex: hasQuery
+  });
   const symbol = useMemo(() => resolveTickersPageSymbol(searchParams), [searchParams]);
   const [rangeKey, setRangeKey] = useState('3y');
   const [error, setError] = useState('');

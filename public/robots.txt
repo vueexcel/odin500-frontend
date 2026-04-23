@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# Keep non-content auth/account flows out of search
+Disallow: /login
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /accounts
+
+Sitemap: /sitemap.xml
+

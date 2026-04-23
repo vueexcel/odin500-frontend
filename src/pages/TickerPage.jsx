@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
 import { TickerAnnualReturnsPosNeg } from '../components/TickerAnnualReturnsPosNeg.jsx';
@@ -21,6 +21,7 @@ import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { toDateInput } from '../utils/misc.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
+import { usePageSeo } from '../seo/usePageSeo.js';
 
 const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
 /** Must stay ≤ backend `OHLC_SIGNALS_MAX_RANGE_DAYS` (default 40000). */
@@ -593,9 +594,23 @@ function useMediaChartHeight() {
 }
 
 export default function TickerPage() {
+  const location = useLocation();
   const { symbol: symbolParam } = useParams();
   const navigate = useNavigate();
   const sym = sanitizeTickerPageInput(symbolParam) || 'AAPL';
+  const canonicalSym = String(sym || 'AAPL').toLowerCase();
+
+  usePageSeo({
+    title: `${String(sym).toUpperCase()} Odin500 Signal, Returns & Market Statistics`,
+    description: `Live Odin500 signal, returns, OHLC market data, and strategy comparison for ${String(sym).toUpperCase()}.`,
+    canonicalPath: `/ticker/${canonicalSym}`,
+    noindex: Boolean(location.search),
+    breadcrumbItems: [
+      { name: 'Market', path: '/market' },
+      { name: 'Ticker', path: '/ticker' },
+      { name: String(sym).toUpperCase(), path: `/ticker/${canonicalSym}` }
+    ]
+  });
 
   const [authVersion, setAuthVersion] = useState(0);
   const [timeframe, setTimeframe] = useState('1Y');

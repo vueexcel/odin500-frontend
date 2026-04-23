@@ -5,6 +5,7 @@ import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
 import { returnToHeatColor } from '../utils/heatmapColors.js';
+import { usePageSeo } from '../seo/usePageSeo.js';
 
 /** `apiIndex` must match `market_groups.name` from Supabase (see GET /api/market/indices). */
 const INDEX_MENU = [
@@ -75,6 +76,12 @@ function parsePct(v) {
 }
 
 export default function MarketHeatmapPage() {
+  usePageSeo({
+    title: 'Market Heatmap by Index and Sector | Odin500',
+    description:
+      'Explore index heatmaps with sector and industry breakdowns using live market return snapshots.',
+    canonicalPath: '/heatmap'
+  });
   const [apiIndices, setApiIndices] = useState([]);
   const [periodOptions, setPeriodOptions] = useState([]);
   const [indexMenuId, setIndexMenuId] = useState('sp500');

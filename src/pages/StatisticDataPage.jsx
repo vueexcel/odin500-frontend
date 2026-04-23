@@ -4,6 +4,7 @@ import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
+import { usePageSeo } from '../seo/usePageSeo.js';
 
 const DEFAULT_SYMBOL = 'AAPL';
 const TABLE_RANGE_OPTIONS = [
@@ -329,6 +330,13 @@ function ReturnTable({
 
 export default function StatisticDataPage() {
   const location = useLocation();
+  usePageSeo({
+    title: 'Statistic Tables — Daily, Weekly, Monthly, Quarterly, Annual | Odin500',
+    description:
+      'Table-focused return analytics with CSV downloads across daily, weekly, monthly, quarterly, and annual ranges.',
+    canonicalPath: '/statistic-data',
+    noindex: Boolean(location.search)
+  });
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

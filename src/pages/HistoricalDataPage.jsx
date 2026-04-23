@@ -3,6 +3,7 @@ import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
+import { usePageSeo } from '../seo/usePageSeo.js';
 
 const PAGE_SIZE = 50;
 const DEFAULT_TICKER = 'AAPL';
@@ -56,6 +57,12 @@ function computeCagr(beginValue, endValue, startIso, endIso) {
 }
 
 export default function HistoricalDataPage() {
+  usePageSeo({
+    title: 'Historical OHLC Data and CSV Export | Odin500',
+    description:
+      'Query historical OHLC data by ticker and date range, then export clean CSV tables for analysis.',
+    canonicalPath: '/historical-data'
+  });
   const [ticker, setTicker] = useState(DEFAULT_TICKER);
   const [startDate, setStartDate] = useState(defaultStartDate);
   const [endDate, setEndDate] = useState(todayIsoDate);

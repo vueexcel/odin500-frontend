@@ -4,6 +4,7 @@ import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
 import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
+import { usePageSeo } from '../seo/usePageSeo.js';
 
 /** `apiIndex` matches POST /api/market/ticker-details `index` field (Supabase / BigQuery). */
 const INDEX_MENU = [
@@ -958,6 +959,12 @@ function MarketMoversScatter({ points, volumeNote, axisReturnTitle, tooltipRetur
 }
 
 export default function MarketMoversPage() {
+  usePageSeo({
+    title: 'Market Movers — Top Gainers and Losers | Odin500',
+    description:
+      'Track top gainers and losers across index universes with return intervals and relative volume context.',
+    canonicalPath: '/market-movers'
+  });
   const [indexMenuId, setIndexMenuId] = useState('sp500');
   const [sectorFilter, setSectorFilter] = useState('__all__');
   const [sessionTab, setSessionTab] = useState('market');

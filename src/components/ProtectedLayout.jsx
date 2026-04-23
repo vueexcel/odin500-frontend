@@ -6,8 +6,10 @@ import { AppHeader } from './AppHeader.jsx';
 import { AppSidebar } from './AppSidebar.jsx';
 import { AppRightRail } from './AppRightRail.jsx';
 import { SiteFooter } from './SiteFooter.jsx';
+import { useSitewideSeo } from '../seo/usePageSeo.js';
 
 export function ProtectedLayout() {
+  useSitewideSeo();
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
   const [mobileRightOpen, setMobileRightOpen] = useState(false);
