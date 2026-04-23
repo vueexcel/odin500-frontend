@@ -1,14 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { TICKER_SEARCH_DEBOUNCE_MS } from '../config/tickerSearch.js';
 import {
   fetchTickerSearchLive,
   normalizeTickerSearchRows,
   resolveTickerSymbols
 } from '../store/apiStore.js';
 import { sanitizeTickerSearchInput } from '../utils/tickerUrlSync.js';
-
-/** Wait after last keystroke before calling search + resolve (avoids a request per key). */
-const TICKER_SEARCH_DEBOUNCE_MS = 400;
 
 const LOG_PREFIX = '[WatchlistTickerSearch]';
 

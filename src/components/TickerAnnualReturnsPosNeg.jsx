@@ -1,4 +1,4 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
@@ -165,6 +165,29 @@ function BucketDonut({ counts, buckets, theme, plotHeight }) {
   );
 }
 
+function IcoTable() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4" y="4" width="16" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M4 9h16M4 14h16M12 9v11" stroke="currentColor" strokeWidth="1.75" />
+    </svg>
+  );
+}
+
+function IcoDownload() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 4v10m0 0l4-4m-4 4L8 10M6 18h12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function csvEscape(s) {
+  const t = String(s ?? '');
+  if (/[",\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
+  return t;
+}
+
 /**
  * Figma-style bucketed donuts + center toggle (uses `performance.annualReturns`).
  * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number }} props
@@ -173,6 +196,7 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate, plo
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const buckets = useMemo(() => bucketsForTheme(chartTheme), [chartTheme]);
   const [rightMode, setRightMode] = useState('positive');
+  const [showTable, setShowTable] = useState(false);
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
 
   const rows = useMemo(() => {
@@ -199,6 +223,24 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate, plo
     () => (rightMode === 'positive' ? buildCounts(filteredRows, 'pos') : buildCounts(filteredRows, 'neg')),
     [filteredRows, rightMode]
   );
+
+  const onDownloadCsv = useCallback(() => {
+    if (!filteredRows.length) return;
+    const headers = ['period', 'year', 'startDate', 'endDate', 'totalReturn'];
+    const lines = [
+      headers.join(','),
+      ...filteredRows.map((r) =>
+        [csvEscape(r.period), r.year, csvEscape(r.startDate), csvEscape(r.endDate), r.totalReturn].join(',')
+      )
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${String(symbol || 'ticker').toUpperCase()}-annual-posneg.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [filteredRows, symbol]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const asOfLine = asOfDate ? (
@@ -236,8 +278,29 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate, plo
         <ChartDateApplyRow
           idPrefix="annual-posneg"
           maxDate={asOfDate}
+          mode="year"
+          minYear={1980}
+          maxYear={2026}
+          initialStart="2018"
+          initialEnd={String(asOfDate || '').slice(0, 4)}
           onApply={({ start, end }) => setRangeApplied({ start, end })}
         />
+        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
+          <div className="ticker-annual-figma__left" />
+          <div className="ticker-annual-figma__right">
+            <button
+              type="button"
+              className="ticker-annual-figma__btn"
+              onClick={() => setShowTable((v) => !v)}
+              aria-pressed={showTable}
+            >
+              <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
+            </button>
+            <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
+              <IcoDownload /> Download CSV
+            </button>
+          </div>
+        </div>
 
         <div className="ticker-annual-donut__stage">
           <div className="ticker-annual-donut__toggle-wrap" aria-label="Right panel mode">
@@ -357,6 +420,33 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate, plo
             </div>
           </div>
         </div>
+        {showTable ? (
+          <div className="ticker-annual-figma__table-wrap">
+            <table className="ticker-annual-figma__table">
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Start</th>
+                  <th>End</th>
+                  <th>Total Return</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((r) => (
+                  <tr key={`apn-row-${r.period}`}>
+                    <td>{r.period}</td>
+                    <td>{r.startDate || '—'}</td>
+                    <td>{r.endDate || '—'}</td>
+                    <td className={r.totalReturn >= 0 ? 'ticker-num--up' : 'ticker-num--down'}>
+                      {r.totalReturn >= 0 ? '+' : ''}
+                      {r.totalReturn.toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -20,7 +20,6 @@ import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { toDateInput } from '../utils/misc.js';
-import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 
 const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
@@ -722,10 +721,24 @@ export default function TickerPage() {
     (async () => {
       setMetaBusy(true);
       setError('');
-      try {
-        const returnsDefaultEnd = toDateInput(new Date());
-        const symU = String(sym || '').toUpperCase().trim();
-        const res2018 = await fetchJsonCached({
+      const returnsDefaultEnd = toDateInput(new Date());
+      const symU = String(sym || '').toUpperCase().trim();
+
+      /** 1Y OHLC stats window seeded from calendar “today” so OHLC requests run in parallel with ticker-returns. */
+      const seedEnd = returnsDefaultEnd;
+      const seedAsOfD = new Date(seedEnd + 'T12:00:00');
+      const seedStart365 = new Date(seedAsOfD);
+      seedStart365.setFullYear(seedStart365.getFullYear() - 1);
+      const seedStartIso = toIso(seedStart365);
+
+      const clearBusyWhenVisible = () => {
+        if (!cancelled) setMetaBusy(false);
+      };
+
+      const tasks = [];
+
+      tasks.push(
+        fetchJsonCached({
           path: '/api/market/ticker-returns',
           method: 'POST',
           body: {
@@ -734,41 +747,112 @@ export default function TickerPage() {
             customEndDate: returnsDefaultEnd
           },
           ttlMs: 5 * 60 * 1000
-        });
-        if (cancelled) return;
-        const d18 = res2018.data;
-        const retSymData = pickTickerReturnsFromPayload(d18, symU);
-        const retSpyData = pickTickerReturnsFromPayload(d18, BENCHMARK);
-        const asOf = retSymData?.asOfDate || new Date().toISOString().slice(0, 10);
-        setAsOfDate(asOf);
-        setReturnsSym(retSymData);
+        })
+          .then(async (res2018) => {
+            if (cancelled) return;
+            const d18 = res2018.data;
+            const retSymData = pickTickerReturnsFromPayload(d18, symU);
+            const retSpyData = pickTickerReturnsFromPayload(d18, BENCHMARK);
+            const asOf = retSymData?.asOfDate || seedEnd;
+            setAsOfDate(asOf);
+            setReturnsSym(retSymData);
+            setReturnsSpy(retSpyData);
+            clearBusyWhenVisible();
 
-        const asOfD = new Date(String(asOf).slice(0, 10) + 'T12:00:00');
-        const start365 = new Date(asOfD);
-        start365.setFullYear(start365.getFullYear() - 1);
-        const startIso = toIso(start365);
-        const endIso = String(asOf).slice(0, 10);
+            const endFromReturns = String(asOf).slice(0, 10);
+            if (endFromReturns !== seedEnd) {
+              const asOfD = new Date(endFromReturns + 'T12:00:00');
+              const start365 = new Date(asOfD);
+              start365.setFullYear(start365.getFullYear() - 1);
+              const startIso = toIso(start365);
+              try {
+                const [statsSymRes, statsSpyRes] = await Promise.all([
+                  fetchJsonCached({
+                    path:
+                      '/api/market/ohlc?symbol=' +
+                      encodeURIComponent(sym) +
+                      '&start_date=' +
+                      encodeURIComponent(startIso) +
+                      '&end_date=' +
+                      encodeURIComponent(endFromReturns) +
+                      '&limit=400',
+                    method: 'GET',
+                    ttlMs: 10 * 60 * 1000
+                  }),
+                  fetchJsonCached({
+                    path:
+                      '/api/market/ohlc?symbol=' +
+                      encodeURIComponent(BENCHMARK) +
+                      '&start_date=' +
+                      encodeURIComponent(startIso) +
+                      '&end_date=' +
+                      encodeURIComponent(endFromReturns) +
+                      '&limit=400',
+                    method: 'GET',
+                    ttlMs: 10 * 60 * 1000
+                  })
+                ]);
+                if (cancelled) return;
+                setStatsRows(sortRowsAsc(ohlcRowsFromPayload(statsSymRes.data)));
+                setStatsRowsSpy(sortRowsAsc(ohlcRowsFromPayload(statsSpyRes.data)));
+              } catch {
+                /* keep seeded stats rows */
+              }
+            }
+          })
+          .catch((e) => {
+            if (!cancelled) {
+              setReturnsSym(null);
+              setReturnsSpy(null);
+              setError((prev) => prev || e?.message || 'Failed to load returns');
+            }
+          })
+      );
 
-        const [detailsRes, tailRes, statsSymRes, statsSpyRes] = await Promise.all([
-          fetchJsonCached({
-            path: '/api/market/ticker-details',
-            method: 'POST',
-            body: { index: 'sp500', period: 'last-1-year' },
-            ttlMs: 30 * 60 * 1000
-          }),
-          fetchJsonCached({
-            path: '/api/market/ohlc?symbol=' + encodeURIComponent(sym) + '&limit=8',
-            method: 'GET',
-            ttlMs: 60 * 1000
-          }),
+      tasks.push(
+        fetchJsonCached({
+          path: '/api/market/ticker-details',
+          method: 'POST',
+          body: { index: 'sp500', period: 'last-1-year' },
+          ttlMs: 30 * 60 * 1000
+        })
+          .then((detailsRes) => {
+            if (cancelled) return;
+            const d = detailsRes.data;
+            setDetailRows(Array.isArray(d?.data) ? d.data : []);
+            clearBusyWhenVisible();
+          })
+          .catch(() => {
+            if (!cancelled) setDetailRows([]);
+          })
+      );
+
+      tasks.push(
+        fetchJsonCached({
+          path: '/api/market/ohlc?symbol=' + encodeURIComponent(sym) + '&limit=8',
+          method: 'GET',
+          ttlMs: 60 * 1000
+        })
+          .then((tailRes) => {
+            if (cancelled) return;
+            setTailRows(sortRowsAsc(ohlcRowsFromPayload(tailRes.data)));
+            clearBusyWhenVisible();
+          })
+          .catch(() => {
+            if (!cancelled) setTailRows([]);
+          })
+      );
+
+      tasks.push(
+        Promise.all([
           fetchJsonCached({
             path:
               '/api/market/ohlc?symbol=' +
               encodeURIComponent(sym) +
               '&start_date=' +
-              encodeURIComponent(startIso) +
+              encodeURIComponent(seedStartIso) +
               '&end_date=' +
-              encodeURIComponent(endIso) +
+              encodeURIComponent(seedEnd) +
               '&limit=400',
             method: 'GET',
             ttlMs: 10 * 60 * 1000
@@ -778,36 +862,30 @@ export default function TickerPage() {
               '/api/market/ohlc?symbol=' +
               encodeURIComponent(BENCHMARK) +
               '&start_date=' +
-              encodeURIComponent(startIso) +
+              encodeURIComponent(seedStartIso) +
               '&end_date=' +
-              encodeURIComponent(endIso) +
+              encodeURIComponent(seedEnd) +
               '&limit=400',
             method: 'GET',
             ttlMs: 10 * 60 * 1000
           })
-        ]);
+        ])
+          .then(([statsSymRes, statsSpyRes]) => {
+            if (cancelled) return;
+            setStatsRows(sortRowsAsc(ohlcRowsFromPayload(statsSymRes.data)));
+            setStatsRowsSpy(sortRowsAsc(ohlcRowsFromPayload(statsSpyRes.data)));
+            clearBusyWhenVisible();
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setStatsRows([]);
+              setStatsRowsSpy([]);
+            }
+          })
+      );
 
-        if (cancelled) return;
-        setReturnsSpy(retSpyData);
-        const d = detailsRes.data;
-        setDetailRows(Array.isArray(d?.data) ? d.data : []);
-
-        setTailRows(sortRowsAsc(ohlcRowsFromPayload(tailRes.data)));
-        setStatsRows(sortRowsAsc(ohlcRowsFromPayload(statsSymRes.data)));
-        setStatsRowsSpy(sortRowsAsc(ohlcRowsFromPayload(statsSpyRes.data)));
-      } catch (e) {
-        if (!cancelled) {
-          setError(e.message || 'Failed to load ticker');
-          setReturnsSym(null);
-          setReturnsSpy(null);
-          setDetailRows([]);
-          setStatsRows([]);
-          setStatsRowsSpy([]);
-          setTailRows([]);
-        }
-      } finally {
-        if (!cancelled) setMetaBusy(false);
-      }
+      await Promise.allSettled(tasks);
+      if (!cancelled) setMetaBusy(false);
     })();
 
     return () => {
@@ -971,18 +1049,6 @@ export default function TickerPage() {
   const annualReturnsRaw = returnsSym?.performance?.annualReturns;
   const quarterlyReturnsRaw = returnsSym?.performance?.quarterlyReturns;
   const monthlyReturnsRaw = returnsSym?.performance?.monthlyReturns;
-  const annualQuarterlyRange = useMemo(
-    () => appliedCustomRange || { start: '2018-01-01', end: asOfDate },
-    [appliedCustomRange, asOfDate]
-  );
-  const annualReturnsView = useMemo(
-    () => filterReturnsRows(annualReturnsRaw || [], annualQuarterlyRange.start, annualQuarterlyRange.end),
-    [annualReturnsRaw, annualQuarterlyRange.start, annualQuarterlyRange.end]
-  );
-  const quarterlyReturnsView = useMemo(
-    () => filterReturnsRows(quarterlyReturnsRaw || [], annualQuarterlyRange.start, annualQuarterlyRange.end),
-    [quarterlyReturnsRaw, annualQuarterlyRange.start, annualQuarterlyRange.end]
-  );
   const tickerSelectOptions = useMemo(() => {
     const base = [sym, BENCHMARK, ...(detailRows || []).map((r) => String(r.symbol || '').toUpperCase().trim())];
     return [...new Set(base.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
@@ -1789,16 +1855,16 @@ export default function TickerPage() {
 
           <TickerAnnualReturnsFigma
             symbol={sym}
-            annualReturns={annualReturnsView}
+            annualReturns={annualReturnsRaw}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
-            <TickerAnnualReturnsPosNeg symbol={sym} annualReturns={annualReturnsView} asOfDate={asOfDate} />
+            <TickerAnnualReturnsPosNeg symbol={sym} annualReturns={annualReturnsRaw} asOfDate={asOfDate} />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_QUARTERLY} defaultHeight={288}>
-            <TickerQuarterlyReturnsChart symbol={sym} quarterlyReturns={quarterlyReturnsView} asOfDate={asOfDate} />
+            <TickerQuarterlyReturnsChart symbol={sym} quarterlyReturns={quarterlyReturnsRaw} asOfDate={asOfDate} />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
             <TickerMonthlyReturnsChart symbol={sym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} />

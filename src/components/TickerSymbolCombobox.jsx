@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { TICKER_SEARCH_DEBOUNCE_MS } from '../config/tickerSearch.js';
 import { fetchJsonCached } from '../store/apiStore.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 
@@ -48,7 +49,7 @@ export function TickerSymbolCombobox({
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 75);
+    }, TICKER_SEARCH_DEBOUNCE_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);

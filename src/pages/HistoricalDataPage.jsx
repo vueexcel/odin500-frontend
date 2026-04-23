@@ -162,7 +162,7 @@ export default function HistoricalDataPage() {
       <section className="historical-data__controls">
         <div className="historical-data__ticker">
           <label htmlFor="historical-data-ticker">Ticker</label>
-          {/* Uses built-in debounced ticker search suggestions */}
+          {/* Debounced search: shared delay from src/config/tickerSearch.js (override VITE_TICKER_SEARCH_DEBOUNCE_MS) */}
           <TickerSymbolCombobox
             symbol={ticker}
             onSymbolChange={(next) => setTicker(sanitizeTickerPageInput(next) || DEFAULT_TICKER)}

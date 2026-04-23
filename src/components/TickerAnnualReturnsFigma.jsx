@@ -571,6 +571,11 @@ export function TickerAnnualReturnsFigma({
         <ChartDateApplyRow
           idPrefix="annual-figma"
           maxDate={asOfDate}
+          mode="year"
+          minYear={1980}
+          maxYear={2026}
+          initialStart="2018"
+          initialEnd={String(asOfDate || '').slice(0, 4)}
           onApply={({ start, end }) => setRangeApplied({ start, end })}
         />
         <div className="ticker-annual-figma__chart-card">

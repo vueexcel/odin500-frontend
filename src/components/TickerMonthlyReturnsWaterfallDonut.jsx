@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
@@ -14,6 +14,29 @@ const COL_DONUT_NEG = '#f97316';
 const DONUT_GAP_DEG = 2.35;
 const R0 = 52;
 const R1 = 82;
+
+function IcoTable() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4" y="4" width="16" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M4 9h16M4 14h16M12 9v11" stroke="currentColor" strokeWidth="1.75" />
+    </svg>
+  );
+}
+
+function IcoDownload() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 4v10m0 0l4-4m-4 4L8 10M6 18h12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function csvEscape(s) {
+  const t = String(s ?? '');
+  if (/[",\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
+  return t;
+}
 
 function parseMonthRow(period) {
   const m = String(period || '').match(/^(\d{4})-(\d{2})$/);
@@ -63,6 +86,7 @@ function labelOnDonut(r, degMid) {
  */
 export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asOfDate, plotHeight }) {
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
+  const [showTable, setShowTable] = useState(false);
   const [monthRangeApplied, setMonthRangeApplied] = useState({ start: '', end: '' });
 
   const monthRows = useMemo(() => {
@@ -123,6 +147,10 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
     }
     return arr;
   }, [displayMonthRows, selectedYear]);
+  const selectedYearRows = useMemo(
+    () => displayMonthRows.filter((r) => r.year === selectedYear).sort((a, b) => a.month - b.month),
+    [displayMonthRows, selectedYear]
+  );
 
   const waterfallSvg = useMemo(() => {
     const light = chartTheme === 'light';
@@ -336,6 +364,23 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
   }, [monthMixStats, chartTheme, plotHeight]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
+  const onDownloadCsv = useCallback(() => {
+    if (!selectedYearRows.length) return;
+    const headers = ['period', 'year', 'month', 'startDate', 'endDate', 'totalReturn'];
+    const lines = [
+      headers.join(','),
+      ...selectedYearRows.map((r) =>
+        [csvEscape(r.period), r.year, r.month, csvEscape(r.startDate), csvEscape(r.endDate), r.totalReturn].join(',')
+      )
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${symU}-monthly-waterfall-${selectedYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [selectedYearRows, selectedYear, symU]);
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
   const hasMonthlySource = monthRows.length > 0;
   const hasMonthly = displayMonthRows.length > 0;
@@ -403,6 +448,22 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
               maxDate={asOfDate}
               onApply={({ start, end }) => setMonthRangeApplied({ start, end })}
             />
+            <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
+              <div className="ticker-annual-figma__left" />
+              <div className="ticker-annual-figma__right">
+                <button
+                  type="button"
+                  className="ticker-annual-figma__btn"
+                  onClick={() => setShowTable((v) => !v)}
+                  aria-pressed={showTable}
+                >
+                  <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
+                </button>
+                <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
+                  <IcoDownload /> Download CSV
+                </button>
+              </div>
+            </div>
             {monthlyFilteredEmpty ? (
               <div className="ticker-monthly-adv__empty">No monthly rows overlap the selected date range.</div>
             ) : hasMonthly ? (
@@ -424,6 +485,33 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
                 Total
               </span>
             </div>
+            {showTable ? (
+              <div className="ticker-annual-figma__table-wrap">
+                <table className="ticker-annual-figma__table">
+                  <thead>
+                    <tr>
+                      <th>Period</th>
+                      <th>Start</th>
+                      <th>End</th>
+                      <th>Total Return</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedYearRows.map((r) => (
+                      <tr key={`mw-row-${r.period}`}>
+                        <td>{r.period}</td>
+                        <td>{r.startDate || '—'}</td>
+                        <td>{r.endDate || '—'}</td>
+                        <td className={r.totalReturn >= 0 ? 'ticker-num--up' : 'ticker-num--down'}>
+                          {r.totalReturn >= 0 ? '+' : ''}
+                          {r.totalReturn.toFixed(2)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
           </div>
 
           <div className="ticker-monthly-adv__panel ticker-annual-figma__chart-card ticker-monthly-adv__panel--donut">

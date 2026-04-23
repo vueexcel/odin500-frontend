@@ -7126,6 +7126,7 @@ button:disabled {
   cursor: pointer;
   border: none;
   font-family: inherit;
+  margin-right: 10px;
 }
 
 .ticker-annual-figma__btn--primary {

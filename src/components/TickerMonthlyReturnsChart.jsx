@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
@@ -11,6 +11,29 @@ const COL_AXIS = '#94a3b8';
 const COL_LABEL = '#e2e8f0';
 
 const DEFAULT_YEAR = 2025;
+
+function IcoTable() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4" y="4" width="16" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M4 9h16M4 14h16M12 9v11" stroke="currentColor" strokeWidth="1.75" />
+    </svg>
+  );
+}
+
+function IcoDownload() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 4v10m0 0l4-4m-4 4L8 10M6 18h12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function csvEscape(s) {
+  const t = String(s ?? '');
+  if (/[",\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
+  return t;
+}
 
 function parseMonthRow(period) {
   const m = String(period || '').match(/^(\d{4})-(\d{2})$/);
@@ -31,6 +54,7 @@ function yForValue(v, innerTop, innerH, yMin, yMax) {
  * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number }} props
  */
 export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, plotHeight }) {
+  const [showTable, setShowTable] = useState(false);
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
 
   const rows = useMemo(() => {
@@ -173,6 +197,27 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
+  const selectedYearRows = useMemo(
+    () => filteredRows.filter((r) => r.year === selectedYear).sort((a, b) => a.month - b.month),
+    [filteredRows, selectedYear]
+  );
+  const onDownloadCsv = useCallback(() => {
+    if (!selectedYearRows.length) return;
+    const headers = ['period', 'year', 'month', 'startDate', 'endDate', 'totalReturn'];
+    const lines = [
+      headers.join(','),
+      ...selectedYearRows.map((r) =>
+        [csvEscape(r.period), r.year, r.month, csvEscape(r.startDate), csvEscape(r.endDate), r.totalReturn].join(',')
+      )
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${symU}-monthly-returns-${selectedYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [selectedYearRows, selectedYear, symU]);
 
   if (!rows.length) {
     return (
@@ -277,6 +322,22 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
           maxDate={asOfDate}
           onApply={({ start, end }) => setRangeApplied({ start, end })}
         />
+        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
+          <div className="ticker-annual-figma__left" />
+          <div className="ticker-annual-figma__right">
+            <button
+              type="button"
+              className="ticker-annual-figma__btn"
+              onClick={() => setShowTable((v) => !v)}
+              aria-pressed={showTable}
+            >
+              <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
+            </button>
+            <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
+              <IcoDownload /> Download CSV
+            </button>
+          </div>
+        </div>
 
         <div className="ticker-annual-figma__chart-card">
           {rows.length > 0 && !filteredRows.length ? (
@@ -294,6 +355,33 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
             {selectedYear}
           </span>
         </div>
+        {showTable ? (
+          <div className="ticker-annual-figma__table-wrap">
+            <table className="ticker-annual-figma__table">
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Start</th>
+                  <th>End</th>
+                  <th>Total Return</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedYearRows.map((r) => (
+                  <tr key={`mr-row-${r.period}`}>
+                    <td>{r.period}</td>
+                    <td>{r.startDate || '—'}</td>
+                    <td>{r.endDate || '—'}</td>
+                    <td className={r.totalReturn >= 0 ? 'ticker-num--up' : 'ticker-num--down'}>
+                      {r.totalReturn >= 0 ? '+' : ''}
+                      {r.totalReturn.toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </div>
     </div>
   );
