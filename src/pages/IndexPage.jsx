@@ -545,7 +545,12 @@ export default function IndexPage() {
   const location = useLocation();
   const { indexSlug: indexSlugParam } = useParams();
   const navigate = useNavigate();
-  const slug = sanitizeIndexSlug(indexSlugParam) || 'sp500';
+  const [activeSlug, setActiveSlug] = useState(() => sanitizeIndexSlug(indexSlugParam) || 'sp500');
+  const slug = activeSlug;
+  useEffect(() => {
+    const next = sanitizeIndexSlug(indexSlugParam) || 'sp500';
+    setActiveSlug((prev) => (prev === next ? prev : next));
+  }, [indexSlugParam]);
   const activeMeta = useMemo(
     () => INDEX_ROUTE_CHOICES.find((x) => x.slug === slug) || INDEX_ROUTE_CHOICES[0],
     [slug]
@@ -645,6 +650,7 @@ export default function IndexPage() {
   const onIndexSlugChange = useCallback(
     (nextSlug) => {
       const s = sanitizeIndexSlug(nextSlug);
+      setActiveSlug(s || 'sp500');
       if (!s) navigate('/indices');
       else navigate('/indices/' + encodeURIComponent(s));
     },
