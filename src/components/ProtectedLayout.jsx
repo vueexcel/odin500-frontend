@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { warmWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
 import { AppHeader } from './AppHeader.jsx';
@@ -10,6 +10,7 @@ import { useSitewideSeo } from '../seo/usePageSeo.js';
 
 export function ProtectedLayout() {
   useSitewideSeo();
+  const location = useLocation();
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
   const [mobileRightOpen, setMobileRightOpen] = useState(false);
@@ -99,7 +100,7 @@ export function ProtectedLayout() {
         />
         <div className="app-main-column">
           <div className="app-main-scroll">
-            <Outlet />
+            <Outlet key={location.pathname} />
             <SiteFooter />
           </div>
         </div>

@@ -105,6 +105,25 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
     navigate('/login', { replace: true });
   };
 
+  const handleNavClick = (event, to) => {
+    // Keep browser affordances (new tab, middle click) intact.
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.shiftKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    setProfileOpen(false);
+    setBellOpen(false);
+    // Force real navigation from header so URL/content never desync.
+    window.location.assign(to);
+  };
+
   useEffect(() => {
     const onDown = (e) => {
       const t = e.target;
@@ -164,6 +183,7 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
                 className={({ isActive }) =>
                   'app-header-nav-link' + (isActive ? ' app-header-nav-link--active' : '')
                 }
+                onClick={(e) => handleNavClick(e, item.to)}
               >
                 {item.label}
               </NavLink>
@@ -300,6 +320,7 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
               key={item.to}
               to={item.to}
               className={({ isActive }) => 'main-nav-link' + (isActive ? ' active' : '')}
+              onClick={(e) => handleNavClick(e, item.to)}
             >
               {item.label}
             </NavLink>
