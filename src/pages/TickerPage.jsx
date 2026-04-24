@@ -102,6 +102,35 @@ function pickTickerReturnsFromPayload(payload, ticker) {
   return null;
 }
 
+/** Merge partial `ticker-*-returns` / `ticker-core-returns` payloads into one `returnsSym`-style object. */
+function mergeTickerReturns(prev, patch) {
+  if (!patch || patch.success === false) return prev;
+  const pPrev = prev?.performance || {};
+  const pNext = patch.performance || {};
+  const pick = (key) => {
+    const nextVal = pNext[key];
+    const prevVal = pPrev[key];
+    if (nextVal === undefined) return prevVal;
+    if (Array.isArray(nextVal) && nextVal.length === 0 && Array.isArray(prevVal) && prevVal.length > 0) return prevVal;
+    return nextVal;
+  };
+  return {
+    ...prev,
+    ...patch,
+    ticker: patch.ticker ?? prev?.ticker,
+    asOfDate: patch.asOfDate ?? prev?.asOfDate,
+    success: true,
+    performance: {
+      dynamicPeriods: pick('dynamicPeriods') ?? [],
+      predefinedPeriods: pick('predefinedPeriods') ?? [],
+      annualReturns: pick('annualReturns') ?? [],
+      quarterlyReturns: pick('quarterlyReturns') ?? [],
+      monthlyReturns: pick('monthlyReturns') ?? [],
+      customRange: pick('customRange') ?? []
+    }
+  };
+}
+
 function describeTickerIndex(rawIndex) {
   const s = String(rawIndex || '').trim();
   if (!s) return 'Other';
@@ -767,38 +796,43 @@ export default function TickerPage() {
 
       const tasks = [];
 
+      const defaultRangeBody = {
+        customStartDate: RETURNS_DEFAULT_START,
+        customEndDate: returnsDefaultEnd
+      };
+
+      const patchSymReturns = (data) => {
+        if (cancelled || !data) return;
+        setReturnsSym((prev) => mergeTickerReturns(prev, data));
+        const asOf = data.asOfDate || seedEnd;
+        setAsOfDate(String(asOf).slice(0, 10));
+      };
+      const patchSpyReturns = (data) => {
+        if (cancelled || !data) return;
+        setReturnsSpy((prev) => mergeTickerReturns(prev, data));
+      };
+
       tasks.push(
         fetchJsonCached({
-          path: '/api/market/ticker-returns',
+          path: '/api/market/ticker-core-returns',
           method: 'POST',
-          body: {
-            tickers: [symU, BENCHMARK],
-            customStartDate: RETURNS_DEFAULT_START,
-            customEndDate: returnsDefaultEnd
-          },
+          body: { ticker: symU, ...defaultRangeBody },
           ttlMs: 5 * 60 * 1000
         })
-          .then(async (res2018) => {
+          .then(async (resCore) => {
             if (cancelled) return;
-            const h = res2018?.headers || null;
+            const h = resCore?.headers || null;
             setTickerReturnsDebug({
-              source: h?.['x-ticker-returns-source'] || (res2018?.fromCache ? 'frontend-cache' : 'unknown'),
-              cacheHit: h?.['x-cache-hit'] || (res2018?.fromCache ? '1' : '0'),
+              source: h?.['x-ticker-returns-source'] || (resCore?.fromCache ? 'frontend-cache' : 'unknown'),
+              cacheHit: h?.['x-cache-hit'] || (resCore?.fromCache ? '1' : '0'),
               computeMs: h?.['x-compute-ms'] || '',
               cacheKey: h?.['x-cache-key'] || '',
-              mode: 'default-range',
+              mode: 'core-sym',
               symbol: symU
             });
-            const d18 = res2018.data;
-            const retSymData = pickTickerReturnsFromPayload(d18, symU);
-            const retSpyData = pickTickerReturnsFromPayload(d18, BENCHMARK);
-            const asOf = retSymData?.asOfDate || seedEnd;
-            setAsOfDate(asOf);
-            setReturnsSym(retSymData);
-            setReturnsSpy(retSpyData);
-            clearBusyWhenVisible();
+            patchSymReturns(resCore.data);
 
-            const endFromReturns = String(asOf).slice(0, 10);
+            const endFromReturns = String(resCore.data?.asOfDate || seedEnd).slice(0, 10);
             if (endFromReturns !== seedEnd) {
               const asOfD = new Date(endFromReturns + 'T12:00:00');
               const start365 = new Date(asOfD);
@@ -838,14 +872,76 @@ export default function TickerPage() {
                 /* keep seeded stats rows */
               }
             }
+            clearBusyWhenVisible();
           })
           .catch((e) => {
             if (!cancelled) {
               setReturnsSym(null);
-              setReturnsSpy(null);
               setError((prev) => prev || e?.message || 'Failed to load returns');
             }
           })
+      );
+
+      tasks.push(
+        fetchJsonCached({
+          path: '/api/market/ticker-core-returns',
+          method: 'POST',
+          body: { ticker: BENCHMARK, ...defaultRangeBody },
+          ttlMs: 5 * 60 * 1000
+        })
+          .then((res) => {
+            if (cancelled) return;
+            patchSpyReturns(res.data);
+            clearBusyWhenVisible();
+          })
+          .catch(() => {
+            if (!cancelled) setReturnsSpy(null);
+          })
+      );
+
+      tasks.push(
+        fetchJsonCached({
+          path: '/api/market/ticker-annual-returns',
+          method: 'POST',
+          body: { ticker: symU, ...defaultRangeBody },
+          ttlMs: 5 * 60 * 1000
+        })
+          .then((res) => {
+            if (cancelled) return;
+            patchSymReturns(res.data);
+            clearBusyWhenVisible();
+          })
+          .catch(() => {
+            /* non-fatal: core tables still work */
+          })
+      );
+      tasks.push(
+        fetchJsonCached({
+          path: '/api/market/ticker-quarterly-returns',
+          method: 'POST',
+          body: { ticker: symU, ...defaultRangeBody },
+          ttlMs: 5 * 60 * 1000
+        })
+          .then((res) => {
+            if (cancelled) return;
+            patchSymReturns(res.data);
+            clearBusyWhenVisible();
+          })
+          .catch(() => {})
+      );
+      tasks.push(
+        fetchJsonCached({
+          path: '/api/market/ticker-monthly-returns',
+          method: 'POST',
+          body: { ticker: symU, ...defaultRangeBody },
+          ttlMs: 5 * 60 * 1000
+        })
+          .then((res) => {
+            if (cancelled) return;
+            patchSymReturns(res.data);
+            clearBusyWhenVisible();
+          })
+          .catch(() => {})
       );
 
       tasks.push(
@@ -954,29 +1050,41 @@ export default function TickerPage() {
     (async () => {
       setLongRangeBusy(true);
       try {
-        const res = await fetchJsonCached({
-          path: '/api/market/ticker-returns',
-          method: 'POST',
-          body: {
-            tickers: [symU, benchU],
-            customStartDate: TABLE_LONG_START_DATE,
-            customEndDate: yesterdayIsoForLongTable()
-          },
-          ttlMs: 5 * 60 * 1000
-        });
+        const longEnd = yesterdayIsoForLongTable();
+        const longBody = {
+          customStartDate: TABLE_LONG_START_DATE,
+          customEndDate: longEnd
+        };
+        const [symRes, benchRes] = await Promise.all([
+          fetchJsonCached({
+            path: '/api/market/ticker-core-returns',
+            method: 'POST',
+            body: { ticker: symU, ...longBody },
+            ttlMs: 5 * 60 * 1000
+          }),
+          fetchJsonCached({
+            path: '/api/market/ticker-core-returns',
+            method: 'POST',
+            body: { ticker: benchU, ...longBody },
+            ttlMs: 5 * 60 * 1000
+          })
+        ]);
         if (cancelled) return;
-        const h = res?.headers || null;
+        const h = symRes?.headers || null;
         setTickerReturnsDebug({
-          source: h?.['x-ticker-returns-source'] || (res?.fromCache ? 'frontend-cache' : 'unknown'),
-          cacheHit: h?.['x-cache-hit'] || (res?.fromCache ? '1' : '0'),
+          source: h?.['x-ticker-returns-source'] || (symRes?.fromCache ? 'frontend-cache' : 'unknown'),
+          cacheHit: h?.['x-cache-hit'] || (symRes?.fromCache ? '1' : '0'),
           computeMs: h?.['x-compute-ms'] || '',
           cacheKey: h?.['x-cache-key'] || '',
           mode: 'long-range-table',
           symbol: symU
         });
-        const d = res.data;
-        setLongRangeTickerReturns(pickTickerReturnsFromPayload(d, symU));
-        setLongRangeBenchReturns(pickTickerReturnsFromPayload(d, benchU));
+        setLongRangeTickerReturns(
+          pickTickerReturnsFromPayload(symRes.data, symU) || (symRes.data?.ticker ? symRes.data : null)
+        );
+        setLongRangeBenchReturns(
+          pickTickerReturnsFromPayload(benchRes.data, benchU) || (benchRes.data?.ticker ? benchRes.data : null)
+        );
       } catch {
         if (!cancelled) {
           setLongRangeTickerReturns(null);
@@ -1024,11 +1132,15 @@ export default function TickerPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!getAuthToken()) return;
-    if (!returnsSym || String(returnsSym.ticker || '').toUpperCase() !== sym.toUpperCase()) return;
+    if (!getAuthToken()) {
+      setChartLoading(false);
+      setOhlcRows([]);
+      return;
+    }
 
     (async () => {
       setChartLoading(true);
+      setOhlcRows([]);
       try {
         const { start, end } = chartApiRange;
         const ohlcRes = await fetchJsonCached({
@@ -1053,7 +1165,7 @@ export default function TickerPage() {
     return () => {
       cancelled = true;
     };
-  }, [sym, timeframe, asOfDate, authVersion, returnsSym, chartApiRange.start, chartApiRange.end, symbolRefreshToken]);
+  }, [sym, timeframe, asOfDate, authVersion, chartApiRange.start, chartApiRange.end, symbolRefreshToken]);
 
   useEffect(() => {
     setNewsPage(1);
