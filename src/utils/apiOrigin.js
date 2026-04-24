@@ -1,5 +1,6 @@
 /** Same host as production API; Vite dev proxy forwards `/api` here when `import.meta.env.DEV`. */
 export const PRODUCTION_API_ORIGIN = 'https://trading-backend-xlh9.onrender.com';
+export const LOCAL_DEV_API_ORIGIN = 'http://localhost:5000';
 
 export function normalizeApiOrigin(url) {
   return String(url || '').replace(/\/$/, '');
@@ -18,9 +19,9 @@ export function computeDefaultApiOrigin() {
     /* ignore */
   }
 
-  // Dev: same-origin `/api/...` → Vite proxy → PRODUCTION_API_ORIGIN (vite.config.js)
+  // Dev default: call local backend directly.
   if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
-    return '';
+    return LOCAL_DEV_API_ORIGIN;
   }
 
   return PRODUCTION_API_ORIGIN;

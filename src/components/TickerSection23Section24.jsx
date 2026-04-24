@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import TradingChartLoader from './TradingChartLoader.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
@@ -97,6 +97,7 @@ export function TickerSection23Section24({
   const [localBenchReturns, setLocalBenchReturns] = useState(null);
   const [localReturnsBusy, setLocalReturnsBusy] = useState(false);
   const [loadingGroup, setLoadingGroup] = useState(false);
+  const coreReturnsCacheRef = useRef(new Map());
 
   const activeGroup = useMemo(() => GROUPS.find((g) => g.id === groupId) || GROUPS[0], [groupId]);
 
@@ -160,7 +161,10 @@ export function TickerSection23Section24({
     };
   }, [activeGroup.apiIndex, activeGroup.id, initialSp500Rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** When the peer ticker differs from the page symbol, one batched long-window request (ticker + benchmark). */
+  /**
+   * When the peer ticker differs from the page symbol, load only missing core payloads.
+   * This avoids refetching both symbols when only one dropdown changes.
+   */
   useEffect(() => {
     let cancelled = false;
     const symPage = String(pageSymbol || '').toUpperCase().trim();
@@ -187,24 +191,35 @@ export function TickerSection23Section24({
       };
     }
 
+    async function getCoreReturns(sym) {
+      const u = String(sym || '').toUpperCase().trim();
+      if (!u) return null;
+      const key = `${u}|${TABLE_ONLY_START_DATE}|${yesterdayIso()}`;
+      if (coreReturnsCacheRef.current.has(key)) {
+        return coreReturnsCacheRef.current.get(key);
+      }
+      const res = await fetchJsonCached({
+        path: '/api/market/ticker-core-returns',
+        method: 'POST',
+        body: {
+          ticker: u,
+          customStartDate: TABLE_ONLY_START_DATE,
+          customEndDate: yesterdayIso()
+        },
+        ttlMs: 5 * 60 * 1000
+      });
+      const payload = pickTickerReturnsFromPayload(res.data, u) || (res.data?.ticker ? res.data : null);
+      coreReturnsCacheRef.current.set(key, payload);
+      return payload;
+    }
+
     (async () => {
       setLocalReturnsBusy(true);
       try {
-        const customEndDate = yesterdayIso();
-        const res = await fetchJsonCached({
-          path: '/api/market/ticker-returns',
-          method: 'POST',
-          body: {
-            tickers: [tick, bench],
-            customStartDate: TABLE_ONLY_START_DATE,
-            customEndDate
-          },
-          ttlMs: 5 * 60 * 1000
-        });
+        const [tickData, benchData] = await Promise.all([getCoreReturns(tick), getCoreReturns(bench)]);
         if (cancelled) return;
-        const d = res.data;
-        setLocalTickerReturns(pickTickerReturnsFromPayload(d, tick));
-        setLocalBenchReturns(pickTickerReturnsFromPayload(d, bench));
+        setLocalTickerReturns(tickData);
+        setLocalBenchReturns(benchData);
       } catch {
         if (!cancelled) {
           setLocalTickerReturns(null);
