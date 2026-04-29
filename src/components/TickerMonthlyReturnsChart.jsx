@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
@@ -44,6 +45,25 @@ function parseMonthRow(period) {
   return { year, month };
 }
 
+function parseWeekRow(period) {
+  const m = String(period || '').match(/^(\d{4})-W(\d{1,2})$/i);
+  if (!m) return null;
+  const year = parseInt(m[1], 10);
+  const week = parseInt(m[2], 10);
+  if (!Number.isFinite(year) || week < 1 || week > 53) return null;
+  return { year, month: week };
+}
+
+function parseDailyRow(period) {
+  const m = String(period || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const year = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  const day = parseInt(m[3], 10);
+  if (!Number.isFinite(year) || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year, month: day };
+}
+
 function yForValue(v, innerTop, innerH, yMin, yMax) {
   const c = Math.min(yMax, Math.max(yMin, v));
   return innerTop + ((yMax - c) / (yMax - yMin)) * innerH;
@@ -51,9 +71,17 @@ function yForValue(v, innerTop, innerH, yMin, yMax) {
 
 /**
  * Monthly returns for one calendar year (Figma-style), with year dropdown + info tip.
- * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number }} props
+ * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean }} props
  */
-export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, plotHeight }) {
+export function TickerMonthlyReturnsChart({
+  symbol,
+  monthlyReturns,
+  asOfDate,
+  plotHeight,
+  periodMode = 'monthly',
+  suppressChartDateFilter = false
+}) {
+  const navigate = useNavigate();
   const [showTable, setShowTable] = useState(false);
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
 
@@ -61,7 +89,7 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
     if (!Array.isArray(monthlyReturns)) return [];
     const out = [];
     for (const r of monthlyReturns) {
-      const meta = parseMonthRow(r.period);
+      const meta = periodMode === 'weekly' ? parseWeekRow(r.period) : periodMode === 'daily' ? parseDailyRow(r.period) : parseMonthRow(r.period);
       if (!meta) continue;
       const tr = Number(r.totalReturn);
       if (!Number.isFinite(tr)) continue;
@@ -76,11 +104,12 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
     }
     out.sort((a, b) => a.year - b.year || a.month - b.month);
     return out;
-  }, [monthlyReturns]);
+  }, [monthlyReturns, periodMode]);
 
   const filteredRows = useMemo(
-    () => filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
-    [rows, rangeApplied.start, rangeApplied.end]
+    () =>
+      suppressChartDateFilter ? rows : filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
+    [rows, rangeApplied.start, rangeApplied.end, suppressChartDateFilter]
   );
 
   const availableYears = useMemo(() => {
@@ -97,12 +126,13 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
   }, [availableYears, selectedYear]);
 
   const monthValues = useMemo(() => {
-    const arr = Array.from({ length: 12 }, () => null);
+    const size = periodMode === 'weekly' ? 53 : periodMode === 'daily' ? 31 : 12;
+    const arr = Array.from({ length: size }, () => null);
     for (const r of filteredRows) {
-      if (r.year === selectedYear) arr[r.month - 1] = r.totalReturn;
+      if (r.year === selectedYear && r.month >= 1 && r.month <= size) arr[r.month - 1] = r.totalReturn;
     }
     return arr;
-  }, [filteredRows, selectedYear]);
+  }, [filteredRows, selectedYear, periodMode]);
 
   const { yMin, yMax } = useMemo(() => {
     const vals = monthValues.filter((v) => v != null && Number.isFinite(v));
@@ -124,8 +154,8 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
     const padB = 52;
     const iw = W - padL - padR;
     const ih = H - padT - padB;
-    const n = 12;
-    const gap = 0.22;
+    const n = periodMode === 'weekly' ? 53 : periodMode === 'daily' ? 31 : 12;
+    const gap = periodMode === 'weekly' ? 0.05 : periodMode === 'daily' ? 0.1 : 0.22;
     const bw = (iw / n) * (1 - gap);
     const step = iw / n;
 
@@ -152,7 +182,7 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
     });
 
     const bars = [];
-    for (let m = 1; m <= 12; m++) {
+    for (let m = 1; m <= n; m++) {
       const v = monthValues[m - 1];
       if (!Number.isFinite(v)) continue;
       const i = m - 1;
@@ -165,18 +195,22 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
       bars.push(
         <g key={m}>
           <rect x={x} y={top} width={bw} height={Math.max(h, 1)} rx={2} fill={COL_BAR} />
-          <text x={x + bw / 2} y={labY} textAnchor="middle" fill={COL_LABEL} fontSize="10" fontWeight="700">
-            {v.toFixed(1)}%
-          </text>
+          {periodMode === 'weekly' || periodMode === 'daily' ? null : (
+            <text x={x + bw / 2} y={labY} textAnchor="middle" fill={COL_LABEL} fontSize="10" fontWeight="700">
+              {v.toFixed(1)}%
+            </text>
+          )}
         </g>
       );
     }
 
-    const xLabels = Array.from({ length: 12 }, (_, i) => {
+    const every = periodMode === 'weekly' ? 4 : periodMode === 'daily' ? 5 : 1;
+    const xLabels = Array.from({ length: n }, (_, i) => {
+      if ((periodMode === 'weekly' || periodMode === 'daily') && i % every !== 0 && i !== n - 1) return null;
       const cx = padL + i * step + step / 2;
       return (
         <text key={i} x={cx} y={H - 22} textAnchor="middle" fill={COL_AXIS} fontSize="11" fontWeight="600">
-          {i + 1}
+          {periodMode === 'weekly' ? `W${i + 1}` : periodMode === 'daily' ? i + 1 : i + 1}
         </text>
       );
     });
@@ -193,7 +227,7 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
         {xLabels}
       </svg>
     );
-  }, [monthValues, yMin, yMax, plotHeight]);
+  }, [monthValues, yMin, yMax, plotHeight, periodMode]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
@@ -214,10 +248,31 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${symU}-monthly-returns-${selectedYear}.csv`;
+    a.download = `${symU}-${periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'monthly'}-returns-${selectedYear}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [selectedYearRows, selectedYear, symU]);
+  }, [selectedYearRows, selectedYear, symU, periodMode]);
+
+  const onViewMore = useCallback(() => {
+    const section = periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'monthly';
+    console.info('[view-more] monthly chart click', {
+      periodMode,
+      fromPath: window.location.pathname,
+      fromSearch: window.location.search,
+      to: `/statistic-data?section=${section}`
+    });
+    navigate(`/statistic-data?section=${section}`);
+    queueMicrotask(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    setTimeout(() => {
+      console.info('[view-more] monthly chart post-nav check', {
+        periodMode,
+        currentPath: window.location.pathname,
+        currentSearch: window.location.search
+      });
+    }, 150);
+  }, [navigate, periodMode]);
 
   if (!rows.length) {
     return (
@@ -226,7 +281,7 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
         <div className="ticker-annual-figma__section">
           <div className="ticker-monthly__head">
             <div className="ticker-monthly__title-block">
-              <span className="ticker-monthly__title">Monthly returns</span>
+              <span className="ticker-monthly__title">{periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Monthly returns'}</span>
               <DataInfoTip align="end">
                 <p className="ticker-data-tip__p">
                   <strong>Monthly returns</strong> use <code className="ticker-data-tip__code">performance.monthlyReturns</code> from{' '}
@@ -249,14 +304,16 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
               ))}
             </select>
           </div>
-          <ChartDateApplyRow
-            idPrefix="monthly-returns-empty"
-            maxDate={asOfDate}
-            onApply={({ start, end }) => setRangeApplied({ start, end })}
-          />
+          {!suppressChartDateFilter ? (
+            <ChartDateApplyRow
+              idPrefix="monthly-returns-empty"
+              maxDate={asOfDate}
+              onApply={({ start, end }) => setRangeApplied({ start, end })}
+            />
+          ) : null}
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">
-              No <code className="ticker-annual-figma__code">monthlyReturns</code> in the returns payload for {symU}.
+              No <code className="ticker-annual-figma__code">{periodMode === 'weekly' ? 'weeklyReturns' : periodMode === 'daily' ? 'dailyReturns' : 'monthlyReturns'}</code> in the returns payload for {symU}.
             </p>
           </div>
         </div>
@@ -269,7 +326,7 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
       <div className="ticker-annual-figma__section">
         <div className="ticker-monthly__head">
           <div className="ticker-monthly__title-block">
-            <span className="ticker-monthly__title">Monthly returns</span>
+            <span className="ticker-monthly__title">{periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Monthly returns'}</span>
             <DataInfoTip align="end">
               <p className="ticker-data-tip__p">
                 <strong>Data</strong>: <code className="ticker-data-tip__code">performance.monthlyReturns</code> from{' '}
@@ -317,14 +374,23 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
             </select>
           </div>
         </div>
-        <ChartDateApplyRow
-          idPrefix="monthly-returns"
-          maxDate={asOfDate}
-          onApply={({ start, end }) => setRangeApplied({ start, end })}
-        />
+        {!suppressChartDateFilter ? (
+          <ChartDateApplyRow
+            idPrefix="monthly-returns"
+            maxDate={asOfDate}
+            onApply={({ start, end }) => setRangeApplied({ start, end })}
+          />
+        ) : null}
         <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
           <div className="ticker-annual-figma__left" />
           <div className="ticker-annual-figma__right">
+            <button
+              type="button"
+              className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+              onClick={onViewMore}
+            >
+              View More
+            </button>
             <button
               type="button"
               className="ticker-annual-figma__btn"
@@ -352,7 +418,7 @@ export function TickerMonthlyReturnsChart({ symbol, monthlyReturns, asOfDate, pl
         <div className="ticker-annual-figma__legend ticker-monthly__legend">
           <span className="ticker-annual-figma__legend-item">
             <span className="ticker-monthly__swatch" aria-hidden />
-            {selectedYear}
+            {periodMode === 'weekly' ? `${selectedYear} (weeks)` : selectedYear}
           </span>
         </div>
         {showTable ? (

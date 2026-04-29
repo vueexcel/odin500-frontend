@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SidebarToggleGlyph } from './SidebarToggleGlyph.jsx';
 import odinLogo from '../assets/odin500-logo.svg';
 import odinLogoLight from '../assets/odin500-logo-light.svg';
@@ -166,6 +166,7 @@ function NavRow({ to, onClick, icon: Icon, label, badge, badgeTone, active = fal
         to={to}
         end={to === '/market'}
         className={({ isActive }) => 'app-sidebar__row' + (isActive || active ? ' app-sidebar__row--active' : '')}
+        onClick={onClick}
       >
         {content}
       </NavLink>
@@ -180,13 +181,45 @@ function NavRow({ to, onClick, icon: Icon, label, badge, badgeTone, active = fal
 }
 
 export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onRequestClose = null }) {
+  const navigate = useNavigate();
   const isExpandedView = expanded || mobileOpen;
   const location = useLocation();
+  const tickerPathMatch = location.pathname.match(
+    /^\/(?:ticker|ticker-annual|ticker-quarterly|ticker-monthly|ticker-weekly|ticker-daily)\/([^/?#]+)$/i
+  );
+  const activeTickerSymbol = tickerPathMatch?.[1] ? decodeURIComponent(tickerPathMatch[1]).trim().toUpperCase() : '';
+  const tickerSuffix = activeTickerSymbol ? `/${encodeURIComponent(activeTickerSymbol)}` : '';
+  const annualTo = `/ticker-annual${tickerSuffix}`;
+  const quarterlyTo = `/ticker-quarterly${tickerSuffix}`;
+  const monthlyTo = `/ticker-monthly${tickerSuffix}`;
+  const weeklyTo = `/ticker-weekly${tickerSuffix}`;
+  const dailyTo = `/ticker-daily${tickerSuffix}`;
   const statSection =
     location.pathname === '/statistic-data' ? new URLSearchParams(location.search).get('section') || '' : '';
+  const annualPageActive = location.pathname.startsWith('/ticker-annual');
+  const quarterlyPageActive = location.pathname.startsWith('/ticker-quarterly');
+  const monthlyPageActive = location.pathname.startsWith('/ticker-monthly');
+  const weeklyPageActive = location.pathname.startsWith('/ticker-weekly');
+  const dailyPageActive = location.pathname.startsWith('/ticker-daily');
 
   const handleAnyClick = () => {
     if (mobileOpen && typeof onRequestClose === 'function') onRequestClose();
+  };
+  const handleNavClick = (event, to) => {
+    // Keep browser affordances (new tab, middle click) intact.
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.shiftKey
+    ) {
+      return;
+    }
+    handleAnyClick();
+    event.preventDefault();
+    navigate(to);
   };
 
   return (
@@ -198,7 +231,6 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
         (mobileOpen ? ' app-sidebar--mobile-open app-sidebar--expanded' : '')
       }
       aria-label="Main navigation"
-      onClickCapture={handleAnyClick}
     >
       {!isExpandedView ? (
         <div className="app-sidebar__collapsed-only">
@@ -231,45 +263,46 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
 
           <div className="app-sidebar__scroll">
             <nav className="app-sidebar__nav" aria-label="Markets">
-              <NavRow to="/market" icon={IconGlobe} label="Markets" />
+              <NavRow to="/market" icon={IconGlobe} label="Markets" onClick={(e) => handleNavClick(e, '/market')} />
               <NavRow icon={IconGrid} label="Default Screen" onClick={() => {}} />
-              <NavRow to="/indices/dow-jones" icon={IconLineChart} label="Dow Jones" />
-              <NavRow to="/indices/nasdaq-100" icon={IconLineChart} label="Nasdaq-100" />
-              <NavRow to="/indices/sp500" icon={IconLineChart} label="SP 500" />
-              <NavRow to="/news" icon={IconNews} label="News" />
-              <NavRow to="/market-movers" icon={IconFlame} label="Market Movers" />
-              <NavRow to="/heatmap" icon={IconGrid} label="Heatmaps" />
+              <NavRow to="/indices/dow-jones" icon={IconLineChart} label="Dow Jones" onClick={(e) => handleNavClick(e, '/indices/dow-jones')} />
+              <NavRow to="/indices/nasdaq-100" icon={IconLineChart} label="Nasdaq-100" onClick={(e) => handleNavClick(e, '/indices/nasdaq-100')} />
+              <NavRow to="/indices/sp500" icon={IconLineChart} label="SP 500" onClick={(e) => handleNavClick(e, '/indices/sp500')} />
+              <NavRow to="/news" icon={IconNews} label="News" onClick={(e) => handleNavClick(e, '/news')} />
+              <NavRow to="/market-movers" icon={IconFlame} label="Market Movers" onClick={(e) => handleNavClick(e, '/market-movers')} />
+              <NavRow to="/heatmap" icon={IconGrid} label="Heatmaps" onClick={(e) => handleNavClick(e, '/heatmap')} />
             </nav>
 
             <div className="app-sidebar__section-label">pages</div>
             <nav className="app-sidebar__nav" aria-label="Page">
-              <NavRow to="/ticker" icon={IconPeople} label="Tickers" onClick={() => {}} />
+              <NavRow to="/ticker" icon={IconPeople} label="Tickers" onClick={(e) => handleNavClick(e, '/ticker')} />
             </nav>
 
             <div className="app-sidebar__section-label">Statistics</div>
             <nav className="app-sidebar__nav" aria-label="Statistics">
-              <NavRow to="/statistic-data?section=annual" icon={IconBarChart} label="Annual" active={statSection === 'annual'} />
+              <NavRow to={annualTo} icon={IconBarChart} label="Annual" active={annualPageActive} onClick={(e) => handleNavClick(e, annualTo)} />
               <NavRow
-                to="/statistic-data?section=quarterly"
+                to={quarterlyTo}
                 icon={IconBarChart}
                 label="Quarterly"
-                active={statSection === 'quarterly'}
+                active={quarterlyPageActive || statSection === 'quarterly'}
+                onClick={(e) => handleNavClick(e, quarterlyTo)}
               />
-              <NavRow to="/statistic-data?section=monthly" icon={IconBarChart} label="Monthly" active={statSection === 'monthly'} />
-              <NavRow to="/statistic-data?section=weekly" icon={IconBarChart} label="Weekly" active={statSection === 'weekly'} />
-              <NavRow to="/statistic-data?section=daily" icon={IconBarChart} label="Daily" active={statSection === 'daily'} />
+              <NavRow to={monthlyTo} icon={IconBarChart} label="Monthly" active={monthlyPageActive || statSection === 'monthly'} onClick={(e) => handleNavClick(e, monthlyTo)} />
+              <NavRow to={weeklyTo} icon={IconBarChart} label="Weekly" active={weeklyPageActive || statSection === 'weekly'} onClick={(e) => handleNavClick(e, weeklyTo)} />
+              <NavRow to={dailyTo} icon={IconBarChart} label="Daily" active={dailyPageActive || statSection === 'daily'} onClick={(e) => handleNavClick(e, dailyTo)} />
               <NavRow icon={IconLineChart} label="Relative strength" onClick={() => {}} />
               <NavRow icon={IconFocus} label="Odin Index Signals" onClick={() => {}} />
-              <NavRow to="/odin-signals" icon={IconFocus} label="Odin Signals" />
+              <NavRow to="/odin-signals" icon={IconFocus} label="Odin Signals" onClick={(e) => handleNavClick(e, '/odin-signals')} />
               <NavRow icon={IconWallet} label="Sample Odin Portfolios" onClick={() => {}} />
               <NavRow icon={IconMonitor} label="Odin Signals Performance" onClick={() => {}} />
             </nav>
 
             <div className="app-sidebar__section-label">Data</div>
             <nav className="app-sidebar__nav" aria-label="Data">
-              <NavRow to="/historical-data" icon={IconDocSearch} label="Historical data" />
+              <NavRow to="/historical-data" icon={IconDocSearch} label="Historical data" onClick={(e) => handleNavClick(e, '/historical-data')} />
               <NavRow icon={IconLineChart} label="Returns" onClick={() => {}} />
-              <NavRow to="/statistic-data" icon={IconCamera} label="Statistic Table" />
+              <NavRow to="/statistic-data" icon={IconCamera} label="Statistic Table" onClick={(e) => handleNavClick(e, '/statistic-data')} />
             </nav>
 
             <div className="app-sidebar__section-label">Premium</div>

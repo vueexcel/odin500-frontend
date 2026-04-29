@@ -120,8 +120,7 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
     event.preventDefault();
     setProfileOpen(false);
     setBellOpen(false);
-    // Force real navigation from header so URL/content never desync.
-    window.location.assign(to);
+    navigate(to);
   };
 
   useEffect(() => {

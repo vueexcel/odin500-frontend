@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Start / end date inputs + Submit (+ Clear) for client-side chart filtering.
@@ -25,6 +25,7 @@ export function ChartDateApplyRow({
 }) {
   const [start, setStart] = useState(String(initialStart || ''));
   const [end, setEnd] = useState(String(initialEnd || ''));
+  const lastAppliedRef = useRef({ start: null, end: null });
 
   const normalizedMinYear = Number.isFinite(Number(minYear)) ? Math.floor(Number(minYear)) : 1980;
   const normalizedMaxYear = Number.isFinite(Number(maxYear)) ? Math.floor(Number(maxYear)) : 2026;
@@ -47,6 +48,10 @@ export function ChartDateApplyRow({
         s = e;
         e = t;
       }
+      // Avoid feedback loops when parent passes a new onApply identity each render.
+      // Only emit when the normalized values actually changed.
+      if (lastAppliedRef.current.start === s && lastAppliedRef.current.end === e) return;
+      lastAppliedRef.current = { start: s, end: e };
       onApply({ start: s, end: e });
     },
     [maxDate, mode, onApply]
@@ -59,6 +64,7 @@ export function ChartDateApplyRow({
   const clear = useCallback(() => {
     setStart('');
     setEnd('');
+    lastAppliedRef.current = { start: '', end: '' };
     onApply({ start: '', end: '' });
   }, [onApply]);
 

@@ -47,6 +47,7 @@ const PERIOD_MENU = [
   { id: 'last-date', label: 'Last date' },
 ];
 const ODIN_HEATMAP_RESIZE_KEY = 'odin_signals_heatmap_treemap_h';
+const ODIN_HEATMAP_TABLE_PAGE_SIZE = 30;
 
 const OMX_SIGNAL_SCORES = {
   L1: 100,
@@ -111,6 +112,12 @@ function formatListDate(d) {
   }).format(d);
 }
 
+function formatPctSigned(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 'N/A';
+  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+}
+
 export default function OdinSignalsPage() {
   const chartRef = useRef(null);
   const navigate = useNavigate();
@@ -135,6 +142,7 @@ export default function OdinSignalsPage() {
   const [odinHeatmapZoom, setOdinHeatmapZoom] = useState(1);
   const [odinSignalBinSpan, setOdinSignalBinSpan] = useState(15);
   const [odinHeatmapHover, setOdinHeatmapHover] = useState('');
+  const [odinTablePage, setOdinTablePage] = useState(1);
   const odinHeatmapMainRef = useRef(null);
   const odinTreemapHostRef = useRef(null);
   const {
@@ -382,6 +390,32 @@ export default function OdinSignalsPage() {
       })),
     [indexRows]
   );
+
+  const odinTableRowsSorted = useMemo(() => {
+    const copy = [...indexRows];
+    copy.sort((a, b) => Math.abs(Number(b.ret) || 0) - Math.abs(Number(a.ret) || 0));
+    return copy;
+  }, [indexRows]);
+  const odinTableTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(odinTableRowsSorted.length / ODIN_HEATMAP_TABLE_PAGE_SIZE)),
+    [odinTableRowsSorted.length]
+  );
+  const odinTablePageSafe = Math.min(Math.max(1, odinTablePage), odinTableTotalPages);
+  const odinTableRows = useMemo(() => {
+    const start = (odinTablePageSafe - 1) * ODIN_HEATMAP_TABLE_PAGE_SIZE;
+    return odinTableRowsSorted.slice(start, start + ODIN_HEATMAP_TABLE_PAGE_SIZE);
+  }, [odinTableRowsSorted, odinTablePageSafe]);
+  const odinTablePageButtons = useMemo(() => {
+    if (odinTableTotalPages <= 1) return [1];
+    if (odinTableTotalPages <= 5) return Array.from({ length: odinTableTotalPages }, (_, i) => i + 1);
+    let start = Math.max(1, odinTablePageSafe - 2);
+    if (start + 4 > odinTableTotalPages) start = odinTableTotalPages - 4;
+    return [start, start + 1, start + 2, start + 3, start + 4];
+  }, [odinTablePageSafe, odinTableTotalPages]);
+
+  useEffect(() => {
+    setOdinTablePage(1);
+  }, [activeIndex.id, selectedPeriod, odinTableRowsSorted.length]);
 
   const toggleOdinHeatmapFullscreen = useCallback(() => {
     const el = odinHeatmapMainRef.current;
@@ -767,6 +801,110 @@ export default function OdinSignalsPage() {
                 </div>
               </footer>
             </div>
+
+            <section className="heatmap-bottom-table odin-signals-heatmap__table" aria-labelledby="odin-heatmap-table-title">
+              <div className="heatmap-bottom-table__head">
+                <h2 className="heatmap-card__title" id="odin-heatmap-table-title">
+                  {activeIndex.label} — ticker details
+                </h2>
+                <span className="heatmap-bottom-table__meta">
+                  Showing {odinTableRows.length} of {odinTableRowsSorted.length} rows (page {odinTablePageSafe}/
+                  {odinTableTotalPages})
+                </span>
+              </div>
+              <div className="heatmap-table-wrap heatmap-table-wrap--bottom">
+                <table className="heatmap-table heatmap-table--bottom">
+                  <thead>
+                    <tr>
+                      <th>Ticker</th>
+                      <th>Company</th>
+                      <th>Sector</th>
+                      <th>Industry</th>
+                      <th>Signal</th>
+                      <th>Price</th>
+                      <th>Change %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {odinTableRows.map((r) => {
+                      const v = Number(r.ret);
+                      const up = Number.isFinite(v) && v > 0;
+                      const down = Number.isFinite(v) && v < 0;
+                      return (
+                        <tr
+                          key={`${r.symbol}-${r.industry}-${r.signal}`}
+                          onMouseEnter={() => setOdinHeatmapHover(r.symbol)}
+                          onMouseLeave={() => setOdinHeatmapHover('')}
+                        >
+                          <td>
+                            <button
+                              type="button"
+                              className="index-constituents-link"
+                              onClick={() => openTickerPage(r.symbol)}
+                            >
+                              {r.symbol}
+                            </button>
+                          </td>
+                          <td>{r.security || 'N/A'}</td>
+                          <td>{r.sector || 'N/A'}</td>
+                          <td>{r.industry || 'N/A'}</td>
+                          <td>{r.signal || 'N'}</td>
+                          <td>{fmtPrice(r.price)}</td>
+                          <td
+                            className={
+                              'heatmap-table__chg' +
+                              (up ? ' heatmap-table__chg--up' : '') +
+                              (down ? ' heatmap-table__chg--down' : '')
+                            }
+                          >
+                            {formatPctSigned(r.totalReturnPercentage)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!indexLoading && !odinTableRows.length ? (
+                      <tr>
+                        <td colSpan={7} className="heatmap-table__empty">
+                          No tickers found for this selection.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+              <div className="heatmap-table-pagination" aria-label="Odin heatmap table pagination">
+                <button
+                  type="button"
+                  className="heatmap-table-pagination__btn heatmap-table-pagination__btn--nav"
+                  disabled={odinTablePageSafe <= 1}
+                  onClick={() => setOdinTablePage((p) => Math.max(1, p - 1))}
+                >
+                  Prev
+                </button>
+                {odinTablePageButtons.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={
+                      'heatmap-table-pagination__btn' +
+                      (p === odinTablePageSafe ? ' heatmap-table-pagination__btn--active' : '')
+                    }
+                    onClick={() => setOdinTablePage(p)}
+                    aria-current={p === odinTablePageSafe ? 'page' : undefined}
+                  >
+                    {p}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="heatmap-table-pagination__btn heatmap-table-pagination__btn--nav"
+                  disabled={odinTablePageSafe >= odinTableTotalPages}
+                  onClick={() => setOdinTablePage((p) => Math.min(odinTableTotalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+            </section>
           </section>
 
           {/* <div className="odin-signals-page__toolbar">

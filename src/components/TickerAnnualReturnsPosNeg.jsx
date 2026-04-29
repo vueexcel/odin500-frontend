@@ -189,10 +189,17 @@ function csvEscape(s) {
 }
 
 /**
- * Figma-style bucketed donuts + center toggle (uses `performance.annualReturns`).
- * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number }} props
+ * Figma-style bucketed donuts + center toggle (uses annual/quarterly returns payload rows).
+ * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'annual' | 'quarterly' | 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean }} props
  */
-export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate, plotHeight }) {
+export function TickerAnnualReturnsPosNeg({
+  symbol,
+  annualReturns,
+  asOfDate,
+  plotHeight,
+  periodMode = 'annual',
+  suppressChartDateFilter = false
+}) {
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const buckets = useMemo(() => bucketsForTheme(chartTheme), [chartTheme]);
   const [rightMode, setRightMode] = useState('positive');
@@ -237,10 +244,10 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate, plo
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${String(symbol || 'ticker').toUpperCase()}-annual-posneg.csv`;
+    a.download = `${String(symbol || 'ticker').toUpperCase()}-${periodMode === 'quarterly' ? 'quarterly' : periodMode === 'monthly' ? 'monthly' : periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'annual'}-posneg.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filteredRows, symbol]);
+  }, [filteredRows, symbol, periodMode]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const asOfLine = asOfDate ? (
@@ -254,12 +261,16 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate, plo
       <div className="ticker-annual-donut">
         <div className="ticker-annual-figma__section">
           <div className="ticker-annual-figma__toolbar">
-            <span className="ticker-annual-figma__badge">Annual returns — positive &amp; negative years</span>
+            <span className="ticker-annual-figma__badge">
+              {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive &amp; negative periods
+            </span>
           </div>
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">
-              No annual return series for <strong>{symU}</strong>. Uses{' '}
-              <code className="ticker-annual-figma__code">performance.annualReturns</code>.
+              No {periodMode === 'quarterly' ? 'quarterly' : periodMode === 'monthly' ? 'monthly' : periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'annual'} return series for <strong>{symU}</strong>. Uses{' '}
+              <code className="ticker-annual-figma__code">
+                performance.{periodMode === 'quarterly' ? 'quarterlyReturns' : periodMode === 'monthly' ? 'monthlyReturns' : periodMode === 'weekly' ? 'weeklyReturns' : periodMode === 'daily' ? 'dailyReturns' : 'annualReturns'}
+              </code>.
             </p>
           </div>
         </div>
@@ -273,18 +284,22 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate, plo
     <div className="ticker-annual-donut">
       <div className="ticker-annual-figma__section ticker-annual-donut__section">
         <div className="ticker-annual-figma__toolbar">
-          <span className="ticker-annual-figma__badge">Annual returns — positive &amp; negative years</span>
+          <span className="ticker-annual-figma__badge">
+            {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive &amp; negative periods
+          </span>
         </div>
-        <ChartDateApplyRow
-          idPrefix="annual-posneg"
-          maxDate={asOfDate}
-          mode="year"
-          minYear={1980}
-          maxYear={2026}
-          initialStart="2018"
-          initialEnd={String(asOfDate || '').slice(0, 4)}
-          onApply={({ start, end }) => setRangeApplied({ start, end })}
-        />
+        {!suppressChartDateFilter ? (
+          <ChartDateApplyRow
+            idPrefix="annual-posneg"
+            maxDate={asOfDate}
+            mode={periodMode === 'daily' ? 'date' : 'year'}
+            minYear={1980}
+            maxYear={2026}
+            initialStart={periodMode === 'daily' ? '' : '2018'}
+            initialEnd={periodMode === 'daily' ? '' : String(asOfDate || '').slice(0, 4)}
+            onApply={({ start, end }) => setRangeApplied({ start, end })}
+          />
+        ) : null}
         <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
           <div className="ticker-annual-figma__left" />
           <div className="ticker-annual-figma__right">
@@ -340,8 +355,11 @@ export function TickerAnnualReturnsPosNeg({ symbol, annualReturns, asOfDate, plo
                 <div className="ticker-annual-donut__panel-tip">
                   <DataInfoTip align="end">
                     <p className="ticker-data-tip__p">
-                      <strong>Years, total</strong>: every row in{' '}
-                      <code className="ticker-data-tip__code">performance.annualReturns</code> is counted once. Each year
+                        <strong>Years, total</strong>: every row in{' '}
+                        <code className="ticker-data-tip__code">
+                          performance.{periodMode === 'quarterly' ? 'quarterlyReturns' : periodMode === 'monthly' ? 'monthlyReturns' : periodMode === 'weekly' ? 'weeklyReturns' : periodMode === 'daily' ? 'dailyReturns' : 'annualReturns'}
+                        </code>{' '}
+                        is counted once. Each period
                       is placed in a <strong>return magnitude</strong> band using <strong>|totalReturn|</strong> (absolute
                       %): 0–1%, 1–2.5%, 2.5–5%, 5–10%, or &gt;10%.
                     </p>

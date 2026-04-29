@@ -1,4 +1,5 @@
 import { useCallback, useId, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { useTickerPlotResize } from '../hooks/useTickerPlotResize.js';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
@@ -13,6 +14,7 @@ const COL_GRID = 'rgba(148, 163, 184, 0.14)';
 const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
 const COL_AXIS = '#94a3b8';
 const COL_LABEL = '#e2e8f0';
+const YEAR_PALETTE = ['#38bdf8', '#f97316', '#64748b', '#eab308', '#7dd3fc', '#a78bfa', '#34d399', '#fb7185', '#f472b6', '#22d3ee'];
 
 /** “Nice” tick step for ~`targetCount` intervals across `span`. */
 function pickNiceStep(span, targetCount) {
@@ -99,6 +101,43 @@ function parseYear(period) {
   return Number.isFinite(y) ? y : NaN;
 }
 
+function parseQuarter(period) {
+  const m = String(period || '').match(/^(\d{4})-Q([1-4])$/i);
+  if (!m) return null;
+  const year = parseInt(m[1], 10);
+  const q = parseInt(m[2], 10);
+  if (!Number.isFinite(year) || !Number.isFinite(q)) return null;
+  return { year, q };
+}
+
+function parseMonth(period) {
+  const m = String(period || '').match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  const year = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+function parseWeek(period) {
+  const m = String(period || '').match(/^(\d{4})-W(\d{1,2})$/i);
+  if (!m) return null;
+  const year = parseInt(m[1], 10);
+  const week = parseInt(m[2], 10);
+  if (!Number.isFinite(year) || !Number.isFinite(week) || week < 1 || week > 53) return null;
+  return { year, week };
+}
+
+function parseDaily(period) {
+  const m = String(period || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const year = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  const day = parseInt(m[3], 10);
+  if (!Number.isFinite(year) || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year, month, day };
+}
+
 function median(nums) {
   const arr = nums.filter((n) => Number.isFinite(n));
   if (!arr.length) return null;
@@ -151,7 +190,7 @@ function csvEscape(s) {
 
 /**
  * Figma-style annual returns + stats (uses `performance.annualReturns` from ticker-returns API).
- * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, resizeStorageKey?: string, resizeDefaultHeight?: number }} props
+ * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, resizeStorageKey?: string, resizeDefaultHeight?: number, periodMode?: 'annual' | 'quarterly' | 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean }} props
  */
 export function TickerAnnualReturnsFigma({
   symbol,
@@ -159,8 +198,11 @@ export function TickerAnnualReturnsFigma({
   asOfDate,
   plotHeight,
   resizeStorageKey,
-  resizeDefaultHeight = 260
+  resizeDefaultHeight = 260,
+  periodMode = 'annual',
+  suppressChartDateFilter = false
 }) {
+  const navigate = useNavigate();
   const resize = useTickerPlotResize(resizeStorageKey ?? null, resizeDefaultHeight);
   const plotPx = resize.plotHeight ?? plotHeight;
   const clipComboId = useId().replace(/:/g, '');
@@ -171,23 +213,112 @@ export function TickerAnnualReturnsFigma({
 
   const rows = useMemo(() => {
     if (!Array.isArray(annualReturns)) return [];
-    return [...annualReturns]
-      .map((r) => ({
-        period: r.period,
-        startDate: r.startDate,
-        endDate: r.endDate,
-        startPrice: r.startPrice,
-        endPrice: r.endPrice,
-        totalReturn: Number(r.totalReturn),
-        year: parseYear(r.period)
-      }))
-      .filter((r) => Number.isFinite(r.year) && Number.isFinite(r.totalReturn))
-      .sort((a, b) => a.year - b.year);
-  }, [annualReturns]);
+    const mapped = [...annualReturns]
+      .map((r) => {
+        const period = String(r?.period || '');
+        const totalReturn = Number(r?.totalReturn);
+        if (!Number.isFinite(totalReturn)) return null;
+        if (periodMode === 'quarterly') {
+          const q = parseQuarter(period);
+          if (!q) return null;
+          return {
+            period,
+            startDate: r?.startDate,
+            endDate: r?.endDate,
+            startPrice: r?.startPrice,
+            endPrice: r?.endPrice,
+            totalReturn,
+            year: q.year,
+            quarter: q.q,
+            rowKey: period,
+            xLabel: period
+          };
+        }
+        if (periodMode === 'monthly') {
+          const m = parseMonth(period);
+          if (!m) return null;
+          return {
+            period,
+            startDate: r?.startDate,
+            endDate: r?.endDate,
+            startPrice: r?.startPrice,
+            endPrice: r?.endPrice,
+            totalReturn,
+            year: m.year,
+            quarter: null,
+            month: m.month,
+            rowKey: period,
+            xLabel: period
+          };
+        }
+        if (periodMode === 'weekly') {
+          const w = parseWeek(period);
+          if (!w) return null;
+          return {
+            period,
+            startDate: r?.startDate,
+            endDate: r?.endDate,
+            startPrice: r?.startPrice,
+            endPrice: r?.endPrice,
+            totalReturn,
+            year: w.year,
+            quarter: null,
+            month: null,
+            week: w.week,
+            rowKey: period,
+            xLabel: period
+          };
+        }
+        if (periodMode === 'daily') {
+          const d = parseDaily(period);
+          if (!d) return null;
+          return {
+            period,
+            startDate: r?.startDate,
+            endDate: r?.endDate,
+            startPrice: r?.startPrice,
+            endPrice: r?.endPrice,
+            totalReturn,
+            year: d.year,
+            quarter: null,
+            month: d.month,
+            week: null,
+            day: d.day,
+            rowKey: period,
+            xLabel: period
+          };
+        }
+        const y = parseYear(period);
+        if (!Number.isFinite(y)) return null;
+        return {
+          period,
+          startDate: r?.startDate,
+          endDate: r?.endDate,
+          startPrice: r?.startPrice,
+          endPrice: r?.endPrice,
+          totalReturn,
+          year: y,
+          quarter: null,
+          rowKey: String(y),
+          xLabel: String(y)
+        };
+      })
+      .filter(Boolean);
+    mapped.sort(
+      (a, b) =>
+        a.year - b.year ||
+        (a.quarter || 0) - (b.quarter || 0) ||
+        (a.month || 0) - (b.month || 0) ||
+        (a.week || 0) - (b.week || 0) ||
+        (a.day || 0) - (b.day || 0)
+    );
+    return mapped;
+  }, [annualReturns, periodMode]);
 
   const displayRows = useMemo(
-    () => filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
-    [rows, rangeApplied.start, rangeApplied.end]
+    () =>
+      suppressChartDateFilter ? rows : filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
+    [rows, rangeApplied.start, rangeApplied.end, suppressChartDateFilter]
   );
 
   const stats = useMemo(() => {
@@ -227,10 +358,40 @@ export function TickerAnnualReturnsFigma({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${String(symbol || 'ticker').toUpperCase()}-annual-returns.csv`;
+    a.download = `${String(symbol || 'ticker').toUpperCase()}-${periodMode === 'quarterly' ? 'quarterly' : periodMode === 'monthly' ? 'monthly' : periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'annual'}-returns.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [displayRows, symbol]);
+  }, [displayRows, symbol, periodMode]);
+
+  const onViewMore = useCallback(() => {
+    const section =
+      periodMode === 'quarterly'
+        ? 'quarterly'
+        : periodMode === 'monthly'
+          ? 'monthly'
+          : periodMode === 'weekly'
+            ? 'weekly'
+            : periodMode === 'daily'
+              ? 'daily'
+              : 'annual';
+    console.info('[view-more] annual figma click', {
+      periodMode,
+      fromPath: window.location.pathname,
+      fromSearch: window.location.search,
+      to: `/statistic-data?section=${section}`
+    });
+    navigate(`/statistic-data?section=${section}`);
+    queueMicrotask(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    setTimeout(() => {
+      console.info('[view-more] annual figma post-nav check', {
+        periodMode,
+        currentPath: window.location.pathname,
+        currentSearch: window.location.search
+      });
+    }, 150);
+  }, [navigate, periodMode]);
 
   const comboSvg = useMemo(() => {
     if (!displayRows.length || !stats) return null;
@@ -249,6 +410,11 @@ export function TickerAnnualReturnsFigma({
 
     const returns = displayRows.map((r) => r.totalReturn);
     const { yMin, yMax, ticks: yTicks } = computePercentAxis(returns, stats.avg, plotPx, H, ih);
+    const yearColors = new Map();
+    if (periodMode === 'monthly') {
+      const years = [...new Set(displayRows.map((r) => r.year))].sort((a, b) => a - b);
+      years.forEach((y, i) => yearColors.set(y, YEAR_PALETTE[i % YEAR_PALETTE.length]));
+    }
 
     const gridLines = yTicks.map((t) => {
       const y = yForValueAxis(t, padT, ih, yMin, yMax);
@@ -276,7 +442,15 @@ export function TickerAnnualReturnsFigma({
       const top = Math.min(y0, y1);
       const h = Math.abs(y1 - y0);
       return (
-        <rect key={`r-${r.year}`} x={x} y={top} width={bw} height={Math.max(h, 1)} rx={2} fill={COL_BAR}>
+        <rect
+          key={`r-${r.rowKey}`}
+          x={x}
+          y={top}
+          width={bw}
+          height={Math.max(h, 1)}
+          rx={2}
+          fill={periodMode === 'monthly' ? yearColors.get(r.year) || COL_BAR : COL_BAR}
+        >
           <title>
             {r.year}: {r.totalReturn >= 0 ? '+' : ''}
             {r.totalReturn.toFixed(2)}% (Y {yMin.toFixed(0)}%–{yMax.toFixed(0)}%)
@@ -285,7 +459,32 @@ export function TickerAnnualReturnsFigma({
       );
     });
 
+    const shouldLabelBar = (r, i) => {
+      if (periodMode === 'monthly') {
+        if (n <= 24) return true;
+        if (Math.abs(Number(r.totalReturn)) >= 12) return true; // keep only strong moves on dense monthly view
+        return false;
+      }
+      if (periodMode === 'weekly') {
+        // Weekly series is very dense; only annotate extreme moves.
+        if (n <= 24) return true;
+        if (Math.abs(Number(r.totalReturn)) >= 20) return true;
+        return false;
+      }
+      if (periodMode === 'daily') {
+        if (n <= 18) return true;
+        if (Math.abs(Number(r.totalReturn)) >= 4) return true;
+        return false;
+      }
+      if (periodMode === 'quarterly') {
+        if (n <= 32) return true;
+        return Math.abs(Number(r.totalReturn)) >= 15;
+      }
+      return true;
+    };
+
     const barLabels = displayRows.map((r, i) => {
+      if (!shouldLabelBar(r, i)) return null;
       const x = padL + i * step + (step - bw) / 2;
       const y0 = yForValueAxis(0, padT, ih, yMin, yMax);
       const y1 = yForValueAxis(r.totalReturn, padT, ih, yMin, yMax);
@@ -293,7 +492,7 @@ export function TickerAnnualReturnsFigma({
       const h = Math.abs(y1 - y0);
       const labY = r.totalReturn >= 0 ? top - 6 : top + h + 14;
       return (
-        <text key={`t-${r.year}`} x={x + bw / 2} y={labY} textAnchor="middle" fill={COL_LABEL} fontSize="11" fontWeight="700">
+        <text key={`t-${r.rowKey}`} x={x + bw / 2} y={labY} textAnchor="middle" fill={COL_LABEL} fontSize="11" fontWeight="700">
           {r.totalReturn >= 0 ? '+' : ''}
           {r.totalReturn.toFixed(0)}%
         </text>
@@ -303,11 +502,54 @@ export function TickerAnnualReturnsFigma({
     const avgY = yForValueAxis(stats.avg, padT, ih, yMin, yMax);
     const avgLabelY = avgY < padT + 16 ? avgY + 14 : avgY - 5;
 
+    const labelEvery =
+      periodMode === 'monthly'
+        ? n > 72
+          ? 12
+          : n > 48
+            ? 6
+            : n > 24
+              ? 3
+              : 1
+        : n > 28
+          ? 4
+          : n > 14
+            ? 2
+            : 1;
     const xLabels = displayRows.map((r, i) => {
+      if (periodMode === 'monthly') {
+        const isJanuary = r.month === 1;
+        if (!(isJanuary || i === 0 || i === n - 1 || i % labelEvery === 0)) return null;
+      } else if (periodMode === 'weekly') {
+        const isYearStart = r.week === 1;
+        // Keep weekly axis clean: year markers only + final point.
+        if (!(isYearStart || i === n - 1)) return null;
+      } else if (periodMode === 'daily') {
+        const isMonthStart = r.day === 1;
+        if (!(isMonthStart || i === 0 || i === n - 1 || i % 5 === 0)) return null;
+      } else if (i % labelEvery !== 0 && i !== n - 1) {
+        return null;
+      }
       const cx = padL + i * step + step / 2;
+      const txt =
+        periodMode === 'monthly'
+          ? r.month === 1
+            ? String(r.year)
+            : r.xLabel
+          : periodMode === 'weekly'
+            ? r.week === 1
+              ? String(r.year)
+              : i === n - 1
+                ? `W${String(r.week || '').padStart(2, '0')}`
+                : ''
+            : periodMode === 'daily'
+              ? r.day === 1
+                ? `${String(r.month).padStart(2, '0')}/${String(r.day).padStart(2, '0')}`
+                : String(r.day)
+            : r.xLabel;
       return (
-        <text key={r.year} x={cx} y={H - 28} textAnchor="middle" fill={COL_AXIS} fontSize="11" fontWeight="600">
-          {r.year}
+        <text key={`xl-${r.rowKey}`} x={cx} y={H - 28} textAnchor="middle" fill={COL_AXIS} fontSize="11" fontWeight="600">
+          {txt}
         </text>
       );
     });
@@ -318,7 +560,7 @@ export function TickerAnnualReturnsFigma({
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="xMidYMid meet"
         style={tickerSvgPlotStyle(plotPx)}
-        aria-label={`Annual returns bar chart, Y-axis ${formatTickPct(yMin)} to ${formatTickPct(yMax)} from data range; resize to show finer grid labels.`}
+        aria-label={`${periodMode === 'quarterly' ? 'Quarterly' : periodMode === 'monthly' ? 'Monthly' : periodMode === 'weekly' ? 'Weekly' : periodMode === 'daily' ? 'Daily' : 'Annual'} returns bar chart, Y-axis ${formatTickPct(yMin)} to ${formatTickPct(yMax)} from data range; resize to show finer grid labels.`}
       >
         <defs>
           <clipPath id={clipComboId}>
@@ -350,7 +592,13 @@ export function TickerAnnualReturnsFigma({
         {xLabels}
       </svg>
     );
-  }, [clipComboId, displayRows, stats, plotPx]);
+  }, [clipComboId, displayRows, stats, plotPx, periodMode]);
+
+  const monthlyYearLegend = useMemo(() => {
+    if (periodMode !== 'monthly' || !displayRows.length) return [];
+    const years = [...new Set(displayRows.map((r) => r.year))].sort((a, b) => a - b);
+    return years.map((y, i) => ({ year: y, color: YEAR_PALETTE[i % YEAR_PALETTE.length] }));
+  }, [displayRows, periodMode]);
 
   const summaryBars = useMemo(() => {
     if (!stats) return null;
@@ -528,12 +776,18 @@ export function TickerAnnualReturnsFigma({
       <div className="ticker-annual-figma">
         <div className="ticker-annual-figma__section">
           <div className="ticker-annual-figma__toolbar">
-            <span className="ticker-annual-figma__badge">Annual returns</span>
+            <span className="ticker-annual-figma__badge">
+              {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'}
+            </span>
           </div>
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">
-              No annual return series yet. Load completes after <strong>ticker-returns</strong> returns{' '}
-              <code className="ticker-annual-figma__code">performance.annualReturns</code> for {String(symbol).toUpperCase()}.
+              No {periodMode === 'quarterly' ? 'quarterly' : periodMode === 'monthly' ? 'monthly' : periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'annual'} return series yet. Load completes after{' '}
+              <strong>ticker-returns</strong> returns{' '}
+              <code className="ticker-annual-figma__code">
+                performance.{periodMode === 'quarterly' ? 'quarterlyReturns' : periodMode === 'monthly' ? 'monthlyReturns' : periodMode === 'weekly' ? 'weeklyReturns' : periodMode === 'daily' ? 'dailyReturns' : 'annualReturns'}
+              </code>{' '}
+              for {String(symbol).toUpperCase()}.
             </p>
             {asOfDate ? (
               <p className="ticker-annual-figma__empty-sub">As of {asOfDate} from returns payload.</p>
@@ -553,9 +807,17 @@ export function TickerAnnualReturnsFigma({
       >
         <div className="ticker-annual-figma__toolbar">
           <span className="ticker-annual-figma__badge">
-            Annual returns <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualReturns} align="end" />
+            {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'}{' '}
+            <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualReturns} align="end" />
           </span>
           <div className="ticker-annual-figma__actions">
+            <button
+              type="button"
+              className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+              onClick={onViewMore}
+            >
+              View More
+            </button>
             <button
               type="button"
               className="ticker-annual-figma__btn ticker-annual-figma__btn--primary"
@@ -568,16 +830,18 @@ export function TickerAnnualReturnsFigma({
             </button>
           </div>
         </div>
-        <ChartDateApplyRow
-          idPrefix="annual-figma"
-          maxDate={asOfDate}
-          mode="year"
-          minYear={1980}
-          maxYear={2026}
-          initialStart="2018"
-          initialEnd={String(asOfDate || '').slice(0, 4)}
-          onApply={({ start, end }) => setRangeApplied({ start, end })}
-        />
+        {!suppressChartDateFilter ? (
+          <ChartDateApplyRow
+            idPrefix="annual-figma"
+            maxDate={asOfDate}
+            mode={periodMode === 'daily' ? 'date' : 'year'}
+            minYear={1980}
+            maxYear={2026}
+            initialStart={periodMode === 'daily' ? '' : '2018'}
+            initialEnd={periodMode === 'daily' ? '' : String(asOfDate || '').slice(0, 4)}
+            onApply={({ start, end }) => setRangeApplied({ start, end })}
+          />
+        ) : null}
         <div className="ticker-annual-figma__chart-card">
           {comboSvg ? (
             comboSvg
@@ -588,10 +852,19 @@ export function TickerAnnualReturnsFigma({
           )}
         </div>
         <div className="ticker-annual-figma__legend">
-          <span className="ticker-annual-figma__legend-item">
-            <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden />
-            Annual return (%)
-          </span>
+          {periodMode === 'monthly' ? (
+            monthlyYearLegend.map((it) => (
+              <span key={`yl-${it.year}`} className="ticker-annual-figma__legend-item">
+                <span className="ticker-annual-figma__swatch" aria-hidden style={{ background: it.color }} />
+                {it.year}
+              </span>
+            ))
+          ) : (
+            <span className="ticker-annual-figma__legend-item">
+              <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden />
+              Annual return (%)
+            </span>
+          )}
           <span className="ticker-annual-figma__legend-item">
             <span className="ticker-annual-figma__swatch-line" aria-hidden />
             Av. return (%)
@@ -602,7 +875,7 @@ export function TickerAnnualReturnsFigma({
             <table className="ticker-annual-figma__table">
               <thead>
                 <tr>
-                  <th>Year</th>
+                  <th>{periodMode === 'annual' ? 'Year' : 'Period'}</th>
                   <th>Start</th>
                   <th>End</th>
                   <th>Total return %</th>
@@ -612,8 +885,8 @@ export function TickerAnnualReturnsFigma({
               </thead>
               <tbody>
                 {displayRows.map((r) => (
-                  <tr key={r.year}>
-                    <td>{r.year}</td>
+                  <tr key={r.rowKey}>
+                    <td>{periodMode === 'annual' ? r.year : r.period}</td>
                     <td>{r.startDate ?? '—'}</td>
                     <td>{r.endDate ?? '—'}</td>
                     <td>{r.totalReturn.toFixed(2)}</td>

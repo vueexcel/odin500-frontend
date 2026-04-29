@@ -15,6 +15,11 @@ import TickerPage from './pages/TickerPage.jsx';
 import IndexPage from './pages/IndexPage.jsx';
 import MarketMoversPage from './pages/MarketMoversPage.jsx';
 import StatisticDataPage from './pages/StatisticDataPage.jsx';
+import TickerAnnualPage from './pages/TickerAnnualPage.jsx';
+import TickerQuarterlyPage from './pages/TickerQuarterlyPage.jsx';
+import TickerMonthlyPage from './pages/TickerMonthlyPage.jsx';
+import TickerWeeklyPage from './pages/TickerWeeklyPage.jsx';
+import TickerDailyPage from './pages/TickerDailyPage.jsx';
 import HistoricalDataPage from './pages/HistoricalDataPage.jsx';
 import NewsPage from './pages/NewsPage.jsx';
 import Pricing from './pages/Pricing.jsx';
@@ -32,8 +37,16 @@ function ProtectedRoute({ children }) {
 
 function AppRoutes() {
   const location = useLocation();
+  React.useEffect(() => {
+    console.info('[router] AppRoutes location changed', {
+      pathname: location.pathname,
+      search: location.search,
+      key: location.key
+    });
+  }, [location.pathname, location.search, location.key]);
+
   return (
-    <Routes location={location} key={location.pathname}>
+    <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/signup/verify-email" element={<SignupVerifyEmailPage />} />
@@ -56,6 +69,11 @@ function AppRoutes() {
         <Route path="/news" element={<NewsPage />} />
         <Route path="/odin-signals" element={<OdinSignalsPage />} />
         <Route path="/statistic-data" element={<StatisticDataPage />} />
+        <Route path="/ticker-annual/:symbol?" element={<TickerAnnualPage />} />
+        <Route path="/ticker-quarterly/:symbol?" element={<TickerQuarterlyPage />} />
+        <Route path="/ticker-monthly/:symbol?" element={<TickerMonthlyPage />} />
+        <Route path="/ticker-weekly/:symbol?" element={<TickerWeeklyPage />} />
+        <Route path="/ticker-daily/:symbol?" element={<TickerDailyPage />} />
         <Route path="/historical-data" element={<HistoricalDataPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/premium" element={<Pricing />} />

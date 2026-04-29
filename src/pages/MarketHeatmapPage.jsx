@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
 import { SectorTreemap } from '../components/SectorTreemap.jsx';
+import { resolveTreemapRows } from '../components/SectorTreemap.jsx';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
@@ -30,6 +32,7 @@ const PERIOD_LABEL_OVERRIDES = {
   'last-5-years': '5 year performance',
   'last-10-years': '10 year performance'
 };
+const HEATMAP_TABLE_PAGE_SIZE = 30;
 
 function norm(s) {
   return String(s || '')
@@ -75,7 +78,35 @@ function parsePct(v) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+function rowSubIndustry(row) {
+  return (
+    row?.subIndustry ||
+    row?.sub_industry ||
+    row?.subindustry ||
+    row?.SubIndustry ||
+    row?.Sub_Industry ||
+    '—'
+  );
+}
+
+function rowWeight(row) {
+  const candidates = [
+    row?.weight,
+    row?.Weight,
+    row?.indexWeight,
+    row?.index_weight,
+    row?.weightPercent,
+    row?.weight_percentage
+  ];
+  for (const c of candidates) {
+    const n = Number(c);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
 export default function MarketHeatmapPage() {
+  const navigate = useNavigate();
   usePageSeo({
     title: 'Market Heatmap by Index and Sector | Odin500',
     description:
@@ -93,6 +124,7 @@ export default function MarketHeatmapPage() {
   const [hoverSymbol, setHoverSymbol] = useState('');
   const [scaleSpan, setScaleSpan] = useState(3);
   const [zoom, setZoom] = useState(1);
+  const [tablePage, setTablePage] = useState(1);
   const mainRef = useRef(null);
   const treemapHostRef = useRef(null);
   const indicesInitRef = useRef(false);
@@ -192,15 +224,33 @@ export default function MarketHeatmapPage() {
     );
   }, [rows, searchQuery]);
 
-  const tableRows = useMemo(() => {
-    const copy = [...filteredRows];
+  const sortedRows = useMemo(() => {
+    const copy = [...resolveTreemapRows(filteredRows)];
     copy.sort((a, b) => {
       const da = Math.abs(parsePct(a.totalReturnPercentage) || 0);
       const db = Math.abs(parsePct(b.totalReturnPercentage) || 0);
       return db - da;
     });
-    return copy.slice(0, 80);
+    return copy;
   }, [filteredRows]);
+  const leftTableRows = useMemo(() => sortedRows.slice(0, 80), [sortedRows]);
+
+  const tableTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(sortedRows.length / HEATMAP_TABLE_PAGE_SIZE)),
+    [sortedRows.length]
+  );
+  const tablePageSafe = Math.min(Math.max(1, tablePage), tableTotalPages);
+  const tableRows = useMemo(() => {
+    const start = (tablePageSafe - 1) * HEATMAP_TABLE_PAGE_SIZE;
+    return sortedRows.slice(start, start + HEATMAP_TABLE_PAGE_SIZE);
+  }, [sortedRows, tablePageSafe]);
+  const tablePageButtons = useMemo(() => {
+    if (tableTotalPages <= 1) return [1];
+    if (tableTotalPages <= 5) return Array.from({ length: tableTotalPages }, (_, i) => i + 1);
+    let start = Math.max(1, tablePageSafe - 2);
+    if (start + 4 > tableTotalPages) start = tableTotalPages - 4;
+    return [start, start + 1, start + 2, start + 3, start + 4];
+  }, [tablePageSafe, tableTotalPages]);
 
   const periodSelectOptions = useMemo(() => {
     if (!periodOptions.length) {
@@ -218,6 +268,10 @@ export default function MarketHeatmapPage() {
       setPeriodValue(periodSelectOptions[0].value);
     }
   }, [periodSelectOptions, periodValue]);
+
+  useEffect(() => {
+    setTablePage(1);
+  }, [indexMenuId, periodValue, searchQuery, sortedRows.length]);
 
   const scaleMin = -scaleSpan;
   const scaleMax = scaleSpan;
@@ -258,6 +312,14 @@ export default function MarketHeatmapPage() {
 
   const zoomIn = () => setZoom((z) => Math.min(2.25, Math.round((z + 0.25) * 100) / 100));
   const zoomOut = () => setZoom((z) => Math.max(0.75, Math.round((z - 0.25) * 100) / 100));
+  const openTickerPage = useCallback(
+    (sym) => {
+      const clean = String(sym || '').toUpperCase().trim();
+      if (!clean) return;
+      navigate(`/ticker/${encodeURIComponent(clean)}?ticker=${encodeURIComponent(clean)}`);
+    },
+    [navigate]
+  );
 
   return (
     <div className="heatmap-page">
@@ -344,7 +406,7 @@ export default function MarketHeatmapPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tableRows.map((t) => {
+                  {leftTableRows.map((t) => {
                     const pct = parsePct(t.totalReturnPercentage);
                     const neg = Number.isFinite(pct) && pct < 0;
                     const pos = Number.isFinite(pct) && pct > 0;
@@ -355,7 +417,13 @@ export default function MarketHeatmapPage() {
                         onMouseLeave={() => setHoverSymbol('')}
                       >
                         <td>
-                          <span className="heatmap-table__ticker">{t.symbol}</span>
+                          <button
+                            type="button"
+                            className="index-constituents-link"
+                            onClick={() => openTickerPage(t.symbol)}
+                          >
+                            {t.symbol}
+                          </button>
                         </td>
                         <td>{formatPriceEu(t.price)}</td>
                         <td
@@ -452,6 +520,116 @@ export default function MarketHeatmapPage() {
               </div>
             )}
           </div>
+
+          <section className="heatmap-bottom-table" aria-labelledby="heatmap-bottom-table-title">
+            <div className="heatmap-bottom-table__head">
+              <h2 className="heatmap-card__title" id="heatmap-bottom-table-title">
+                {activeMenu.label} Tickers
+              </h2>
+              <span className="heatmap-bottom-table__meta">
+                Showing {tableRows.length} of {sortedRows.length} rows (page {tablePageSafe}/{tableTotalPages})
+              </span>
+            </div>
+            <div className="heatmap-table-wrap heatmap-table-wrap--bottom">
+              <table className="heatmap-table heatmap-table--bottom">
+                <thead>
+                  <tr>
+                    <th>Ticker</th>
+                    <th>Company</th>
+                    <th>Sector</th>
+                    <th>Industry</th>
+                    <th>Price</th>
+                    <th>Change %</th>
+                    <th>Signal</th>
+                    <th>Weight</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableRows.map((t) => {
+                    const pct = parsePct(t.totalReturnPercentage);
+                    const neg = Number.isFinite(pct) && pct < 0;
+                    const pos = Number.isFinite(pct) && pct > 0;
+                    const weight = rowWeight(t);
+                    const tileSize =
+                      Number.isFinite(Number(t.__tmw)) && Number(t.__tmw) > 0 ? Number(t.__tmw) : null;
+                    return (
+                      <tr
+                        key={`${t.symbol}-${t.industry || ''}-${t.sector || ''}`}
+                        onMouseEnter={() => setHoverSymbol(String(t.symbol || ''))}
+                        onMouseLeave={() => setHoverSymbol('')}
+                      >
+                        <td>
+                          <button
+                            type="button"
+                            className="index-constituents-link"
+                            onClick={() => openTickerPage(t.symbol)}
+                          >
+                            {t.symbol || 'N/A'}
+                          </button>
+                        </td>
+                        <td>{t.security || 'N/A'}</td>
+                        <td>{t.sector || 'N/A'}</td>
+                        <td>{t.industry || 'N/A'}</td>
+                        <td>{formatPriceEu(t.price)}</td>
+                        <td
+                          className={
+                            'heatmap-table__chg' +
+                            (pos ? ' heatmap-table__chg--up' : '') +
+                            (neg ? ' heatmap-table__chg--down' : '')
+                          }
+                        >
+                          {formatPctEuSigned(t.totalReturnPercentage)}
+                        </td>
+                        <td>{t.signal || 'N'}</td>
+                        <td title={weight != null ? `Raw weight: ${weight}` : 'No raw weight available'}>
+                          {tileSize != null ? tileSize.toFixed(3) : 'N/A'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!loading && !tableRows.length ? (
+                    <tr>
+                      <td colSpan={9} className="heatmap-table__empty">
+                        No tickers found for this index/period.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+            <div className="heatmap-table-pagination" aria-label="Heatmap ticker pagination">
+              <button
+                type="button"
+                className="heatmap-table-pagination__btn heatmap-table-pagination__btn--nav"
+                disabled={tablePageSafe <= 1}
+                onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+              >
+                Prev
+              </button>
+              {tablePageButtons.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={
+                    'heatmap-table-pagination__btn' +
+                    (p === tablePageSafe ? ' heatmap-table-pagination__btn--active' : '')
+                  }
+                  onClick={() => setTablePage(p)}
+                  aria-current={p === tablePageSafe ? 'page' : undefined}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="heatmap-table-pagination__btn heatmap-table-pagination__btn--nav"
+                disabled={tablePageSafe >= tableTotalPages}
+                onClick={() => setTablePage((p) => Math.min(tableTotalPages, p + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </section>
 
           <footer className="heatmap-scale-bar">
             <div className="heatmap-scale-bar__swatches">

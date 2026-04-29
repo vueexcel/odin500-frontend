@@ -45,15 +45,10 @@ function csvEscape(v) {
   return s;
 }
 
-function computeCagr(beginValue, endValue, startIso, endIso) {
-  const start = new Date(`${String(startIso || '').slice(0, 10)}T12:00:00`);
-  const end = new Date(`${String(endIso || '').slice(0, 10)}T12:00:00`);
-  if (!Number.isFinite(beginValue) || !Number.isFinite(endValue) || beginValue <= 0) return null;
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null;
-  const years = (end.getTime() - start.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-  if (!Number.isFinite(years) || years <= 0) return null;
-  const cagr = (Math.pow(endValue / beginValue, 1 / years) - 1) * 100;
-  return Number.isFinite(cagr) ? cagr : null;
+function computeReturnPct(openValue, closeValue) {
+  if (!Number.isFinite(openValue) || !Number.isFinite(closeValue) || openValue === 0) return null;
+  const pct = ((closeValue - openValue) / openValue) * 100;
+  return Number.isFinite(pct) ? pct : null;
 }
 
 export default function HistoricalDataPage() {
@@ -113,17 +108,15 @@ export default function HistoricalDataPage() {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(rows.length / PAGE_SIZE)), [rows.length]);
   const pageSafe = Math.min(Math.max(1, page), totalPages);
-  const cagrByDate = useMemo(() => {
+  const returnPctByDate = useMemo(() => {
     if (!rows.length) return new Map();
-    const oldest = rows[rows.length - 1];
-    const startIso = rowDateToTimeKey(oldest);
-    const baseClose = pickNum(oldest, ['Close', 'close']);
     const out = new Map();
     for (const row of rows) {
-      const endIso = rowDateToTimeKey(row);
-      const endClose = pickNum(row, ['Close', 'close']);
-      const cagr = computeCagr(baseClose, endClose, startIso, endIso);
-      out.set(endIso || '', cagr);
+      const iso = rowDateToTimeKey(row);
+      const open = pickNum(row, ['Open', 'open']);
+      const close = pickNum(row, ['Close', 'close']);
+      const ret = computeReturnPct(open, close);
+      out.set(iso || '', ret);
     }
     return out;
   }, [rows]);
@@ -134,19 +127,19 @@ export default function HistoricalDataPage() {
 
   const onDownloadCsv = useCallback(() => {
     if (!rows.length) return;
-    const headers = ['Date', 'Open', 'High', 'Low', 'Close', 'CAGR'];
+    const headers = ['Date', 'Open', 'High', 'Low', 'Close', 'Return %'];
     const lines = [
       headers.join(','),
       ...rows.map((r) => {
         const iso = rowDateToTimeKey(r) || '';
-        const cagr = cagrByDate.get(iso);
+        const ret = returnPctByDate.get(iso);
         return [
           csvEscape(iso),
           csvEscape(pickNum(r, ['Open', 'open']) ?? ''),
           csvEscape(pickNum(r, ['High', 'high']) ?? ''),
           csvEscape(pickNum(r, ['Low', 'low']) ?? ''),
           csvEscape(pickNum(r, ['Close', 'close']) ?? ''),
-          csvEscape(cagr != null ? cagr.toFixed(4) : '')
+          csvEscape(ret != null ? ret.toFixed(4) : '')
         ].join(',');
       })
     ];
@@ -157,7 +150,7 @@ export default function HistoricalDataPage() {
     a.download = `historical-data-${sanitizeTickerPageInput(ticker) || DEFAULT_TICKER}-${startDate}-${endDate}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [rows, cagrByDate, ticker, startDate, endDate]);
+  }, [rows, returnPctByDate, ticker, startDate, endDate]);
 
   return (
     <div className="historical-data-page">
@@ -225,7 +218,7 @@ export default function HistoricalDataPage() {
                 <th>High</th>
                 <th>Low</th>
                 <th>Close</th>
-                <th>CAGR</th>
+                <th>Return %</th>
               </tr>
             </thead>
             <tbody>
@@ -240,8 +233,8 @@ export default function HistoricalDataPage() {
                     <td>
                       {(() => {
                         const iso = rowDateToTimeKey(r) || '';
-                        const cagr = cagrByDate.get(iso);
-                        return cagr != null ? `${cagr.toFixed(2)}%` : '—';
+                        const ret = returnPctByDate.get(iso);
+                        return ret != null ? `${ret.toFixed(2)}%` : '—';
                       })()}
                     </td>
                   </tr>

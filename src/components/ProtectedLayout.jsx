@@ -41,6 +41,14 @@ export function ProtectedLayout() {
   }, [theme]);
 
   useEffect(() => {
+    console.info('[router] ProtectedLayout render location', {
+      pathname: location.pathname,
+      search: location.search,
+      key: location.key
+    });
+  }, [location.pathname, location.search, location.key]);
+
+  useEffect(() => {
     const warmWatchlistCache = () => {
       if (!getAuthToken()) return;
       const ttlMs = 2 * 60 * 1000;
@@ -100,7 +108,7 @@ export function ProtectedLayout() {
         />
         <div className="app-main-column">
           <div className="app-main-scroll">
-            <Outlet key={location.pathname} />
+            <Outlet />
             <SiteFooter />
           </div>
         </div>

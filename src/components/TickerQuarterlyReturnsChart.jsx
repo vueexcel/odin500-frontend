@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
@@ -79,6 +80,7 @@ function csvEscape(s) {
  * @param {{ symbol: string, quarterlyReturns?: unknown[], asOfDate?: string, plotHeight?: number }} props
  */
 export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate, plotHeight }) {
+  const navigate = useNavigate();
   const rows = useMemo(() => buildRows(quarterlyReturns), [quarterlyReturns]);
   const [showTable, setShowTable] = useState(false);
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
@@ -311,6 +313,24 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
     URL.revokeObjectURL(url);
   }, [filteredRows, symU]);
 
+  const onViewMore = useCallback(() => {
+    console.info('[view-more] quarterly click', {
+      fromPath: window.location.pathname,
+      fromSearch: window.location.search,
+      to: '/statistic-data?section=quarterly'
+    });
+    navigate('/statistic-data?section=quarterly');
+    queueMicrotask(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    setTimeout(() => {
+      console.info('[view-more] quarterly post-nav check', {
+        currentPath: window.location.pathname,
+        currentSearch: window.location.search
+      });
+    }, 150);
+  }, [navigate]);
+
   if (!rows.length) {
     return (
       <div className="ticker-quarterly">
@@ -347,6 +367,13 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
         <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
           <div className="ticker-annual-figma__left" />
           <div className="ticker-annual-figma__right">
+            <button
+              type="button"
+              className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+              onClick={onViewMore}
+            >
+              View More
+            </button>
             <button
               type="button"
               className="ticker-annual-figma__btn"

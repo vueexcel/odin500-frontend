@@ -441,6 +441,21 @@ function ReturnTable({
 
 export default function StatisticDataPage() {
   const location = useLocation();
+  useEffect(() => {
+    console.info('[statistic-data] page mounted');
+    return () => {
+      console.info('[statistic-data] page unmounted');
+    };
+  }, []);
+
+  useEffect(() => {
+    console.info('[statistic-data] location changed', {
+      pathname: location.pathname,
+      search: location.search,
+      key: location.key
+    });
+  }, [location.pathname, location.search, location.key]);
+
   usePageSeo({
     title: 'Statistic Tables — Daily, Weekly, Monthly, Quarterly, Annual | Odin500',
     description:
@@ -467,7 +482,28 @@ export default function StatisticDataPage() {
   const annualRef = useRef(null);
 
   useEffect(() => {
-    const section = new URLSearchParams(location.search).get('section') || '';
+    const rawSection = (new URLSearchParams(location.search).get('section') || '').toLowerCase();
+    const sectionAliases = {
+      predefined: 'predefined',
+      'predefined-range': 'predefined',
+      'predefined-ranges': 'predefined',
+      daily: 'daily',
+      'daily-return': 'daily',
+      'daily-returns': 'daily',
+      weekly: 'weekly',
+      'weekly-return': 'weekly',
+      'weekly-returns': 'weekly',
+      monthly: 'monthly',
+      'monthly-return': 'monthly',
+      'monthly-returns': 'monthly',
+      quarterly: 'quarterly',
+      'quarterly-return': 'quarterly',
+      'quarterly-returns': 'quarterly',
+      annual: 'annual',
+      'annual-return': 'annual',
+      'annual-returns': 'annual'
+    };
+    const section = sectionAliases[rawSection] || '';
     const map = {
       predefined: predefinedRef,
       daily: dailyRef,
@@ -477,6 +513,11 @@ export default function StatisticDataPage() {
       annual: annualRef
     };
     const targetRef = map[section];
+    console.info('[statistic-data] section resolution', {
+      rawSection,
+      resolvedSection: section,
+      hasTargetRef: Boolean(targetRef?.current)
+    });
     setActiveSection(targetRef ? section : '');
     if (targetRef?.current) {
       targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });

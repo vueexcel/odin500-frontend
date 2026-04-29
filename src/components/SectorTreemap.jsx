@@ -80,7 +80,7 @@ function fallbackOnlyWeight(row) {
  * - If explicit index weights exist (e.g. SP500 percentages), use them as primary sizing signal.
  * - Missing explicit weights get a small proxy so they never overpower real weighted names.
  */
-function resolveTreemapRows(rows) {
+export function resolveTreemapRows(rows) {
   const list = Array.isArray(rows) ? rows : [];
   if (!list.length) return [];
 

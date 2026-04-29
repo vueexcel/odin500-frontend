@@ -16,7 +16,6 @@ import {
   TICKER_CHART_TYPE_OPTIONS,
   TickerLightweightChart
 } from '../components/TickerLightweightChart.jsx';
-import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { toDateInput } from '../utils/misc.js';
@@ -46,6 +45,18 @@ const SECTION_LONG_DEFAULT_BENCHMARK = 'SPX';
 
 const MAX_NEWS_ITEMS = 120;
 const NEWS_PAGE_SIZE = 5;
+const FINNHUB_BASE = 'https://finnhub.io/api/v1/company-news';
+const FINNHUB_TOKEN =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_FINNHUB_TOKEN) || '';
+const FALLBACK_TICKER_NEWS = [
+  {
+    id: 'ticker-news-fallback-1',
+    title: 'Company-specific headline feed unavailable; showing placeholder item.',
+    source: 'Odin Ticker Desk',
+    time: 'sample',
+    url: ''
+  }
+];
 
 const PERF_COLS = [
   { label: '1M', period: 'Last Month' },
@@ -333,6 +344,54 @@ function formatVolLong(n) {
   if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
   if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
   return String(Math.round(v));
+}
+
+function toIsoDate(d) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function recentRange(days) {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(end.getDate() - days);
+  return { from: toIsoDate(start), to: toIsoDate(end) };
+}
+
+function fmtNewsTime(unixSec) {
+  const ts = Number(unixSec);
+  if (!Number.isFinite(ts)) return '';
+  const d = new Date(ts * 1000);
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function mapTickerNewsRow(row, symbol) {
+  if (!row || typeof row !== 'object') return null;
+  const title = String(row.headline || '').trim();
+  const id = row.id != null ? `${symbol}-${row.id}` : `${symbol}-${row.url || title}`;
+  if (!title || !id) return null;
+  return {
+    id,
+    title,
+    source: String(row.source || 'Finnhub').trim() || 'Finnhub',
+    time: fmtNewsTime(row.datetime) || '',
+    url: String(row.url || '').trim()
+  };
+}
+
+async function fetchTickerNews(symbol, days = 10) {
+  if (!FINNHUB_TOKEN) return [];
+  const sym = String(symbol || '').trim().toUpperCase();
+  if (!sym) return [];
+  const { from, to } = recentRange(days);
+  const qs = new URLSearchParams({ symbol: sym, from, to, token: FINNHUB_TOKEN });
+  const res = await fetch(`${FINNHUB_BASE}?${qs.toString()}`);
+  if (!res.ok) throw new Error(`News request failed (${res.status})`);
+  const payload = await res.json();
+  const list = Array.isArray(payload) ? payload : [];
+  return list.map((r) => mapTickerNewsRow(r, sym)).filter(Boolean).slice(0, MAX_NEWS_ITEMS);
 }
 
 function annualizedVol(closes) {
@@ -681,8 +740,13 @@ export default function TickerPage() {
   const [longRangeBusy, setLongRangeBusy] = useState(false);
   const [tailRows, setTailRows] = useState([]);
   const [newsPage, setNewsPage] = useState(1);
-  const { busy: newsBusy, error: newsError, items: liveNewsAll } = useGeneralNewsFeed();
-  const liveNews = useMemo(() => liveNewsAll.slice(0, MAX_NEWS_ITEMS), [liveNewsAll]);
+  const [tickerNewsBusy, setTickerNewsBusy] = useState(false);
+  const [tickerNewsError, setTickerNewsError] = useState('');
+  const [tickerNewsItems, setTickerNewsItems] = useState([]);
+  const liveNews = useMemo(
+    () => (tickerNewsItems.length ? tickerNewsItems.slice(0, MAX_NEWS_ITEMS) : FALLBACK_TICKER_NEWS),
+    [tickerNewsItems]
+  );
   const [appliedCustomRange, setAppliedCustomRange] = useState(null);
   const [draftChartStart, setDraftChartStart] = useState('');
   const [draftChartEnd, setDraftChartEnd] = useState('');
@@ -1185,6 +1249,30 @@ export default function TickerPage() {
 
   useEffect(() => {
     setNewsPage(1);
+  }, [sym]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const symbol = String(sym || '').toUpperCase().trim();
+    (async () => {
+      setTickerNewsBusy(true);
+      setTickerNewsError('');
+      try {
+        const rows = await fetchTickerNews(symbol, 10);
+        if (cancelled) return;
+        setTickerNewsItems(rows.length ? rows : FALLBACK_TICKER_NEWS);
+      } catch (e) {
+        if (!cancelled) {
+          setTickerNewsError(e?.message || 'Failed to load ticker headlines.');
+          setTickerNewsItems(FALLBACK_TICKER_NEWS);
+        }
+      } finally {
+        if (!cancelled) setTickerNewsBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [sym]);
 
   const newsTotalPages = useMemo(
@@ -1969,15 +2057,16 @@ export default function TickerPage() {
               </h2>
               <DataInfoTip align="start">
                 <p className="ticker-data-tip__p">
-                  <strong>News</strong> below comes from Finnhub general trading category via REST API.
+                  <strong>News</strong> below is ticker-specific (company news) from Finnhub for{' '}
+                  <strong>{String(sym || '').toUpperCase()}</strong>.
                 </p>
-                <p className="ticker-data-tip__p">This list is market-wide and refreshes every 30 seconds.</p>
+                <p className="ticker-data-tip__p">Headlines refresh whenever you change ticker.</p>
               </DataInfoTip>
             </div>
-            {newsBusy ? <p className="ticker-page__news-sample-note">Loading general trading news…</p> : null}
-            {!newsBusy && newsError ? <p className="ticker-page__news-sample-note">{newsError}</p> : null}
-            {!newsBusy && !newsError && !liveNews.length ? (
-              <p className="ticker-page__news-sample-note">No general trading headlines yet.</p>
+            {tickerNewsBusy ? <p className="ticker-page__news-sample-note">Loading ticker news…</p> : null}
+            {!tickerNewsBusy && tickerNewsError ? <p className="ticker-page__news-sample-note">{tickerNewsError}</p> : null}
+            {!tickerNewsBusy && !tickerNewsError && !liveNews.length ? (
+              <p className="ticker-page__news-sample-note">No ticker headlines yet.</p>
             ) : null}
             <ul className="ticker-news-list">
               {newsPageItems.map((n) => (
@@ -2214,7 +2303,7 @@ export default function TickerPage() {
               </dl>
             </div>
             <p className="ticker-page__label ticker-kd-comp-label">
-              <span>More from {relatedTickersSourceLabel}</span>
+              <span>RELATED TICKERS</span>
               <span className="ticker-kd-comp-label__links">
                 {RELATED_INDEX_LINKS.map((idx) => (
                   <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">

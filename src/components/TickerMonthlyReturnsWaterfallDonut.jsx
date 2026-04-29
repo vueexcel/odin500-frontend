@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
@@ -47,6 +48,15 @@ function parseMonthRow(period) {
   return { year, month };
 }
 
+function parseWeekRow(period) {
+  const m = String(period || '').match(/^(\d{4})-W(\d{1,2})$/i);
+  if (!m) return null;
+  const year = parseInt(m[1], 10);
+  const week = parseInt(m[2], 10);
+  if (!Number.isFinite(year) || week < 1 || week > 53) return null;
+  return { year, month: week };
+}
+
 /** API rows may use totalReturn, TotalReturn, or legacy shapes. */
 function pickTotalReturn(r) {
   if (r == null) return NaN;
@@ -84,7 +94,8 @@ function labelOnDonut(r, degMid) {
  * same rows as the waterfall — updates when year or month date filter changes).
  * Renders below `TickerMonthlyReturnsChart`; does not replace it.
  */
-export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asOfDate, plotHeight }) {
+export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asOfDate, plotHeight, periodMode = 'monthly' }) {
+  const navigate = useNavigate();
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const [showTable, setShowTable] = useState(false);
   const [monthRangeApplied, setMonthRangeApplied] = useState({ start: '', end: '' });
@@ -93,7 +104,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
     if (!Array.isArray(monthlyReturns)) return [];
     const out = [];
     for (const r of monthlyReturns) {
-      const meta = parseMonthRow(r.period);
+      const meta = periodMode === 'weekly' ? parseWeekRow(r.period) : parseMonthRow(r.period);
       if (!meta) continue;
       const tr = pickTotalReturn(r);
       if (!Number.isFinite(tr)) continue;
@@ -108,7 +119,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
     }
     out.sort((a, b) => a.year - b.year || a.month - b.month);
     return out;
-  }, [monthlyReturns]);
+  }, [monthlyReturns, periodMode]);
 
   const displayMonthRows = useMemo(
     () => filterReturnsRows(monthRows, monthRangeApplied.start, monthRangeApplied.end),
@@ -141,12 +152,13 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
   }, [displayMonthRows, selectedYear]);
 
   const monthValues = useMemo(() => {
-    const arr = Array.from({ length: 12 }, () => null);
+    const size = periodMode === 'weekly' ? 53 : 12;
+    const arr = Array.from({ length: size }, () => null);
     for (const r of displayMonthRows) {
-      if (r.year === selectedYear) arr[r.month - 1] = r.totalReturn;
+      if (r.year === selectedYear && r.month >= 1 && r.month <= size) arr[r.month - 1] = r.totalReturn;
     }
     return arr;
-  }, [displayMonthRows, selectedYear]);
+  }, [displayMonthRows, selectedYear, periodMode]);
   const selectedYearRows = useMemo(
     () => displayMonthRows.filter((r) => r.year === selectedYear).sort((a, b) => a.month - b.month),
     [displayMonthRows, selectedYear]
@@ -161,9 +173,10 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
     const COL_CONN = light ? 'rgba(15, 23, 42, 0.35)' : 'rgba(148, 163, 184, 0.45)';
     const COL_TOTAL = light ? '#475569' : COL_NEU;
 
+    const n = periodMode === 'weekly' ? 53 : 12;
     const deltas = monthValues.map((v) => (Number.isFinite(v) ? v : 0));
     const cum = [0];
-    for (let i = 0; i < 12; i++) cum.push(cum[i] + deltas[i]);
+    for (let i = 0; i < n; i++) cum.push(cum[i] + deltas[i]);
     const cmin = Math.min(...cum);
     const cmax = Math.max(...cum);
     let yMin = Math.min(-20, Math.floor(cmin / 10) * 10);
@@ -178,8 +191,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
     const padB = 54;
     const iw = W - padL - padR;
     const ih = H - padT - padB;
-    const n = 12;
-    const gap = 0.2;
+    const gap = periodMode === 'weekly' ? 0.04 : 0.2;
     const bw = (iw / n) * (1 - gap);
     const step = iw / n;
 
@@ -207,7 +219,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
 
     const bars = [];
     const connectors = [];
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < n; i++) {
       const m = i + 1;
       const d = deltas[i];
       const c0 = cum[i];
@@ -228,7 +240,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
           </text>
         </g>
       );
-      if (i < 11) {
+      if (i < n - 1) {
         const cxNext = padL + (i + 1.5) * step;
         const yJoin = yForValue(c1, padT, ih, yMin, yMax);
         const xR = cx + bw / 2;
@@ -250,19 +262,20 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
       }
     }
 
-    const xLabels = Array.from({ length: 12 }, (_, i) => {
+    const xLabels = Array.from({ length: n }, (_, i) => {
+      if (periodMode === 'weekly' && i % 4 !== 0 && i !== n - 1) return null;
       const cx = padL + (i + 0.5) * step;
       return (
         <text key={i} x={cx} y={H - 22} textAnchor="middle" fill={COL_AXIS} fontSize="11" fontWeight="600">
-          {i + 1}
+          {periodMode === 'weekly' ? `W${i + 1}` : i + 1}
         </text>
       );
     });
 
-    const endCum = cum[12];
+    const endCum = cum[n];
     const totalLabel = (
       <text x={padL + iw / 2} y={H - 6} textAnchor="middle" fill={COL_TOTAL} fontSize="9" fontWeight="700">
-        Year cumulative (Dec end): {endCum >= 0 ? '+' : ''}
+        Year cumulative ({periodMode === 'weekly' ? 'W53' : 'Dec'} end): {endCum >= 0 ? '+' : ''}
         {endCum.toFixed(1)}%
       </text>
     );
@@ -281,7 +294,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
         {totalLabel}
       </svg>
     );
-  }, [monthValues, selectedYear, chartTheme, plotHeight]);
+  }, [monthValues, selectedYear, chartTheme, plotHeight, periodMode]);
 
   const donutSvg = useMemo(() => {
     const light = chartTheme === 'light';
@@ -377,10 +390,30 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${symU}-monthly-waterfall-${selectedYear}.csv`;
+    a.download = `${symU}-${periodMode === 'weekly' ? 'weekly' : 'monthly'}-waterfall-${selectedYear}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [selectedYearRows, selectedYear, symU]);
+  }, [selectedYearRows, selectedYear, symU, periodMode]);
+  const onViewMore = useCallback(() => {
+    const section = periodMode === 'weekly' ? 'weekly' : 'monthly';
+    console.info('[view-more] waterfall click', {
+      periodMode,
+      fromPath: window.location.pathname,
+      fromSearch: window.location.search,
+      to: `/statistic-data?section=${section}`
+    });
+    navigate(`/statistic-data?section=${section}`);
+    queueMicrotask(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    setTimeout(() => {
+      console.info('[view-more] waterfall post-nav check', {
+        periodMode,
+        currentPath: window.location.pathname,
+        currentSearch: window.location.search
+      });
+    }, 150);
+  }, [navigate, periodMode]);
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
   const hasMonthlySource = monthRows.length > 0;
   const hasMonthly = displayMonthRows.length > 0;
@@ -397,7 +430,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
           <div className="ticker-monthly-adv__panel ticker-annual-figma__chart-card">
             <div className="ticker-monthly-adv__panel-head">
               <div className="ticker-monthly-adv__title-block">
-                <span className="ticker-monthly-adv__panel-title">Cumulative monthly</span>
+              <span className="ticker-monthly-adv__panel-title">{periodMode === 'weekly' ? 'Cumulative weekly' : 'Cumulative monthly'}</span>
                 <DataInfoTip align="end">
                   <p className="ticker-data-tip__p">
                     <strong>Waterfall</strong>: for the selected calendar year, each column is a month (1 = Jan … 12 = Dec). Each bar runs from the{' '}
@@ -453,6 +486,13 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
               <div className="ticker-annual-figma__right">
                 <button
                   type="button"
+                  className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+                  onClick={onViewMore}
+                >
+                  View More
+                </button>
+                <button
+                  type="button"
                   className="ticker-annual-figma__btn"
                   onClick={() => setShowTable((v) => !v)}
                   aria-pressed={showTable}
@@ -465,11 +505,11 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
               </div>
             </div>
             {monthlyFilteredEmpty ? (
-              <div className="ticker-monthly-adv__empty">No monthly rows overlap the selected date range.</div>
+              <div className="ticker-monthly-adv__empty">No {periodMode === 'weekly' ? 'weekly' : 'monthly'} rows overlap the selected date range.</div>
             ) : hasMonthly ? (
               waterfallSvg
             ) : (
-              <div className="ticker-monthly-adv__empty">No monthly returns to plot.</div>
+              <div className="ticker-monthly-adv__empty">No {periodMode === 'weekly' ? 'weekly' : 'monthly'} returns to plot.</div>
             )}
             <div className="ticker-monthly-adv__legend-row">
               <span className="ticker-annual-figma__legend-item">
@@ -517,7 +557,7 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
           <div className="ticker-monthly-adv__panel ticker-annual-figma__chart-card ticker-monthly-adv__panel--donut">
             <div className="ticker-monthly-adv__panel-head ticker-monthly-adv__panel-head--donut">
               <span className="ticker-monthly-adv__panel-spacer" aria-hidden />
-              <span className="ticker-monthly-adv__panel-title">Month mix</span>
+              <span className="ticker-monthly-adv__panel-title">{periodMode === 'weekly' ? 'Week mix' : 'Month mix'}</span>
               <div className="ticker-monthly-adv__panel-tip">
                 <DataInfoTip align="end">
                   <p className="ticker-data-tip__p">
@@ -537,18 +577,18 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
               </div>
             </div>
             {monthlyFilteredEmpty ? (
-              <div className="ticker-monthly-adv__empty">No monthly rows overlap the selected date range.</div>
+              <div className="ticker-monthly-adv__empty">No {periodMode === 'weekly' ? 'weekly' : 'monthly'} rows overlap the selected date range.</div>
             ) : hasMonthly ? (
               donutSvg
             ) : (
-              <div className="ticker-monthly-adv__empty">No monthly returns to plot.</div>
+              <div className="ticker-monthly-adv__empty">No {periodMode === 'weekly' ? 'weekly' : 'monthly'} returns to plot.</div>
             )}
             <div className="ticker-monthly-adv__legend-row">
               <span className="ticker-annual-figma__legend-item">
-                <span className="ticker-monthly-adv__sw donut-pos" aria-hidden /># positive months
+                <span className="ticker-monthly-adv__sw donut-pos" aria-hidden /># positive {periodMode === 'weekly' ? 'weeks' : 'months'}
               </span>
               <span className="ticker-annual-figma__legend-item">
-                <span className="ticker-monthly-adv__sw donut-neg" aria-hidden /># negative months
+                <span className="ticker-monthly-adv__sw donut-neg" aria-hidden /># negative {periodMode === 'weekly' ? 'weeks' : 'months'}
               </span>
             </div>
           </div>
