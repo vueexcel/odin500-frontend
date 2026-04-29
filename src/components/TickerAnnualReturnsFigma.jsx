@@ -4,6 +4,7 @@ import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { useTickerPlotResize } from '../hooks/useTickerPlotResize.js';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
+import { formatWeekAxisDate, isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
@@ -252,8 +253,19 @@ export function TickerAnnualReturnsFigma({
           };
         }
         if (periodMode === 'weekly') {
-          const w = parseWeek(period);
+          let w = parseWeek(period);
+          const iy = Number(r?.isoYear);
+          const iw = Number(r?.isoWeek);
+          if (!w && Number.isFinite(iy) && Number.isFinite(iw) && iw >= 1 && iw <= 53) {
+            w = { year: iy, week: iw };
+          }
+          if (!w && /^\d{4}-\d{2}-\d{2}$/.test(period)) {
+            const ip = isoYearWeekFromIsoDate(period);
+            if (ip && ip.week >= 1 && ip.week <= 53) w = { year: ip.year, week: ip.week };
+          }
           if (!w) return null;
+          const endIso = String(r?.endDate ?? period ?? '').slice(0, 10);
+          const dateLbl = formatWeekAxisDate(endIso);
           return {
             period,
             startDate: r?.startDate,
@@ -266,7 +278,7 @@ export function TickerAnnualReturnsFigma({
             month: null,
             week: w.week,
             rowKey: period,
-            xLabel: period
+            xLabel: dateLbl || period
           };
         }
         if (periodMode === 'daily') {
@@ -540,7 +552,7 @@ export function TickerAnnualReturnsFigma({
             ? r.week === 1
               ? String(r.year)
               : i === n - 1
-                ? `W${String(r.week || '').padStart(2, '0')}`
+                ? formatWeekAxisDate(String(r.endDate || r.period || '').slice(0, 10)) || String(r.year)
                 : ''
             : periodMode === 'daily'
               ? r.day === 1

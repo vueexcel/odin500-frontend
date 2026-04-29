@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
+import { formatWeekAxisDate, isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
@@ -54,6 +55,23 @@ function parseWeekRow(period) {
   return { year, month: week };
 }
 
+/** Slot weekly rows on the ISO week grid using api isoYear/isoWeek or period (YYYY-Www or end date). */
+function weeklyRowMeta(r) {
+  const wy = Number(r?.isoYear);
+  const wk = Number(r?.isoWeek);
+  if (Number.isFinite(wy) && Number.isFinite(wk) && wk >= 1 && wk <= 53) {
+    return { year: wy, month: wk };
+  }
+  const fromLegacy = parseWeekRow(r.period);
+  if (fromLegacy) return fromLegacy;
+  const p = String(r?.period || '').slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(p)) {
+    const iw = isoYearWeekFromIsoDate(p);
+    if (iw && iw.week >= 1 && iw.week <= 53) return { year: iw.year, month: iw.week };
+  }
+  return null;
+}
+
 function parseDailyRow(period) {
   const m = String(period || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
@@ -89,7 +107,12 @@ export function TickerMonthlyReturnsChart({
     if (!Array.isArray(monthlyReturns)) return [];
     const out = [];
     for (const r of monthlyReturns) {
-      const meta = periodMode === 'weekly' ? parseWeekRow(r.period) : periodMode === 'daily' ? parseDailyRow(r.period) : parseMonthRow(r.period);
+      const meta =
+        periodMode === 'weekly'
+          ? weeklyRowMeta(r)
+          : periodMode === 'daily'
+            ? parseDailyRow(r.period)
+            : parseMonthRow(r.period);
       if (!meta) continue;
       const tr = Number(r.totalReturn);
       if (!Number.isFinite(tr)) continue;
@@ -132,6 +155,22 @@ export function TickerMonthlyReturnsChart({
       if (r.year === selectedYear && r.month >= 1 && r.month <= size) arr[r.month - 1] = r.totalReturn;
     }
     return arr;
+  }, [filteredRows, selectedYear, periodMode]);
+
+  /** Map ISO week index (1–53) → short date label for the x-axis (week ending). */
+  const weekAxisLabels = useMemo(() => {
+    const m = new Map();
+    if (periodMode !== 'weekly') return m;
+    for (const r of filteredRows) {
+      if (r.year !== selectedYear) continue;
+      const slot = r.month;
+      if (slot < 1 || slot > 53) continue;
+      const end = String(r.endDate || '').slice(0, 10);
+      const iso = /^\d{4}-\d{2}-\d{2}$/.test(end) ? end : String(r.period || '').slice(0, 10);
+      const lbl = formatWeekAxisDate(iso);
+      if (lbl) m.set(slot, lbl);
+    }
+    return m;
   }, [filteredRows, selectedYear, periodMode]);
 
   const { yMin, yMax } = useMemo(() => {
@@ -208,9 +247,18 @@ export function TickerMonthlyReturnsChart({
     const xLabels = Array.from({ length: n }, (_, i) => {
       if ((periodMode === 'weekly' || periodMode === 'daily') && i % every !== 0 && i !== n - 1) return null;
       const cx = padL + i * step + step / 2;
+      if (periodMode === 'weekly') {
+        const lbl = weekAxisLabels.get(i + 1);
+        if (!lbl) return null;
+        return (
+          <text key={i} x={cx} y={H - 22} textAnchor="middle" fill={COL_AXIS} fontSize="11" fontWeight="600">
+            {lbl}
+          </text>
+        );
+      }
       return (
         <text key={i} x={cx} y={H - 22} textAnchor="middle" fill={COL_AXIS} fontSize="11" fontWeight="600">
-          {periodMode === 'weekly' ? `W${i + 1}` : periodMode === 'daily' ? i + 1 : i + 1}
+          {periodMode === 'daily' ? i + 1 : i + 1}
         </text>
       );
     });
@@ -227,7 +275,7 @@ export function TickerMonthlyReturnsChart({
         {xLabels}
       </svg>
     );
-  }, [monthValues, yMin, yMax, plotHeight, periodMode]);
+  }, [monthValues, yMin, yMax, plotHeight, periodMode, weekAxisLabels]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
@@ -418,7 +466,7 @@ export function TickerMonthlyReturnsChart({
         <div className="ticker-annual-figma__legend ticker-monthly__legend">
           <span className="ticker-annual-figma__legend-item">
             <span className="ticker-monthly__swatch" aria-hidden />
-            {periodMode === 'weekly' ? `${selectedYear} (weeks)` : selectedYear}
+            {selectedYear}
           </span>
         </div>
         {showTable ? (

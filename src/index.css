@@ -12016,13 +12016,14 @@ html[data-theme='light'] .about-legal-item {
   background: linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.72));
   padding: 12px;
   display: grid;
-  grid-template-columns: minmax(240px, 320px) 170px 170px auto;
+  grid-template-columns: minmax(240px, 320px) minmax(130px, 160px) 170px 170px auto;
   gap: 12px;
   align-items: end;
 }
 
 .historical-data__ticker label,
-.historical-data__dates label {
+.historical-data__dates label,
+.historical-data__frequency label {
   display: inline-block;
   margin-bottom: 8px;
   color: #93c5fd;
@@ -12032,7 +12033,8 @@ html[data-theme='light'] .about-legal-item {
   letter-spacing: 0.07em;
 }
 
-.historical-data__date-input {
+.historical-data__date-input,
+.historical-data__select {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid rgba(147, 197, 253, 0.38);
@@ -12041,6 +12043,11 @@ html[data-theme='light'] .about-legal-item {
   color: #e2e8f0;
   font-size: 13px;
   padding: 8px 10px;
+}
+
+.historical-data__select {
+  cursor: pointer;
+  appearance: auto;
 }
 
 .historical-data__actions {
@@ -12169,6 +12176,7 @@ html[data-theme='light'] .about-legal-item {
 
 [data-theme='light'] .historical-data__ticker label,
 [data-theme='light'] .historical-data__dates label,
+[data-theme='light'] .historical-data__frequency label,
 [data-theme='light'] .historical-data__status,
 [data-theme='light'] .historical-data__pager span {
   color: #1d4ed8;
@@ -12178,7 +12186,8 @@ html[data-theme='light'] .about-legal-item {
   color: #b91c1c;
 }
 
-[data-theme='light'] .historical-data__date-input {
+[data-theme='light'] .historical-data__date-input,
+[data-theme='light'] .historical-data__select {
   border-color: rgba(59, 130, 246, 0.45);
   background: #ffffff;
   color: #0f172a;

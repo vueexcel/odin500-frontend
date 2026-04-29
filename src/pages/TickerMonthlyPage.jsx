@@ -9,6 +9,7 @@ import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyR
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
+import { isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
@@ -74,18 +75,6 @@ function defaultDailyFetchRange(endIso) {
   if (Number.isNaN(d.getTime())) return { start: '', end: '' };
   d.setMonth(d.getMonth() - 1);
   return { start: d.toISOString().slice(0, 10), end };
-}
-
-function isoWeekPeriod(isoLike) {
-  const iso = String(isoLike || '').slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
-  const d = new Date(iso + 'T12:00:00Z');
-  if (Number.isNaN(d.getTime())) return null;
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
 function fmtPct(v) {
@@ -430,25 +419,39 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
             .map((r) => {
               const open = Number(r?.Open ?? r?.open);
               const close = Number(r?.Close ?? r?.close);
-              const yearNum = Number(r?.year);
-              const weekNum = Number(r?.week);
-              const periodFromParts =
-                Number.isFinite(yearNum) && Number.isFinite(weekNum) && weekNum >= 1 && weekNum <= 53
-                  ? `${yearNum}-W${String(weekNum).padStart(2, '0')}`
-                  : '';
+              let yearNum = Number(r?.year);
+              let weekNum = Number(r?.week);
               const endDateRaw = String(r?.end_date ?? r?.Date ?? r?.date ?? '');
               const startDateRaw = String(r?.start_date ?? '');
+              const weekStartRaw = String(r?.week_start ?? '');
               const startDate = startDateRaw.slice(0, 10);
               const endDate = endDateRaw.slice(0, 10);
-              const period = periodFromParts || isoWeekPeriod(endDate) || isoWeekPeriod(startDate);
+              const weekStart = weekStartRaw.slice(0, 10);
+              const period =
+                endDate ||
+                startDate ||
+                weekStart ||
+                (Number.isFinite(yearNum) && Number.isFinite(weekNum) && weekNum >= 1 && weekNum <= 53
+                  ? `${yearNum}-W${String(weekNum).padStart(2, '0')}`
+                  : '');
+              const fallbackIw = endDate ? isoYearWeekFromIsoDate(endDate) : null;
+              if (
+                (!Number.isFinite(yearNum) || !Number.isFinite(weekNum)) &&
+                fallbackIw
+              ) {
+                yearNum = fallbackIw.year;
+                weekNum = fallbackIw.week;
+              }
               if (!period || !Number.isFinite(open) || !Number.isFinite(close) || open === 0) return null;
               return {
                 period,
                 startDate: startDate || endDate,
-                endDate,
+                endDate: endDate || startDate,
                 startPrice: open,
                 endPrice: close,
-                totalReturn: ((close - open) / open) * 100
+                totalReturn: ((close - open) / open) * 100,
+                isoYear: Number.isFinite(yearNum) ? yearNum : null,
+                isoWeek: Number.isFinite(weekNum) ? weekNum : null
               };
             })
             .filter(Boolean);
