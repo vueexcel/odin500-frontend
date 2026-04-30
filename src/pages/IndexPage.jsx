@@ -590,6 +590,7 @@ export default function IndexPage() {
   const [ohlcTickerBounds, setOhlcTickerBounds] = useState(/** @type {{ min: string, max: string } | null} */ (null));
 
   const [newsPage, setNewsPage] = useState(1);
+  const [chartHoverOhlc, setChartHoverOhlc] = useState(null);
   const { busy: newsBusy, error: newsError, items: liveNewsAll } = useGeneralNewsFeed();
   const liveNews = useMemo(() => liveNewsAll.slice(0, MAX_NEWS_ITEMS), [liveNewsAll]);
   const [appliedCustomRange, setAppliedCustomRange] = useState(null);
@@ -1546,6 +1547,12 @@ export default function IndexPage() {
                   <span className={'ticker-num ' + pctClass(headerChgPct)}>{formatPct(headerChgPct)}</span>
                 ) : null}
                 <span className="ticker-chart-legend__sig">Signal: {lastSignal}</span>
+                {chartHoverOhlc ? (
+                  <span className="ticker-chart-legend__sig">
+                    O:{chartHoverOhlc.open != null ? formatPx(chartHoverOhlc.open) : '—'} H:{chartHoverOhlc.high != null ? formatPx(chartHoverOhlc.high) : '—'} L:{chartHoverOhlc.low != null ? formatPx(chartHoverOhlc.low) : '—'} C:{chartHoverOhlc.close != null ? formatPx(chartHoverOhlc.close) : '—'}
+                    {chartHoverOhlc.volume != null ? ` Vol:${Math.round(chartHoverOhlc.volume).toLocaleString('en-US')}` : ''}
+                  </span>
+                ) : null}
               </div>
               <div
                 ref={chartPlotHostRef}
@@ -1568,7 +1575,12 @@ export default function IndexPage() {
                     />
                   </div>
                 ) : sortedChart.length ? (
-                  <TickerLightweightChart rows={sortedChart} height={plotHeight} chartType={mainChartType} />
+                  <TickerLightweightChart
+                    rows={sortedChart}
+                    height={plotHeight}
+                    chartType={mainChartType}
+                    onHoverOhlcChange={setChartHoverOhlc}
+                  />
                 ) : (
                   <div className="ticker-sparkline ticker-sparkline--empty">No rows in this range.</div>
                 )}

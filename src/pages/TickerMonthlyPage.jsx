@@ -19,6 +19,10 @@ const RESIZE_KEY_M_POSNEG = 'odin_ticker_monthly_resize_posneg';
 const RESIZE_KEY_M_MAIN = 'odin_ticker_monthly_resize_main';
 const RESIZE_KEY_M_WF = 'odin_ticker_monthly_resize_waterfall';
 const RETURNS_DEFAULT_START = '1980-01-01';
+const DEFAULT_MONTHLY_START_YEAR = 2021;
+const DEFAULT_MONTHLY_END_YEAR = 2026;
+const DEFAULT_WEEKLY_START_YEAR = 2024;
+const DEFAULT_WEEKLY_END_YEAR = 2026;
 const BENCHMARK = 'SPY';
 const PERF_COLS = [
   { label: '1M', period: 'Last Month' },
@@ -342,6 +346,10 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
   const [statsRows, setStatsRows] = useState([]);
   const [statsRowsSpy, setStatsRowsSpy] = useState([]);
   const [detailRows, setDetailRows] = useState([]);
+  const [chartStartYear, setChartStartYear] = useState(String(DEFAULT_MONTHLY_START_YEAR));
+  const [chartEndYear, setChartEndYear] = useState(String(DEFAULT_MONTHLY_END_YEAR));
+  const [weeklyStartYear, setWeeklyStartYear] = useState(String(DEFAULT_WEEKLY_START_YEAR));
+  const [weeklyEndYear, setWeeklyEndYear] = useState(String(DEFAULT_WEEKLY_END_YEAR));
   const [tableRange, setTableRange] = useState('max');
   const [tablePage, setTablePage] = useState(1);
   const [dailyFilter, setDailyFilter] = useState(() => ({ start: '', end: '' }));
@@ -562,6 +570,140 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
     setDailyFetchRange(fallback);
   }, [sym]);
 
+  const monthYearOptions = useMemo(() => {
+    const rows = Array.isArray(monthlyReturnsRaw) ? monthlyReturnsRaw : [];
+    const years = Array.from(
+      new Set(
+        rows
+          .map((r) => parseYear(r?.period))
+          .filter((y) => Number.isFinite(y))
+      )
+    ).sort((a, b) => a - b);
+    return years.length ? years : Array.from({ length: 2026 - 1980 + 1 }, (_, i) => 1980 + i);
+  }, [monthlyReturnsRaw]);
+  const weekYearOptions = useMemo(() => {
+    if (!isWeekly) return [];
+    const years = Array.from(
+      new Set(
+        (Array.isArray(monthlyReturnsRaw) ? monthlyReturnsRaw : [])
+          .map((r) => parseYear(r?.period))
+          .filter((y) => Number.isFinite(y))
+      )
+    ).sort((a, b) => a - b);
+    return years.length ? years : Array.from({ length: 2026 - 1980 + 1 }, (_, i) => 1980 + i);
+  }, [isWeekly, monthlyReturnsRaw]);
+
+  useEffect(() => {
+    if (isDaily || isWeekly || !monthYearOptions.length) return;
+    const hasDefaultStart = monthYearOptions.includes(DEFAULT_MONTHLY_START_YEAR);
+    const hasDefaultEnd = monthYearOptions.includes(DEFAULT_MONTHLY_END_YEAR);
+    const nextStart = hasDefaultStart ? DEFAULT_MONTHLY_START_YEAR : monthYearOptions[0];
+    const nextEnd = hasDefaultEnd ? DEFAULT_MONTHLY_END_YEAR : monthYearOptions[monthYearOptions.length - 1];
+    setChartStartYear((prev) => (monthYearOptions.includes(Number(prev)) ? prev : String(nextStart)));
+    setChartEndYear((prev) => (monthYearOptions.includes(Number(prev)) ? prev : String(nextEnd)));
+  }, [isDaily, isWeekly, monthYearOptions]);
+  useEffect(() => {
+    if (!isWeekly || !weekYearOptions.length) return;
+    const hasDefaultStart = weekYearOptions.includes(DEFAULT_WEEKLY_START_YEAR);
+    const hasDefaultEnd = weekYearOptions.includes(DEFAULT_WEEKLY_END_YEAR);
+    const nextStart = hasDefaultStart ? DEFAULT_WEEKLY_START_YEAR : weekYearOptions[0];
+    const nextEnd = hasDefaultEnd ? DEFAULT_WEEKLY_END_YEAR : weekYearOptions[weekYearOptions.length - 1];
+    setWeeklyStartYear((prev) => (weekYearOptions.includes(Number(prev)) ? prev : String(nextStart)));
+    setWeeklyEndYear((prev) => (weekYearOptions.includes(Number(prev)) ? prev : String(nextEnd)));
+  }, [isWeekly, weekYearOptions]);
+
+  const monthlyChartRows = useMemo(() => {
+    if (isDaily) return dailyReturnsForUi || [];
+    if (isWeekly) {
+      const rows = Array.isArray(monthlyReturnsRaw) ? monthlyReturnsRaw : [];
+      const startY = Number(weeklyStartYear);
+      const endY = Number(weeklyEndYear);
+      if (!Number.isFinite(startY) || !Number.isFinite(endY)) return rows;
+      const lo = Math.min(startY, endY);
+      const hi = Math.max(startY, endY);
+      return rows.filter((r) => {
+        const y = parseYear(r?.period);
+        return Number.isFinite(y) && y >= lo && y <= hi;
+      });
+    }
+    const rows = Array.isArray(monthlyReturnsRaw) ? monthlyReturnsRaw : [];
+    const startY = Number(chartStartYear);
+    const endY = Number(chartEndYear);
+    if (!Number.isFinite(startY) || !Number.isFinite(endY)) return rows;
+    const lo = Math.min(startY, endY);
+    const hi = Math.max(startY, endY);
+    return rows.filter((r) => {
+      const y = parseYear(r?.period);
+      return Number.isFinite(y) && y >= lo && y <= hi;
+    });
+  }, [
+    chartEndYear,
+    chartStartYear,
+    dailyReturnsForUi,
+    isDaily,
+    isWeekly,
+    monthlyReturnsRaw,
+    weeklyEndYear,
+    weeklyStartYear
+  ]);
+
+  const monthlyChartRangeControls = !isDaily && !isWeekly ? (
+    <div className="ticker-page__custom-range" aria-label="Monthly chart year range">
+      <span className="ticker-page__label ticker-page__label--inline">Start year</span>
+      <select
+        className="ticker-page__date-inp"
+        value={chartStartYear}
+        onChange={(e) => setChartStartYear(e.target.value)}
+      >
+        {monthYearOptions.map((y) => (
+          <option key={`monthly-chart-start-${y}`} value={String(y)}>
+            {y}
+          </option>
+        ))}
+      </select>
+      <span className="ticker-page__label ticker-page__label--inline">End year</span>
+      <select
+        className="ticker-page__date-inp"
+        value={chartEndYear}
+        onChange={(e) => setChartEndYear(e.target.value)}
+      >
+        {monthYearOptions.map((y) => (
+          <option key={`monthly-chart-end-${y}`} value={String(y)}>
+            {y}
+          </option>
+        ))}
+      </select>
+    </div>
+  ) : null;
+  const weeklyChartRangeControls = isWeekly ? (
+    <div className="ticker-page__custom-range" aria-label="Weekly chart year range">
+      <span className="ticker-page__label ticker-page__label--inline">Start date</span>
+      <select
+        className="ticker-page__date-inp"
+        value={weeklyStartYear}
+        onChange={(e) => setWeeklyStartYear(e.target.value)}
+      >
+        {weekYearOptions.map((y) => (
+          <option key={`weekly-chart-start-${y}`} value={String(y)}>
+            {y}
+          </option>
+        ))}
+      </select>
+      <span className="ticker-page__label ticker-page__label--inline">End date</span>
+      <select
+        className="ticker-page__date-inp"
+        value={weeklyEndYear}
+        onChange={(e) => setWeeklyEndYear(e.target.value)}
+      >
+        {weekYearOptions.map((y) => (
+          <option key={`weekly-chart-end-${y}`} value={String(y)}>
+            {y}
+          </option>
+        ))}
+      </select>
+    </div>
+  ) : null;
+
   const tableRows = useMemo(() => {
     const source = isDaily ? (dailyReturnsForUi || []) : monthlyReturnsRaw;
     const rows = (Array.isArray(source) ? source : []).map((r) => ({
@@ -574,19 +716,29 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
       year: parseYear(r?.period)
     })).filter((r) => r.period);
     if (isDaily) return rows;
+    if (isWeekly) {
+      const startY = Number(weeklyStartYear);
+      const endY = Number(weeklyEndYear);
+      if (!Number.isFinite(startY) || !Number.isFinite(endY)) return rows;
+      const lo = Math.min(startY, endY);
+      const hi = Math.max(startY, endY);
+      return rows.filter((r) => Number.isFinite(r.year) && r.year >= lo && r.year <= hi);
+    }
     if (tableRange === 'max') return rows;
     const years = Number(tableRange);
     if (!Number.isFinite(years) || years <= 0) return rows;
     const cutoff = new Date().getFullYear() - years + 1;
     return rows.filter((r) => Number.isFinite(r.year) && r.year >= cutoff);
-  }, [monthlyReturnsRaw, tableRange, isDaily, dailyReturnsForUi]);
+  }, [monthlyReturnsRaw, tableRange, isDaily, dailyReturnsForUi, isWeekly, weeklyEndYear, weeklyStartYear]);
   const tableTotalPages = useMemo(() => Math.max(1, Math.ceil(tableRows.length / TABLE_PAGE_SIZE)), [tableRows.length]);
   const tablePageSafe = useMemo(() => Math.min(Math.max(1, tablePage), tableTotalPages), [tablePage, tableTotalPages]);
   const tablePageRows = useMemo(() => {
     const start = (tablePageSafe - 1) * TABLE_PAGE_SIZE;
     return tableRows.slice(start, start + TABLE_PAGE_SIZE);
   }, [tableRows, tablePageSafe]);
-  useEffect(() => { setTablePage(1); }, [sym, tableRange, dailyFilter.start, dailyFilter.end, isDaily]);
+  useEffect(() => {
+    setTablePage(1);
+  }, [sym, tableRange, dailyFilter.start, dailyFilter.end, isDaily, isWeekly, weeklyStartYear, weeklyEndYear]);
   useEffect(() => { setTablePage((p) => Math.min(Math.max(1, p), tableTotalPages)); }, [tableTotalPages]);
 
   const symU = String(sym || '').toUpperCase();
@@ -638,17 +790,18 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
         <div className="ticker-page__main">
           <TickerAnnualReturnsFigma
             symbol={symU}
-            annualReturns={isDaily ? dailyReturnsForUi || [] : monthlyReturnsRaw}
+            annualReturns={monthlyChartRows}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_M_FIGMA}
             resizeDefaultHeight={260}
             periodMode={modeSlug}
             suppressChartDateFilter={isDaily}
+            toolbarControls={isWeekly ? weeklyChartRangeControls : monthlyChartRangeControls}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_M_POSNEG} defaultHeight={260}>
             <TickerAnnualReturnsPosNeg
               symbol={symU}
-              annualReturns={isDaily ? dailyReturnsForUi || [] : monthlyReturnsRaw}
+              annualReturns={monthlyChartRows}
               asOfDate={asOfDate}
               periodMode={modeSlug}
               suppressChartDateFilter={isDaily}
@@ -657,7 +810,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
           <TickerChartResizeScope storageKey={RESIZE_KEY_M_MAIN} defaultHeight={288}>
             <TickerMonthlyReturnsChart
               symbol={symU}
-              monthlyReturns={isDaily ? dailyReturnsForUi || [] : monthlyReturnsRaw}
+              monthlyReturns={monthlyChartRows}
               asOfDate={asOfDate}
               periodMode={modeSlug}
               suppressChartDateFilter={isDaily}
@@ -665,7 +818,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
           </TickerChartResizeScope>
           {!isWeekly && !isDaily ? (
             <TickerChartResizeScope storageKey={RESIZE_KEY_M_WF} defaultHeight={300}>
-              <TickerMonthlyReturnsWaterfallDonut symbol={symU} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} periodMode={modeSlug} />
+              <TickerMonthlyReturnsWaterfallDonut symbol={symU} monthlyReturns={monthlyChartRows} asOfDate={asOfDate} periodMode={modeSlug} />
             </TickerChartResizeScope>
           ) : null}
 
@@ -728,6 +881,29 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
                     >
                       Clear
                     </button>
+                  </>
+                ) : isWeekly ? (
+                  <>
+                    <label className="statistic-data__range">
+                      <span>Start date</span>
+                      <select value={weeklyStartYear} onChange={(e) => setWeeklyStartYear(e.target.value)}>
+                        {weekYearOptions.map((y) => (
+                          <option key={`weekly-start-${y}`} value={String(y)}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="statistic-data__range">
+                      <span>End date</span>
+                      <select value={weeklyEndYear} onChange={(e) => setWeeklyEndYear(e.target.value)}>
+                        {weekYearOptions.map((y) => (
+                          <option key={`weekly-end-${y}`} value={String(y)}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </>
                 ) : (
                   <label className="statistic-data__range">

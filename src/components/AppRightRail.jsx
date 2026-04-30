@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { NewsRailFlyout } from './NewsRailFlyout.jsx';
 import { WatchlistRailFlyout } from './WatchlistRailFlyout.jsx';
+import { clearApiCache, clearAuthToken, fetchWithAuth } from '../store/apiStore.js';
+import { apiUrl } from '../utils/apiOrigin.js';
 
 /**
  * Fixed narrow right rail (Figma): always visible, not expandable.
@@ -107,12 +109,73 @@ function IcoOdinSignals() {
 }
 
 export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
+  const navigate = useNavigate();
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [newsOpen, setNewsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [displayName, setDisplayName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const profileWrapRef = useRef(null);
+
+  const fallbackName = (() => {
+    try {
+      const em = String(localStorage.getItem('market_api_email') || '').trim();
+      if (!em) return 'Profile';
+      const at = em.indexOf('@');
+      return (at > 0 ? em.slice(0, at) : em) || 'Profile';
+    } catch {
+      return 'Profile';
+    }
+  })();
+  const profileName = (displayName || fallbackName || 'Profile').trim();
+  const initials =
+    profileName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((s) => s[0])
+      .join('')
+      .toUpperCase() || 'P';
+
+  const handleSignOut = () => {
+    clearAuthToken();
+    clearApiCache();
+    navigate('/login', { replace: true });
+  };
+
+  useEffect(() => {
+    const onDown = (e) => {
+      const t = e.target;
+      if (profileWrapRef.current && !profileWrapRef.current.contains(t)) setProfileOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadProfile = async () => {
+      try {
+        const res = await fetchWithAuth(apiUrl('/api/user/profile'), { method: 'GET' });
+        const payload = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        const apiName = payload?.userName || payload?.displayName || '';
+        if (res.ok && apiName) setDisplayName(String(apiName));
+        if (res.ok) setAvatarUrl(String(payload?.avatarUrl || ''));
+      } catch {
+        /* ignore */
+      }
+    };
+    void loadProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const closeAll = () => {
     setWatchlistOpen(false);
     setNewsOpen(false);
+    setProfileOpen(false);
     if (typeof onRequestClose === 'function') onRequestClose();
   };
 
@@ -122,6 +185,7 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
       return;
     }
     setNewsOpen(false);
+    setProfileOpen(false);
     setWatchlistOpen((o) => !o);
   };
 
@@ -131,6 +195,7 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
       return;
     }
     setWatchlistOpen(false);
+    setProfileOpen(false);
     setNewsOpen((o) => !o);
   };
 
@@ -140,17 +205,54 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
       <NewsRailFlyout open={newsOpen} onClose={() => setNewsOpen(false)} />
       <aside className={'app-right-rail' + (mobileOpen ? ' app-right-rail--mobile-open' : '')} aria-label="Quick navigation">
         <div className="app-right-rail__stack">
-          <button
-            type="button"
-            className="app-right-rail__btn"
-            title="User Silhouette"
-            aria-label="User Silhouette"
-            onClick={() => {
-              if (mobileOpen) closeAll();
-            }}
-          >
-            <IcoUser />
-          </button>
+          <div className="header-util-wrap" ref={profileWrapRef}>
+            <button
+              type="button"
+              className={'app-right-rail__btn header-avatar-btn' + (profileOpen ? ' app-right-rail__btn--active header-avatar-btn--active' : '')}
+              title="User Silhouette"
+              aria-label="User Silhouette"
+              aria-expanded={profileOpen}
+              onClick={() => {
+                if (mobileOpen) {
+                  closeAll();
+                  return;
+                }
+                setWatchlistOpen(false);
+                setNewsOpen(false);
+                setProfileOpen((v) => !v);
+              }}
+            >
+              {avatarUrl ? <img src={avatarUrl} alt="" className="header-avatar-image" aria-hidden /> : <span className="header-avatar-placeholder">{initials}</span>}
+            </button>
+            {profileOpen ? (
+              <div className="header-pop header-pop--profile" role="menu" aria-label="Profile menu">
+                <div className="header-pop__profile-top">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" className="header-pop__profile-image" aria-hidden />
+                  ) : (
+                    <span className="header-pop__profile-icon" aria-hidden>{initials}</span>
+                  )}
+                  <span className="header-pop__profile-name">{profileName}</span>
+                </div>
+                <button type="button" className="header-pop__item" onClick={() => setProfileOpen(false)}>
+                  Your Profile
+                </button>
+                <button type="button" className="header-pop__item" onClick={() => setProfileOpen(false)}>
+                  Setting
+                </button>
+                <button
+                  type="button"
+                  className="header-pop__item header-pop__item--danger"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    handleSignOut();
+                  }}
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             className={'app-right-rail__btn' + (watchlistOpen ? ' app-right-rail__btn--active' : '')}

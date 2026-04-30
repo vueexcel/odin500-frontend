@@ -94,7 +94,15 @@ function labelOnDonut(r, degMid) {
  * same rows as the waterfall — updates when year or month date filter changes).
  * Renders below `TickerMonthlyReturnsChart`; does not replace it.
  */
-export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asOfDate, plotHeight, periodMode = 'monthly' }) {
+export function TickerMonthlyReturnsWaterfallDonut({
+  symbol,
+  monthlyReturns,
+  asOfDate,
+  plotHeight,
+  periodMode = 'monthly',
+  suppressChartDateFilter = false,
+  showOpenPeriodPageButton = false
+}) {
   const navigate = useNavigate();
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const [showTable, setShowTable] = useState(false);
@@ -414,6 +422,11 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
       });
     }, 150);
   }, [navigate, periodMode]);
+  const onOpenPeriodPage = useCallback(() => {
+    const suffix = String(symbol || '').trim() ? '/' + encodeURIComponent(String(symbol || '').trim()) : '';
+    const base = periodMode === 'weekly' ? '/ticker-weekly' : '/ticker-monthly';
+    navigate(base + suffix);
+  }, [navigate, periodMode, symbol]);
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
   const hasMonthlySource = monthRows.length > 0;
   const hasMonthly = displayMonthRows.length > 0;
@@ -476,11 +489,13 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
                 </select>
               </div>
             </div>
-            <ChartDateApplyRow
-              idPrefix="monthly-waterfall"
-              maxDate={asOfDate}
-              onApply={({ start, end }) => setMonthRangeApplied({ start, end })}
-            />
+            {!suppressChartDateFilter ? (
+              <ChartDateApplyRow
+                idPrefix="monthly-waterfall"
+                maxDate={asOfDate}
+                onApply={({ start, end }) => setMonthRangeApplied({ start, end })}
+              />
+            ) : null}
             <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
               <div className="ticker-annual-figma__left" />
               <div className="ticker-annual-figma__right">
@@ -491,6 +506,15 @@ export function TickerMonthlyReturnsWaterfallDonut({ symbol, monthlyReturns, asO
                 >
                   View More
                 </button>
+                {showOpenPeriodPageButton ? (
+                  <button
+                    type="button"
+                    className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+                    onClick={onOpenPeriodPage}
+                  >
+                    Open {periodMode === 'weekly' ? 'Weekly' : 'Monthly'} Page
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="ticker-annual-figma__btn"

@@ -149,14 +149,14 @@ function ohlcFromMainPoint(chartType, md) {
  * TradingView **Lightweight Charts™** — main series type controlled by parent (line, area, candles, bars) + volume.
  * @param {{ rows: unknown[], height?: number, chartType?: TickerChartType }} props
  */
-export function TickerLightweightChart({ rows, height = 320, chartType = 'line' }) {
+export function TickerLightweightChart({ rows, height = 320, chartType = 'line', onHoverOhlcChange = null }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const mainSeriesRef = useRef(null);
   const volRef = useRef(null);
   const rowByTimeRef = useRef(new Map());
   const chartTypeRef = useRef(chartType);
-  const [crosshairHtml, setCrosshairHtml] = useState(null);
+  const onHoverOhlcChangeRef = useRef(onHoverOhlcChange);
 
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
 
@@ -175,17 +175,20 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
     const linePts = candles0.map((c) => ({ time: c.time, value: c.close }));
     const upCol = chartTheme === 'light' ? 'rgba(22, 163, 74, 0.5)' : 'rgba(34, 197, 94, 0.45)';
     const downCol = chartTheme === 'light' ? 'rgba(220, 38, 38, 0.5)' : 'rgba(239, 68, 68, 0.45)';
-    const volumes0 = candles0.map((c) => {
-      const row = byTime.get(c.time);
-      const v = row ? pickNum(row, ['Volume', 'volume', 'VOLUME']) : null;
-      const val = v != null && Number.isFinite(v) && v > 0 ? v : 0;
-      const up = c.close >= c.open;
-      return {
-        time: c.time,
-        value: val,
-        color: up ? upCol : downCol
-      };
-    });
+    const volumes0 = candles0
+      .map((c) => {
+        const row = byTime.get(c.time);
+        const v = row ? pickNum(row, ['Volume', 'volume', 'VOLUME']) : null;
+        const val = v != null && Number.isFinite(v) && v > 0 ? v : null;
+        if (val == null) return null;
+        const up = c.close >= c.open;
+        return {
+          time: c.time,
+          value: val,
+          color: up ? upCol : downCol
+        };
+      })
+      .filter(Boolean);
     return { linePoints: linePts, candles: candles0, volumes: volumes0, rowByTime: byTime };
   }, [rows, chartTheme]);
 
@@ -196,6 +199,10 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
   useEffect(() => {
     chartTypeRef.current = chartType;
   }, [chartType]);
+
+  useEffect(() => {
+    onHoverOhlcChangeRef.current = onHoverOhlcChange;
+  }, [onHoverOhlcChange]);
 
   const addMainSeries = useCallback((chart, type, theme) => {
     const ohlcStyle =
@@ -278,7 +285,10 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
     const mainSeries = addMainSeries(chart, chartType, chartTheme);
     const volSeries = chart.addHistogramSeries({
       priceFormat: { type: 'volume' },
-      priceScaleId: ''
+      priceScaleId: '',
+      priceLineVisible: false,
+      lastValueVisible: false,
+      baseLineVisible: false
     });
 
     mainSeries.priceScale().applyOptions({
@@ -294,61 +304,39 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
 
     chart.subscribeCrosshairMove((param) => {
       if (!param || param.time === undefined || param.point === undefined) {
-        setCrosshairHtml(null);
+        if (typeof onHoverOhlcChangeRef.current === 'function') onHoverOhlcChangeRef.current(null);
         return;
       }
       const ct = chartTypeRef.current;
       const md = param.seriesData.get(mainSeries);
       const ohlc = ohlcFromMainPoint(ct, md);
       if (!ohlc) {
-        setCrosshairHtml(null);
+        if (typeof onHoverOhlcChangeRef.current === 'function') onHoverOhlcChangeRef.current(null);
         return;
       }
       const tKey = timeKeyFromCrosshair(param.time);
       const dateStr = formatChartTime(param.time);
       const row = rowByTimeRef.current.get(tKey);
       const v = param.seriesData.get(volSeries);
-      const volLine =
-        v && typeof v.value === 'number' && v.value > 0
-          ? '\nVol ' + Math.round(v.value).toLocaleString('en-US')
-          : '';
-      let body;
+      const vol = v && typeof v.value === 'number' && v.value > 0 ? Number(v.value) : null;
+      let open = null;
+      let high = null;
+      let low = null;
+      let close = null;
       if (ct === 'line' || ct === 'area') {
-        const o = row ? pickNum(row, ['Open', 'open']) : null;
-        const h = row ? pickNum(row, ['High', 'high']) : null;
-        const l = row ? pickNum(row, ['Low', 'low']) : null;
-        const c = ohlc.close;
-        body =
-          o != null && h != null && l != null
-            ? 'O ' +
-              formatPrice(o) +
-              '\nH ' +
-              formatPrice(h) +
-              '\nL ' +
-              formatPrice(l) +
-              '\nC ' +
-              formatPrice(c)
-            : 'Close ' + formatPrice(c);
+        open = row ? pickNum(row, ['Open', 'open']) : null;
+        high = row ? pickNum(row, ['High', 'high']) : null;
+        low = row ? pickNum(row, ['Low', 'low']) : null;
+        close = ohlc.close;
       } else {
-        body =
-          'O ' +
-          formatPrice(ohlc.open) +
-          '\nH ' +
-          formatPrice(ohlc.high) +
-          '\nL ' +
-          formatPrice(ohlc.low) +
-          '\nC ' +
-          formatPrice(ohlc.close);
+        open = ohlc.open ?? null;
+        high = ohlc.high ?? null;
+        low = ohlc.low ?? null;
+        close = ohlc.close ?? null;
       }
-      setCrosshairHtml(
-        <>
-          <div className="ticker-lw-chart__ohlc-muted">{dateStr}</div>
-          <span>
-            {body}
-            {volLine}
-          </span>
-        </>
-      );
+      if (typeof onHoverOhlcChangeRef.current === 'function') {
+        onHoverOhlcChangeRef.current({ date: dateStr, open, high, low, close, volume: vol });
+      }
     });
 
     const ro = new ResizeObserver(() => {
@@ -395,29 +383,9 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line' 
     chart.timeScale().fitContent();
   }, [linePoints, candles, volumes, chartType, chartTheme]);
 
-  const hintLine =
-    chartType === 'line' || chartType === 'area'
-      ? 'hover for OHLC (line = Close)'
-      : 'hover for OHLC on each bar';
-
   return (
     <div className="ticker-lw-chart">
       <div ref={containerRef} className="ticker-lw-chart__root" />
-      <div
-        className={
-          'ticker-lw-chart__hover' + (chartTheme === 'light' ? ' ticker-lw-chart__hover--light' : '')
-        }
-        aria-live="polite"
-      >
-        {crosshairHtml == null ? (
-          <>
-            <div className="ticker-lw-chart__ohlc-muted">Crosshair</div>
-            <span>Drag to pan · wheel / pinch to zoom · {hintLine}</span>
-          </>
-        ) : (
-          crosshairHtml
-        )}
-      </div>
     </div>
   );
 }

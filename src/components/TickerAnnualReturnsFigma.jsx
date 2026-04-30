@@ -2,10 +2,9 @@ import { useCallback, useId, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { useTickerPlotResize } from '../hooks/useTickerPlotResize.js';
-import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import { formatWeekAxisDate, isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
-import { filterReturnsRows } from '../utils/returnsDateRange.js';
+import { periodModeNouns } from '../utils/periodModeNouns.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
 /** Match `TickerLightweightChart` / dark ticker cards. */
@@ -191,7 +190,7 @@ function csvEscape(s) {
 
 /**
  * Figma-style annual returns + stats (uses `performance.annualReturns` from ticker-returns API).
- * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, resizeStorageKey?: string, resizeDefaultHeight?: number, periodMode?: 'annual' | 'quarterly' | 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean }} props
+ * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, resizeStorageKey?: string, resizeDefaultHeight?: number, periodMode?: 'annual' | 'quarterly' | 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, toolbarControls?: import('react').ReactNode }} props
  */
 export function TickerAnnualReturnsFigma({
   symbol,
@@ -201,7 +200,9 @@ export function TickerAnnualReturnsFigma({
   resizeStorageKey,
   resizeDefaultHeight = 260,
   periodMode = 'annual',
-  suppressChartDateFilter = false
+  suppressChartDateFilter = false,
+  showOpenPeriodPageButton = false,
+  toolbarControls = null
 }) {
   const navigate = useNavigate();
   const resize = useTickerPlotResize(resizeStorageKey ?? null, resizeDefaultHeight);
@@ -210,7 +211,6 @@ export function TickerAnnualReturnsFigma({
   const clipSummaryId = useId().replace(/:/g, '');
 
   const [showTable, setShowTable] = useState(false);
-  const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
 
   const rows = useMemo(() => {
     if (!Array.isArray(annualReturns)) return [];
@@ -327,11 +327,7 @@ export function TickerAnnualReturnsFigma({
     return mapped;
   }, [annualReturns, periodMode]);
 
-  const displayRows = useMemo(
-    () =>
-      suppressChartDateFilter ? rows : filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
-    [rows, rangeApplied.start, rangeApplied.end, suppressChartDateFilter]
-  );
+  const displayRows = useMemo(() => rows, [rows]);
 
   const stats = useMemo(() => {
     if (!displayRows.length) return null;
@@ -348,6 +344,8 @@ export function TickerAnnualReturnsFigma({
       med: median(rets)
     };
   }, [displayRows]);
+
+  const pn = useMemo(() => periodModeNouns(periodMode), [periodMode]);
 
   const onDownloadCsv = useCallback(() => {
     if (!displayRows.length) return;
@@ -404,6 +402,21 @@ export function TickerAnnualReturnsFigma({
       });
     }, 150);
   }, [navigate, periodMode]);
+
+  const onOpenPeriodPage = useCallback(() => {
+    const suffix = String(symbol || '').trim() ? '/' + encodeURIComponent(String(symbol || '').trim()) : '';
+    const path =
+      periodMode === 'quarterly'
+        ? '/ticker-quarterly'
+        : periodMode === 'monthly'
+          ? '/ticker-monthly'
+          : periodMode === 'weekly'
+            ? '/ticker-weekly'
+            : periodMode === 'daily'
+              ? '/ticker-daily'
+              : '/ticker-annual';
+    navigate(path + suffix);
+  }, [navigate, periodMode, symbol]);
 
   const comboSvg = useMemo(() => {
     if (!displayRows.length || !stats) return null;
@@ -823,6 +836,7 @@ export function TickerAnnualReturnsFigma({
             <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualReturns} align="end" />
           </span>
           <div className="ticker-annual-figma__actions">
+            {toolbarControls}
             <button
               type="button"
               className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
@@ -830,6 +844,15 @@ export function TickerAnnualReturnsFigma({
             >
               View More
             </button>
+            {showOpenPeriodPageButton ? (
+              <button
+                type="button"
+                className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+                onClick={onOpenPeriodPage}
+              >
+                Open {periodMode === 'quarterly' ? 'Quarterly' : periodMode === 'monthly' ? 'Monthly' : periodMode === 'weekly' ? 'Weekly' : periodMode === 'daily' ? 'Daily' : 'Annual'} Page
+              </button>
+            ) : null}
             <button
               type="button"
               className="ticker-annual-figma__btn ticker-annual-figma__btn--primary"
@@ -842,18 +865,6 @@ export function TickerAnnualReturnsFigma({
             </button>
           </div>
         </div>
-        {!suppressChartDateFilter ? (
-          <ChartDateApplyRow
-            idPrefix="annual-figma"
-            maxDate={asOfDate}
-            mode={periodMode === 'daily' ? 'date' : 'year'}
-            minYear={1980}
-            maxYear={2026}
-            initialStart={periodMode === 'daily' ? '' : '2018'}
-            initialEnd={periodMode === 'daily' ? '' : String(asOfDate || '').slice(0, 4)}
-            onApply={({ start, end }) => setRangeApplied({ start, end })}
-          />
-        ) : null}
         <div className="ticker-annual-figma__chart-card">
           {comboSvg ? (
             comboSvg
@@ -874,7 +885,7 @@ export function TickerAnnualReturnsFigma({
           ) : (
             <span className="ticker-annual-figma__legend-item">
               <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden />
-              Annual return (%)
+              {pn.statsLabel} return (%)
             </span>
           )}
           <span className="ticker-annual-figma__legend-item">
@@ -928,7 +939,7 @@ export function TickerAnnualReturnsFigma({
       <div className="ticker-annual-figma__section">
         <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--stack">
           <span className="ticker-annual-figma__badge">
-            Annual stats — positive / negative, min max{' '}
+            {pn.statsLabel} stats — positive / negative, min max{' '}
             <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualStats} align="end" />
           </span>
         </div>
@@ -937,10 +948,12 @@ export function TickerAnnualReturnsFigma({
             {donut}
             <div className="ticker-annual-figma__legend ticker-annual-figma__legend--donut">
               <span className="ticker-annual-figma__legend-item">
-                <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden /># positive years
+                <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden />
+                # positive {pn.lower}
               </span>
               <span className="ticker-annual-figma__legend-item">
-                <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--orange" aria-hidden /># negative years
+                <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--orange" aria-hidden />
+                # negative {pn.lower}
               </span>
             </div>
           </div>

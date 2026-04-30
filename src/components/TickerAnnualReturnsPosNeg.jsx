@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
+import { periodModeNouns } from '../utils/periodModeNouns.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
@@ -101,7 +102,7 @@ function buildCounts(rows, mode) {
   return c;
 }
 
-function BucketDonut({ counts, buckets, theme, plotHeight }) {
+function BucketDonut({ counts, buckets, theme, plotHeight, emptyPeriodLower = 'years' }) {
   const light = theme === 'light';
   const ringStroke = light ? '#e2e8f0' : '#0d1520';
   const labelFill = light ? '#0f172a' : '#f8fafc';
@@ -111,7 +112,7 @@ function BucketDonut({ counts, buckets, theme, plotHeight }) {
   if (total === 0) {
     return (
       <div className="ticker-annual-donut__donut-empty">
-        <p className="ticker-annual-donut__donut-empty-txt">No years in these buckets.</p>
+        <p className="ticker-annual-donut__donut-empty-txt">No {emptyPeriodLower} in these buckets.</p>
       </div>
     );
   }
@@ -221,8 +222,8 @@ export function TickerAnnualReturnsPosNeg({
   }, [annualReturns]);
 
   const filteredRows = useMemo(
-    () => filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
-    [rows, rangeApplied.start, rangeApplied.end]
+    () => (suppressChartDateFilter ? rows : filterReturnsRows(rows, rangeApplied.start, rangeApplied.end)),
+    [rows, rangeApplied.start, rangeApplied.end, suppressChartDateFilter]
   );
 
   const countsTotal = useMemo(() => buildCounts(filteredRows, 'all'), [filteredRows]);
@@ -230,6 +231,12 @@ export function TickerAnnualReturnsPosNeg({
     () => (rightMode === 'positive' ? buildCounts(filteredRows, 'pos') : buildCounts(filteredRows, 'neg')),
     [filteredRows, rightMode]
   );
+
+  const pn = useMemo(() => periodModeNouns(periodMode), [periodMode]);
+  const panelTotalTitle = `${pn.title}, total`;
+  const positiveTabLabel = `Positive ${pn.title}`;
+  const negativeTabLabel = `Negative ${pn.title}`;
+  const rightTitle = rightMode === 'positive' ? `Positive ${pn.lower}` : `Negative ${pn.lower}`;
 
   const onDownloadCsv = useCallback(() => {
     if (!filteredRows.length) return;
@@ -262,7 +269,7 @@ export function TickerAnnualReturnsPosNeg({
         <div className="ticker-annual-figma__section">
           <div className="ticker-annual-figma__toolbar">
             <span className="ticker-annual-figma__badge">
-              {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive &amp; negative periods
+              {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive &amp; negative {pn.lower}
             </span>
           </div>
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
@@ -278,14 +285,12 @@ export function TickerAnnualReturnsPosNeg({
     );
   }
 
-  const rightTitle = rightMode === 'positive' ? 'Positive years' : 'Negative years';
-
   return (
     <div className="ticker-annual-donut">
       <div className="ticker-annual-figma__section ticker-annual-donut__section">
         <div className="ticker-annual-figma__toolbar">
           <span className="ticker-annual-figma__badge">
-            {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive &amp; negative periods
+            {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive &amp; negative {pn.lower}
           </span>
         </div>
         {!suppressChartDateFilter ? (
@@ -330,7 +335,7 @@ export function TickerAnnualReturnsPosNeg({
                 aria-selected={rightMode === 'positive'}
                 onClick={() => setRightMode('positive')}
               >
-                Positive Years
+                {positiveTabLabel}
               </button>
               <button
                 type="button"
@@ -342,7 +347,7 @@ export function TickerAnnualReturnsPosNeg({
                 aria-selected={rightMode === 'negative'}
                 onClick={() => setRightMode('negative')}
               >
-                Negative Years
+                {negativeTabLabel}
               </button>
             </div>
           </div>
@@ -351,11 +356,11 @@ export function TickerAnnualReturnsPosNeg({
             <div className="ticker-annual-donut__panel ticker-annual-figma__chart-card">
               <div className="ticker-annual-donut__panel-head">
                 <span className="ticker-annual-donut__panel-spacer" aria-hidden />
-                <h3 className="ticker-annual-donut__panel-title">Years, total</h3>
+                <h3 className="ticker-annual-donut__panel-title">{panelTotalTitle}</h3>
                 <div className="ticker-annual-donut__panel-tip">
                   <DataInfoTip align="end">
                     <p className="ticker-data-tip__p">
-                        <strong>Years, total</strong>: every row in{' '}
+                        <strong>{panelTotalTitle}</strong>: every row in{' '}
                         <code className="ticker-data-tip__code">
                           performance.{periodMode === 'quarterly' ? 'quarterlyReturns' : periodMode === 'monthly' ? 'monthlyReturns' : periodMode === 'weekly' ? 'weeklyReturns' : periodMode === 'daily' ? 'dailyReturns' : 'annualReturns'}
                         </code>{' '}
@@ -375,7 +380,13 @@ export function TickerAnnualReturnsPosNeg({
                 </div>
               </div>
               <div className="ticker-annual-donut__donut-wrap">
-                <BucketDonut counts={countsTotal} buckets={buckets} theme={chartTheme} plotHeight={plotHeight} />
+                <BucketDonut
+                  counts={countsTotal}
+                  buckets={buckets}
+                  theme={chartTheme}
+                  plotHeight={plotHeight}
+                  emptyPeriodLower={pn.lower}
+                />
               </div>
               <div className="ticker-annual-donut__legend">
                 {buckets.map((b) => (
@@ -396,18 +407,18 @@ export function TickerAnnualReturnsPosNeg({
                     {rightMode === 'positive' ? (
                       <>
                         <p className="ticker-data-tip__p">
-                          <strong>Positive years</strong> only: years with <strong>totalReturn &gt; 0</strong>. Each is
+                          <strong>Positive {pn.lower}</strong> only: {pn.lower} with <strong>totalReturn &gt; 0</strong>. Each is
                           bucketed by the <strong>actual</strong> positive return into the same five bands (0–1% through
                           &gt;10%).
                         </p>
                         <p className="ticker-data-tip__p">
-                          Counts sum to the number of up years in the series, not the total number of years.
+                          Counts sum to the number of up {pn.lower} in the series, not the total count of {pn.lower}.
                         </p>
                       </>
                     ) : (
                       <>
                         <p className="ticker-data-tip__p">
-                          <strong>Negative years</strong> only: years with <strong>totalReturn &lt; 0</strong>. Each is
+                          <strong>Negative {pn.lower}</strong> only: {pn.lower} with <strong>totalReturn &lt; 0</strong>. Each is
                           bucketed by <strong>loss magnitude</strong> (absolute value of the negative return) into 0–1%,
                           1–2.5%, 2.5–5%, 5–10%, or &gt;10%.
                         </p>
@@ -417,7 +428,7 @@ export function TickerAnnualReturnsPosNeg({
                       </>
                     )}
                     <p className="ticker-data-tip__p">
-                      Use the <strong>Positive Years</strong> / <strong>Negative Years</strong> control above to switch
+                      Use the <strong>{positiveTabLabel}</strong> / <strong>{negativeTabLabel}</strong> control above to switch
                       this panel. Symbol <strong>{symU}</strong>.
                     </p>
                     {asOfLine}
@@ -425,7 +436,13 @@ export function TickerAnnualReturnsPosNeg({
                 </div>
               </div>
               <div className="ticker-annual-donut__donut-wrap">
-                <BucketDonut counts={countsRight} buckets={buckets} theme={chartTheme} plotHeight={plotHeight} />
+                <BucketDonut
+                  counts={countsRight}
+                  buckets={buckets}
+                  theme={chartTheme}
+                  plotHeight={plotHeight}
+                  emptyPeriodLower={pn.lower}
+                />
               </div>
               <div className="ticker-annual-donut__legend">
                 {buckets.map((b) => (

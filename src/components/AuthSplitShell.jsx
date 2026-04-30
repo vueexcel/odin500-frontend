@@ -18,7 +18,7 @@ export function AuthHeroVisual() {
         alt=""
         className="h-[260px] w-full object-cover object-center lg:absolute lg:inset-0 lg:h-full lg:min-h-full"
         decoding="async"
-        fetchPriority="high"
+        fetchpriority="high"
       />
     </div>
   );

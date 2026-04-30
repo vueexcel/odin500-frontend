@@ -234,10 +234,10 @@ function tooltipPosition(clientX, clientY) {
 }
 
 const LABEL_ON_TILE = '#f8fafc';
-const LABEL_ON_TILE_MUTED = 'rgba(248, 250, 252, 0.88)';
+const LABEL_ON_TILE_MUTED = 'rgba(255, 255, 255, 0.9)';
 
-const MIN_TILE_SYM_PX = 7;
-const MAX_TILE_SYM_PX = 22;
+const MIN_TILE_SYM_PX = 10;
+const MAX_TILE_SYM_PX = 28;
 
 /** Approximate text width for bold UI sans (tickers uppercase; % string mixed). */
 function approxLabelWidth(str, fontPx, charFactor) {
@@ -249,18 +249,15 @@ function approxLabelWidth(str, fontPx, charFactor) {
  * Picks the largest font size that fits (down to MIN_TILE_SYM_PX).
  */
 function fitTileTwoLine(w, h, sym, pctStr) {
-  const padX = 4;
-  const padY = 3;
+  const padX = 3;
+  const padY = 2;
   const gap = 2;
   const symS = String(sym || '');
   const pctS = String(pctStr);
-  const startSym = Math.min(
-    MAX_TILE_SYM_PX,
-    Math.max(MIN_TILE_SYM_PX, Math.floor(Math.min(w, h) * 0.15))
-  );
+  const startSym = Math.min(MAX_TILE_SYM_PX, Math.max(MIN_TILE_SYM_PX, Math.floor(Math.min(w, h) * 0.22)));
 
   for (let symPx = startSym; symPx >= MIN_TILE_SYM_PX; symPx--) {
-    const pctPx = Math.max(6, Math.round(symPx * 0.82));
+    const pctPx = Math.max(6, Math.round(symPx * 0.6));
     const needW =
       Math.max(
         approxLabelWidth(symS, symPx, 0.62),
@@ -281,6 +278,7 @@ export function SectorTreemap({
   rows,
   scaleMin = -3,
   scaleMax = 3,
+  colorFade = undefined,
   highlightSymbol = '',
   disableTooltip = false,
   finvizStrict = false,
@@ -503,8 +501,8 @@ export function SectorTreemap({
               <text
                 x={node.x0 + 8}
                 y={node.y0 + band * 0.72}
-                className="sector-treemap__sector-title"
-                fill="#f8fafc"
+                className="sector-treemap__sector-title heatmap-sector-label"
+                fill="rgba(255,255,255,0.75)"
                 pointerEvents="none"
               >
                 {String(node.data.name).toUpperCase()}
@@ -567,7 +565,7 @@ export function SectorTreemap({
                 x={node.x0 + 5}
                 y={node.y0 + band * 0.72}
                 className="sector-treemap__industry-title"
-                fill="#86efac"
+                fill="rgba(255,255,255,0.55)"
                 pointerEvents="none"
               >
                 {short}
@@ -583,8 +581,8 @@ export function SectorTreemap({
           const cn = node.data.chartNum;
           const fill =
             odinSignalMode && Number.isFinite(Number(cn))
-              ? returnToHeatColor(Number(cn), -3, 3)
-              : returnToHeatColor(pct, scaleMin, scaleMax);
+              ? returnToHeatColor(Number(cn), -3, 3, colorFade)
+              : returnToHeatColor(pct, scaleMin, scaleMax, colorFade);
           const active = highlightSymbol && String(sym).toUpperCase() === highlightSymbol.toUpperCase();
           const pctStr = formatChangePct(pct);
           const tooltipTitle = `${sym} — ${pctStr}`;
@@ -631,15 +629,16 @@ export function SectorTreemap({
             >
               {disableTooltip ? null : <title>{tooltipTitle}</title>}
               <rect
+                className="heatmap-tile"
                 x={node.x0}
                 y={node.y0}
                 width={Math.max(0, w)}
                 height={Math.max(0, h)}
                 fill={fill}
-                stroke="rgba(15, 23, 42, 0.65)"
+                stroke="rgba(0, 0, 0, 0.3)"
                 strokeWidth={active ? 2 : 1}
-                rx={1}
-                ry={1}
+                rx={2}
+                ry={2}
               />
               {labelFit ? (
                 <>
@@ -661,7 +660,7 @@ export function SectorTreemap({
                     dominantBaseline="middle"
                     className="sector-treemap__pct sector-treemap__tick--finviz"
                     fill={LABEL_ON_TILE_MUTED}
-                    style={{ fontSize: labelFit.pctPx }}
+                    style={{ fontSize: labelFit.pctPx, fontWeight: 400 }}
                   >
                     {pctStr}
                   </text>

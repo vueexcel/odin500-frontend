@@ -7,6 +7,7 @@ import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
 const COL_BAR = '#2563eb';
+const COL_AVG = '#f97316';
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
 const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
 const COL_AXIS = '#94a3b8';
@@ -89,7 +90,7 @@ function yForValue(v, innerTop, innerH, yMin, yMax) {
 
 /**
  * Monthly returns for one calendar year (Figma-style), with year dropdown + info tip.
- * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean }} props
+ * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean }} props
  */
 export function TickerMonthlyReturnsChart({
   symbol,
@@ -97,7 +98,8 @@ export function TickerMonthlyReturnsChart({
   asOfDate,
   plotHeight,
   periodMode = 'monthly',
-  suppressChartDateFilter = false
+  suppressChartDateFilter = false,
+  showOpenPeriodPageButton = false
 }) {
   const navigate = useNavigate();
   const [showTable, setShowTable] = useState(false);
@@ -183,6 +185,11 @@ export function TickerMonthlyReturnsChart({
     if (hi <= lo) hi = lo + 5;
     return { yMin: lo, yMax: hi };
   }, [monthValues]);
+  const avgReturn = useMemo(() => {
+    const vals = monthValues.filter((v) => v != null && Number.isFinite(v));
+    if (!vals.length) return null;
+    return vals.reduce((sum, v) => sum + Number(v), 0) / vals.length;
+  }, [monthValues]);
 
   const chart = useMemo(() => {
     const W = 720;
@@ -263,6 +270,30 @@ export function TickerMonthlyReturnsChart({
       );
     });
 
+    const avgLine =
+      avgReturn != null && Number.isFinite(avgReturn) ? (
+        <g>
+          <line
+            x1={padL}
+            y1={yForValue(avgReturn, padT, ih, yMin, yMax)}
+            x2={W - padR}
+            y2={yForValue(avgReturn, padT, ih, yMin, yMax)}
+            stroke={COL_AVG}
+            strokeWidth={1.5}
+          />
+          <text
+            x={W - padR}
+            y={yForValue(avgReturn, padT, ih, yMin, yMax) - 5}
+            textAnchor="end"
+            fill={COL_AVG}
+            fontSize="10"
+            fontWeight="700"
+          >
+            Avg {avgReturn.toFixed(1)}%
+          </text>
+        </g>
+      ) : null;
+
     return (
       <svg
         className="ticker-annual-figma__svg ticker-monthly__svg"
@@ -271,11 +302,12 @@ export function TickerMonthlyReturnsChart({
         style={tickerSvgPlotStyle(plotHeight)}
       >
         {gridLines}
+        {avgLine}
         {bars}
         {xLabels}
       </svg>
     );
-  }, [monthValues, yMin, yMax, plotHeight, periodMode, weekAxisLabels]);
+  }, [avgReturn, monthValues, yMin, yMax, plotHeight, periodMode, weekAxisLabels]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
@@ -321,6 +353,17 @@ export function TickerMonthlyReturnsChart({
       });
     }, 150);
   }, [navigate, periodMode]);
+
+  const onOpenPeriodPage = useCallback(() => {
+    const suffix = String(symbol || '').trim() ? '/' + encodeURIComponent(String(symbol || '').trim()) : '';
+    const base =
+      periodMode === 'weekly'
+        ? '/ticker-weekly'
+        : periodMode === 'daily'
+          ? '/ticker-daily'
+          : '/ticker-monthly';
+    navigate(base + suffix);
+  }, [navigate, periodMode, symbol]);
 
   if (!rows.length) {
     return (
@@ -439,6 +482,15 @@ export function TickerMonthlyReturnsChart({
             >
               View More
             </button>
+            {showOpenPeriodPageButton ? (
+              <button
+                type="button"
+                className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+                onClick={onOpenPeriodPage}
+              >
+                Open {periodMode === 'weekly' ? 'Weekly' : periodMode === 'daily' ? 'Daily' : 'Monthly'} Page
+              </button>
+            ) : null}
             <button
               type="button"
               className="ticker-annual-figma__btn"
@@ -467,6 +519,10 @@ export function TickerMonthlyReturnsChart({
           <span className="ticker-annual-figma__legend-item">
             <span className="ticker-monthly__swatch" aria-hidden />
             {selectedYear}
+          </span>
+          <span className="ticker-annual-figma__legend-item">
+            <span className="ticker-annual-figma__swatch-line" style={{ borderTopColor: COL_AVG }} aria-hidden />
+            Avg return
           </span>
         </div>
         {showTable ? (

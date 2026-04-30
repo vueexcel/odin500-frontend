@@ -8,12 +8,13 @@ import { usePageSeo } from '../seo/usePageSeo.js';
 const PAGE_SIZE = 50;
 const DEFAULT_TICKER = 'AAPL';
 
-/** @typedef {'daily' | 'weekly' | 'monthly' | 'annual'} OhlcFrequency */
+/** @typedef {'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual'} OhlcFrequency */
 
 const FREQUENCY_OPTIONS = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
   { value: 'annual', label: 'Annually' }
 ];
 
@@ -205,6 +206,60 @@ function aggregateMonthlyToAnnual(monthlyOHLC) {
   return sortNormalizedDesc(out);
 }
 
+/** Build quarterly OHLC from monthly OHLC (first open / last close of quarter, range high/low). */
+function aggregateMonthlyToQuarterly(monthlyOHLC) {
+  if (!Array.isArray(monthlyOHLC) || !monthlyOHLC.length) return [];
+  const byQuarter = new Map();
+  const chron = [...monthlyOHLC].sort((a, b) => {
+    const ya = Number(a.year);
+    const yb = Number(b.year);
+    if (ya !== yb) return ya - yb;
+    return Number(a.month) - Number(b.month);
+  });
+  for (const r of chron) {
+    const y = Number(r.year);
+    const m = Number(r.month);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) continue;
+    const q = Math.floor((m - 1) / 3) + 1;
+    const key = `${y}-Q${q}`;
+    const open = Number(r.open);
+    const high = Number(r.high);
+    const low = Number(r.low);
+    const close = Number(r.close);
+    const endDate = String(r.end_date || '').slice(0, 10);
+    if (!byQuarter.has(key)) {
+      byQuarter.set(key, {
+        period: key,
+        open: Number.isFinite(open) ? open : null,
+        high: Number.isFinite(high) ? high : null,
+        low: Number.isFinite(low) ? low : null,
+        close: Number.isFinite(close) ? close : null,
+        sortKey: endDate || key
+      });
+    } else {
+      const agg = byQuarter.get(key);
+      if (Number.isFinite(high) && (agg.high == null || high > agg.high)) agg.high = high;
+      if (Number.isFinite(low) && (agg.low == null || low < agg.low)) agg.low = low;
+      if (Number.isFinite(close)) {
+        agg.close = close;
+        if (endDate) agg.sortKey = endDate;
+      }
+    }
+  }
+
+  return sortNormalizedDesc(
+    [...byQuarter.values()].map((q) => ({
+      period: q.period,
+      sortKey: q.sortKey,
+      open: q.open,
+      high: q.high,
+      low: q.low,
+      close: q.close,
+      returnPct: computeReturnPct(q.open, q.close)
+    }))
+  );
+}
+
 export default function HistoricalDataPage() {
   usePageSeo({
     title: 'Historical OHLC Data and CSV Export | Odin500',
@@ -265,6 +320,15 @@ export default function HistoricalDataPage() {
         });
         const monthly = res?.data?.monthlyOHLC;
         setRows(normalizeMonthlyRows(monthly));
+      } else if (frequency === 'quarterly') {
+        const res = await fetchJsonCached({
+          path: '/api/market/monthly-ohlc',
+          method: 'POST',
+          body: { ticker: sym, start_date: startDate, end_date: endDate },
+          ttlMs: 5 * 60 * 1000
+        });
+        const monthly = res?.data?.monthlyOHLC;
+        setRows(aggregateMonthlyToQuarterly(monthly));
       } else if (frequency === 'annual') {
         const res = await fetchJsonCached({
           path: '/api/market/monthly-ohlc',
@@ -303,6 +367,8 @@ export default function HistoricalDataPage() {
         return 'Loading weekly OHLC…';
       case 'monthly':
         return 'Loading monthly OHLC…';
+      case 'quarterly':
+        return 'Loading quarterly OHLC…';
       case 'annual':
         return 'Loading annual OHLC…';
       default:
@@ -339,7 +405,7 @@ export default function HistoricalDataPage() {
     <div className="historical-data-page">
       <header className="historical-data__head">
         <h1>Historical Data</h1>
-        <p>OHLC by ticker and date range — daily from raw bars; weekly and monthly from aggregated APIs; annually rolled up from monthly.</p>
+        <p>OHLC by ticker and date range — daily from raw bars; weekly and monthly from aggregated APIs; quarterly and annually rolled up from monthly.</p>
       </header>
 
       <section className="historical-data__controls">

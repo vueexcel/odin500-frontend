@@ -4,7 +4,6 @@ import { DataInfoTip } from '../components/DataInfoTip.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
 import { TickerAnnualReturnsPosNeg } from '../components/TickerAnnualReturnsPosNeg.jsx';
-import { TickerQuarterlyReturnsChart } from '../components/TickerQuarterlyReturnsChart.jsx';
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
@@ -13,8 +12,8 @@ import { usePageSeo } from '../seo/usePageSeo.js';
 
 const RESIZE_KEY_ANNUAL_FIGMA = 'odin_ticker_annual_only_resize_annual_figma';
 const RESIZE_KEY_ANNUAL_POSNEG = 'odin_ticker_annual_only_resize_annual_posneg';
-const RESIZE_KEY_QUARTERLY = 'odin_ticker_annual_only_resize_quarterly';
-const RETURNS_DEFAULT_START = '1980-01-01';
+const RETURNS_DEFAULT_START = '2018-01-01';
+const RETURNS_DEFAULT_END = '2026-12-31';
 const BENCHMARK = 'SPY';
 const PERF_COLS = [
   { label: '1M', period: 'Last Month' },
@@ -336,12 +335,18 @@ function FigmaPagination({ page, totalPages, onPageChange }) {
 export default function TickerAnnualPage() {
   const { symbol: symbolParam } = useParams();
   const navigate = useNavigate();
+  const todayIso = new Date().toISOString().slice(0, 10);
   const [sym, setSym] = useState(() => sanitizeTickerPageInput(symbolParam) || 'AAPL');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [asOfDate, setAsOfDate] = useState(() => todayIso);
+  const [draftStartDate, setDraftStartDate] = useState(RETURNS_DEFAULT_START);
+  const [draftEndDate, setDraftEndDate] = useState(RETURNS_DEFAULT_END);
+  const [appliedRange, setAppliedRange] = useState(() => ({
+    start: RETURNS_DEFAULT_START,
+    end: RETURNS_DEFAULT_END
+  }));
   const [annualReturnsRaw, setAnnualReturnsRaw] = useState([]);
-  const [quarterlyReturnsRaw, setQuarterlyReturnsRaw] = useState([]);
   const [dynamicSym, setDynamicSym] = useState([]);
   const [dynamicSpy, setDynamicSpy] = useState([]);
   const [statsRows, setStatsRows] = useState([]);
@@ -356,8 +361,8 @@ export default function TickerAnnualPage() {
   }, [symbolParam]);
 
   usePageSeo({
-    title: `${String(sym).toUpperCase()} Annual & Quarterly Returns | Odin500`,
-    description: `Annual and quarterly return charts for ${String(sym).toUpperCase()} on Odin500.`,
+    title: `${String(sym).toUpperCase()} Annual Returns | Odin500`,
+    description: `Annual return charts for ${String(sym).toUpperCase()} on Odin500.`,
     canonicalPath: `/ticker-annual/${String(sym || 'aapl').toLowerCase()}`
   });
 
@@ -370,12 +375,24 @@ export default function TickerAnnualPage() {
     [navigate]
   );
 
+  const applyReturnsRange = useCallback(() => {
+    let start = String(draftStartDate || '').slice(0, 10) || RETURNS_DEFAULT_START;
+    let end = String(draftEndDate || '').slice(0, 10) || RETURNS_DEFAULT_END;
+    if (start > end) {
+      const t = start;
+      start = end;
+      end = t;
+    }
+    setDraftStartDate(start);
+    setDraftEndDate(end);
+    setAppliedRange({ start, end });
+  }, [draftStartDate, draftEndDate, todayIso]);
+
   useEffect(() => {
     let cancelled = false;
     if (!getAuthToken()) {
       setError('Sign in to load ticker data.');
       setAnnualReturnsRaw([]);
-      setQuarterlyReturnsRaw([]);
       return () => {
         cancelled = true;
       };
@@ -385,25 +402,19 @@ export default function TickerAnnualPage() {
       setLoading(true);
       setError('');
       try {
-        const end = new Date().toISOString().slice(0, 10);
+        const end = appliedRange.end || todayIso;
         const body = {
           ticker: String(sym || '').toUpperCase().trim(),
-          customStartDate: RETURNS_DEFAULT_START,
+          customStartDate: appliedRange.start || RETURNS_DEFAULT_START,
           customEndDate: end
         };
         const oneYearStart = new Date(end + 'T12:00:00');
         oneYearStart.setFullYear(oneYearStart.getFullYear() - 1);
         const oneYearStartIso = oneYearStart.toISOString().slice(0, 10);
         const tickerU = String(sym || '').toUpperCase().trim();
-        const [annualRes, quarterlyRes, coreSymRes, coreSpyRes, ohlcSymRes, ohlcSpyRes, detailsRes] = await Promise.all([
+        const [annualRes, coreSymRes, coreSpyRes, ohlcSymRes, ohlcSpyRes] = await Promise.all([
           fetchJsonCached({
             path: '/api/market/ticker-annual-returns',
-            method: 'POST',
-            body,
-            ttlMs: 5 * 60 * 1000
-          }),
-          fetchJsonCached({
-            path: '/api/market/ticker-quarterly-returns',
             method: 'POST',
             body,
             ttlMs: 5 * 60 * 1000
@@ -443,21 +454,13 @@ export default function TickerAnnualPage() {
               '&limit=400',
             method: 'GET',
             ttlMs: 10 * 60 * 1000
-          }),
-          fetchJsonCached({
-            path: '/api/market/ticker-details',
-            method: 'POST',
-            body: { index: 'sp500', period: 'last-1-year' },
-            ttlMs: 30 * 60 * 1000
           })
         ]);
         if (cancelled) return;
         const annualPerf = annualRes?.data?.performance || {};
-        const quarterlyPerf = quarterlyRes?.data?.performance || {};
         const coreSymPerf = coreSymRes?.data?.performance || {};
         const coreSpyPerf = coreSpyRes?.data?.performance || {};
         setAnnualReturnsRaw(Array.isArray(annualPerf.annualReturns) ? annualPerf.annualReturns : []);
-        setQuarterlyReturnsRaw(Array.isArray(quarterlyPerf.quarterlyReturns) ? quarterlyPerf.quarterlyReturns : []);
         setDynamicSym(Array.isArray(coreSymPerf.dynamicPeriods) ? coreSymPerf.dynamicPeriods : []);
         setDynamicSpy(Array.isArray(coreSpyPerf.dynamicPeriods) ? coreSpyPerf.dynamicPeriods : []);
         const symRows = Array.isArray(ohlcSymRes?.data?.data)
@@ -472,19 +475,30 @@ export default function TickerAnnualPage() {
             : [];
         setStatsRows(sortRowsAsc(symRows));
         setStatsRowsSpy(sortRowsAsc(spyRows));
-        setDetailRows(Array.isArray(detailsRes?.data?.data) ? detailsRes.data.data : []);
         setAsOfDate(
           String(
             annualRes?.data?.asOfDate ||
-              quarterlyRes?.data?.asOfDate ||
               new Date().toISOString().slice(0, 10)
           ).slice(0, 10)
         );
+        setLoading(false);
+        fetchJsonCached({
+          path: '/api/market/ticker-details',
+          method: 'POST',
+          body: { index: 'sp500', period: 'last-1-year' },
+          ttlMs: 30 * 60 * 1000
+        })
+          .then((detailsRes) => {
+            if (cancelled) return;
+            setDetailRows(Array.isArray(detailsRes?.data?.data) ? detailsRes.data.data : []);
+          })
+          .catch(() => {
+            if (!cancelled) setDetailRows([]);
+          });
       } catch (e) {
         if (!cancelled) {
-          setError(e?.message || 'Failed to load annual/quarterly returns');
+          setError(e?.message || 'Failed to load annual returns');
           setAnnualReturnsRaw([]);
-          setQuarterlyReturnsRaw([]);
           setDynamicSym([]);
           setDynamicSpy([]);
           setStatsRows([]);
@@ -499,7 +513,7 @@ export default function TickerAnnualPage() {
     return () => {
       cancelled = true;
     };
-  }, [sym]);
+  }, [sym, appliedRange.end, appliedRange.start, todayIso]);
 
   const titleSymbol = useMemo(() => String(sym || '').toUpperCase(), [sym]);
   const myDetail = useMemo(() => {
@@ -547,6 +561,42 @@ export default function TickerAnnualPage() {
   const selectedTickerKey = BENCHMARK;
   const selectedIndexSeries = { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd };
   const selectedTickerSeries = { dynamicPeriods: dynamicSpy, mtd: spyMtd, qtd: spyQtd };
+  const annualReturnsFiltered = useMemo(() => {
+    const source = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
+    const startY = Number(String(appliedRange.start || '').slice(0, 4));
+    const endY = Number(String(appliedRange.end || '').slice(0, 4));
+    if (!Number.isFinite(startY) || !Number.isFinite(endY)) return source;
+    return source.filter((r) => {
+      let y = parseYear(r?.period);
+      if (!Number.isFinite(y)) y = Number(String(r?.startDate || '').slice(0, 4));
+      if (!Number.isFinite(y)) y = Number(String(r?.endDate || '').slice(0, 4));
+      return Number.isFinite(y) && y >= startY && y <= endY;
+    });
+  }, [annualReturnsRaw, appliedRange.end, appliedRange.start]);
+  const annualChartRangeControls = (
+    <div className="ticker-page__custom-range" aria-label="Annual chart date range">
+      <span className="ticker-page__label ticker-page__label--inline">Start date</span>
+      <input
+        type="date"
+        className="ticker-page__date-inp"
+        value={draftStartDate}
+        onChange={(e) => setDraftStartDate(e.target.value)}
+        max={draftEndDate || asOfDate || todayIso}
+      />
+      <span className="ticker-page__label ticker-page__label--inline">End date</span>
+      <input
+        type="date"
+        className="ticker-page__date-inp"
+        value={draftEndDate}
+        onChange={(e) => setDraftEndDate(e.target.value)}
+        min={draftStartDate}
+        max={RETURNS_DEFAULT_END}
+      />
+      <button type="button" className="ticker-outline-btn ticker-outline-btn--sm" onClick={applyReturnsRange}>
+        Submit
+      </button>
+    </div>
+  );
   const annualTableRows = useMemo(() => {
     const source = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
     const rows = source
@@ -607,7 +657,7 @@ export default function TickerAnnualPage() {
         <div className="ticker-page__header-top">
           <div className="ticker-page__header-identity">
             <h1 className="ticker-page__company ticker-page__company--hero">
-              {titleSymbol} Annual & Quarterly Returns
+              {titleSymbol} Annual Returns
             </h1>
           </div>
         </div>
@@ -617,23 +667,18 @@ export default function TickerAnnualPage() {
         <div className="ticker-page__main">
           <TickerAnnualReturnsFigma
             symbol={titleSymbol}
-            annualReturns={annualReturnsRaw}
+            annualReturns={annualReturnsFiltered}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
+            toolbarControls={annualChartRangeControls}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
             <TickerAnnualReturnsPosNeg
               symbol={titleSymbol}
-              annualReturns={annualReturnsRaw}
+              annualReturns={annualReturnsFiltered}
               asOfDate={asOfDate}
-            />
-          </TickerChartResizeScope>
-          <TickerChartResizeScope storageKey={RESIZE_KEY_QUARTERLY} defaultHeight={288}>
-            <TickerQuarterlyReturnsChart
-              symbol={titleSymbol}
-              quarterlyReturns={quarterlyReturnsRaw}
-              asOfDate={asOfDate}
+              suppressChartDateFilter
             />
           </TickerChartResizeScope>
 

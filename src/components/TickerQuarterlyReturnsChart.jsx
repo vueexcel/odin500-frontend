@@ -1,8 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
-import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
@@ -77,18 +75,13 @@ function csvEscape(s) {
 
 /**
  * Two grouped quarterly bar charts (by year | by quarter), dark UI + per-panel info tips.
- * @param {{ symbol: string, quarterlyReturns?: unknown[], asOfDate?: string, plotHeight?: number }} props
+ * @param {{ symbol: string, quarterlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, showOpenPeriodPageButton?: boolean }} props
  */
-export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate, plotHeight }) {
+export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate, plotHeight, showOpenPeriodPageButton = false }) {
   const navigate = useNavigate();
   const rows = useMemo(() => buildRows(quarterlyReturns), [quarterlyReturns]);
   const [showTable, setShowTable] = useState(false);
-  const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
-
-  const filteredRows = useMemo(
-    () => filterReturnsRows(rows, rangeApplied.start, rangeApplied.end),
-    [rows, rangeApplied.start, rangeApplied.end]
-  );
+  const filteredRows = useMemo(() => rows, [rows]);
 
   const { years, byYear, byQuarter, yMin, yMax } = useMemo(() => {
     if (!filteredRows.length) {
@@ -331,6 +324,11 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
     }, 150);
   }, [navigate]);
 
+  const onOpenQuarterlyPage = useCallback(() => {
+    const suffix = String(symbol || '').trim() ? '/' + encodeURIComponent(String(symbol || '').trim()) : '';
+    navigate('/ticker-quarterly' + suffix);
+  }, [navigate, symbol]);
+
   if (!rows.length) {
     return (
       <div className="ticker-quarterly">
@@ -354,16 +352,6 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
         <div className="ticker-annual-figma__toolbar">
           <span className="ticker-annual-figma__badge">Quarterly returns</span>
         </div>
-        <ChartDateApplyRow
-          idPrefix="quarterly-returns"
-          maxDate={asOfDate}
-          mode="year"
-          minYear={1980}
-          maxYear={2026}
-          initialStart="2018"
-          initialEnd={String(asOfDate || '').slice(0, 4)}
-          onApply={({ start, end }) => setRangeApplied({ start, end })}
-        />
         <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
           <div className="ticker-annual-figma__left" />
           <div className="ticker-annual-figma__right">
@@ -374,6 +362,15 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
             >
               View More
             </button>
+            {showOpenPeriodPageButton ? (
+              <button
+                type="button"
+                className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+                onClick={onOpenQuarterlyPage}
+              >
+                Open Quarterly Page
+              </button>
+            ) : null}
             <button
               type="button"
               className="ticker-annual-figma__btn"

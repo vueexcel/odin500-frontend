@@ -1,7 +1,10 @@
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SidebarToggleGlyph } from './SidebarToggleGlyph.jsx';
 import odinLogo from '../assets/odin500-logo.svg';
 import odinLogoLight from '../assets/odin500-logo-light.svg';
+import { fetchWithAuth } from '../store/apiStore.js';
+import { apiUrl } from '../utils/apiOrigin.js';
 
 function IconGlobe() {
   return (
@@ -127,6 +130,13 @@ function IconFinancial() {
     </svg>
   );
 }
+function IconChevronRight() {
+  return (
+    <svg className="app-sidebar__account-chevron-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 function IconSearch() {
   return (
     <svg className="app-sidebar__search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -184,6 +194,9 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
   const navigate = useNavigate();
   const isExpandedView = expanded || mobileOpen;
   const location = useLocation();
+  const [displayName, setDisplayName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const accountWrapRef = useRef(null);
   const tickerPathMatch = location.pathname.match(
     /^\/(?:ticker|ticker-annual|ticker-quarterly|ticker-monthly|ticker-weekly|ticker-daily)\/([^/?#]+)$/i
   );
@@ -201,6 +214,11 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
   const monthlyPageActive = location.pathname.startsWith('/ticker-monthly');
   const weeklyPageActive = location.pathname.startsWith('/ticker-weekly');
   const dailyPageActive = location.pathname.startsWith('/ticker-daily');
+  const isStatsRoute =
+    annualPageActive || quarterlyPageActive || monthlyPageActive || weeklyPageActive || dailyPageActive || location.pathname === '/statistic-data';
+  const isIndicesRoute = location.pathname.startsWith('/indices');
+  const [indicesOpen, setIndicesOpen] = useState(isIndicesRoute);
+  const [statsOpen, setStatsOpen] = useState(isStatsRoute);
 
   const handleAnyClick = () => {
     if (mobileOpen && typeof onRequestClose === 'function') onRequestClose();
@@ -221,6 +239,59 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
     event.preventDefault();
     navigate(to);
   };
+
+  const fallbackName = (() => {
+    try {
+      const em = String(localStorage.getItem('market_api_email') || '').trim();
+      if (!em) return 'Account';
+      const at = em.indexOf('@');
+      return (at > 0 ? em.slice(0, at) : em) || 'Account';
+    } catch {
+      return 'Account';
+    }
+  })();
+  const profileName = (displayName || fallbackName || 'Account').trim();
+  const initials =
+    profileName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((s) => s[0])
+      .join('')
+      .toUpperCase() || 'A';
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadProfile = async () => {
+      try {
+        const res = await fetchWithAuth(apiUrl('/api/user/profile'), { method: 'GET' });
+        const payload = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        const apiName = payload?.userName || payload?.displayName || '';
+        if (res.ok && apiName) setDisplayName(String(apiName));
+        if (res.ok) setAvatarUrl(String(payload?.avatarUrl || ''));
+      } catch {
+        /* ignore */
+      }
+    };
+    void loadProfile();
+    const onAuth = () => {
+      void loadProfile();
+    };
+    window.addEventListener('odin-auth-updated', onAuth);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('odin-auth-updated', onAuth);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isIndicesRoute) setIndicesOpen(true);
+  }, [isIndicesRoute]);
+
+  useEffect(() => {
+    if (isStatsRoute) setStatsOpen(true);
+  }, [isStatsRoute]);
 
   return (
     <aside
@@ -243,6 +314,19 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
           >
             <SidebarToggleGlyph expanded={false} />
           </button>
+          <button
+            type="button"
+            className="app-sidebar__account-btn app-sidebar__account-btn--collapsed"
+            aria-label="Open account page"
+            title="Account"
+            onClick={() => navigate('/accounts')}
+          >
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="header-avatar-image" aria-hidden />
+            ) : (
+              <span className="header-avatar-placeholder">{initials}</span>
+            )}
+          </button>
         </div>
       ) : (
         <>
@@ -255,7 +339,10 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
               className="app-sidebar__toggle app-sidebar__toggle--inline"
               aria-expanded="true"
               aria-label="Close navigation menu"
-              onClick={() => setExpanded(false)}
+              onClick={() => {
+                if (mobileOpen && typeof onRequestClose === 'function') onRequestClose();
+                else setExpanded(false);
+              }}
             >
               <SidebarToggleGlyph expanded />
             </button>
@@ -264,33 +351,69 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
           <div className="app-sidebar__scroll">
             <nav className="app-sidebar__nav" aria-label="Markets">
               <NavRow to="/market" icon={IconGlobe} label="Markets" onClick={(e) => handleNavClick(e, '/market')} />
-              <NavRow icon={IconGrid} label="Default Screen" onClick={() => {}} />
-              <NavRow to="/indices/dow-jones" icon={IconLineChart} label="Dow Jones" onClick={(e) => handleNavClick(e, '/indices/dow-jones')} />
-              <NavRow to="/indices/nasdaq-100" icon={IconLineChart} label="Nasdaq-100" onClick={(e) => handleNavClick(e, '/indices/nasdaq-100')} />
-              <NavRow to="/indices/sp500" icon={IconLineChart} label="SP 500" onClick={(e) => handleNavClick(e, '/indices/sp500')} />
+              <button
+                type="button"
+                className={'app-sidebar__row app-sidebar__row--btn app-sidebar__row--indices' + (isIndicesRoute ? ' app-sidebar__row--active' : '')}
+                aria-expanded={indicesOpen}
+                aria-controls="app-sidebar-indices-options"
+                onClick={() => setIndicesOpen((v) => !v)}
+              >
+                <span className="app-sidebar__row-icon">
+                  <IconGrid />
+                </span>
+                <span className="app-sidebar__row-label">Indices</span>
+                <span className={'app-sidebar__indices-chevron' + (indicesOpen ? ' app-sidebar__indices-chevron--open' : '')} aria-hidden>
+                  <IconChevronRight />
+                </span>
+              </button>
+              {indicesOpen ? (
+                <div id="app-sidebar-indices-options" className="app-sidebar__subnav" role="group" aria-label="Indices options">
+                  <NavRow to="/indices/dow-jones" icon={IconLineChart} label="Dow Jones" onClick={(e) => handleNavClick(e, '/indices/dow-jones')} />
+                  <NavRow to="/indices/nasdaq-100" icon={IconLineChart} label="Nasdaq-100" onClick={(e) => handleNavClick(e, '/indices/nasdaq-100')} />
+                  <NavRow to="/indices/sp500" icon={IconLineChart} label="SP 500" onClick={(e) => handleNavClick(e, '/indices/sp500')} />
+                </div>
+              ) : null}
               <NavRow to="/news" icon={IconNews} label="News" onClick={(e) => handleNavClick(e, '/news')} />
               <NavRow to="/market-movers" icon={IconFlame} label="Market Movers" onClick={(e) => handleNavClick(e, '/market-movers')} />
               <NavRow to="/heatmap" icon={IconGrid} label="Heatmaps" onClick={(e) => handleNavClick(e, '/heatmap')} />
             </nav>
 
-            <div className="app-sidebar__section-label">pages</div>
+            
             <nav className="app-sidebar__nav" aria-label="Page">
               <NavRow to="/ticker" icon={IconPeople} label="Tickers" onClick={(e) => handleNavClick(e, '/ticker')} />
             </nav>
 
-            <div className="app-sidebar__section-label">Statistics</div>
             <nav className="app-sidebar__nav" aria-label="Statistics">
-              <NavRow to={annualTo} icon={IconBarChart} label="Annual" active={annualPageActive} onClick={(e) => handleNavClick(e, annualTo)} />
-              <NavRow
-                to={quarterlyTo}
-                icon={IconBarChart}
-                label="Quarterly"
-                active={quarterlyPageActive || statSection === 'quarterly'}
-                onClick={(e) => handleNavClick(e, quarterlyTo)}
-              />
-              <NavRow to={monthlyTo} icon={IconBarChart} label="Monthly" active={monthlyPageActive || statSection === 'monthly'} onClick={(e) => handleNavClick(e, monthlyTo)} />
-              <NavRow to={weeklyTo} icon={IconBarChart} label="Weekly" active={weeklyPageActive || statSection === 'weekly'} onClick={(e) => handleNavClick(e, weeklyTo)} />
-              <NavRow to={dailyTo} icon={IconBarChart} label="Daily" active={dailyPageActive || statSection === 'daily'} onClick={(e) => handleNavClick(e, dailyTo)} />
+              <button
+                type="button"
+                className={'app-sidebar__row app-sidebar__row--btn app-sidebar__row--stats' + (isStatsRoute ? ' app-sidebar__row--active' : '')}
+                aria-expanded={statsOpen}
+                aria-controls="app-sidebar-stats-options"
+                onClick={() => setStatsOpen((v) => !v)}
+              >
+                <span className="app-sidebar__row-icon">
+                  <IconBarChart />
+                </span>
+                <span className="app-sidebar__row-label">Statistics</span>
+                <span className={'app-sidebar__indices-chevron' + (statsOpen ? ' app-sidebar__indices-chevron--open' : '')} aria-hidden>
+                  <IconChevronRight />
+                </span>
+              </button>
+              {statsOpen ? (
+                <div id="app-sidebar-stats-options" className="app-sidebar__subnav" role="group" aria-label="Statistics options">
+                  <NavRow to={annualTo} icon={IconBarChart} label="Annual" active={annualPageActive} onClick={(e) => handleNavClick(e, annualTo)} />
+                  <NavRow
+                    to={quarterlyTo}
+                    icon={IconBarChart}
+                    label="Quarterly"
+                    active={quarterlyPageActive || statSection === 'quarterly'}
+                    onClick={(e) => handleNavClick(e, quarterlyTo)}
+                  />
+                  <NavRow to={monthlyTo} icon={IconBarChart} label="Monthly" active={monthlyPageActive || statSection === 'monthly'} onClick={(e) => handleNavClick(e, monthlyTo)} />
+                  <NavRow to={weeklyTo} icon={IconBarChart} label="Weekly" active={weeklyPageActive || statSection === 'weekly'} onClick={(e) => handleNavClick(e, weeklyTo)} />
+                  <NavRow to={dailyTo} icon={IconBarChart} label="Daily" active={dailyPageActive || statSection === 'daily'} onClick={(e) => handleNavClick(e, dailyTo)} />
+                </div>
+              ) : null}
               <NavRow icon={IconLineChart} label="Relative strength" onClick={() => {}} />
               <NavRow icon={IconFocus} label="Odin Index Signals" onClick={() => {}} />
               <NavRow to="/odin-signals" icon={IconFocus} label="Odin Signals" onClick={(e) => handleNavClick(e, '/odin-signals')} />
@@ -307,8 +430,26 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
 
             <div className="app-sidebar__section-label">Premium</div>
             <nav className="app-sidebar__nav" aria-label="Premium">
-              <NavRow icon={IconBriefcase} label="Premium" onClick={() => {}} />
+              <NavRow to="/premium" icon={IconBriefcase} label="Premium" onClick={(e) => handleNavClick(e, '/premium')} />
             </nav>
+          </div>
+          <div className="app-sidebar__footer" ref={accountWrapRef}>
+            <button
+              type="button"
+              className="app-sidebar__account-btn"
+              aria-label="Open account page"
+              onClick={() => navigate('/accounts')}
+            >
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="header-avatar-image" aria-hidden />
+              ) : (
+                <span className="header-avatar-placeholder">{initials}</span>
+              )}
+              <span className="app-sidebar__account-label">Account</span>
+              <span className="app-sidebar__account-chevron" aria-hidden>
+                <IconChevronRight />
+              </span>
+            </button>
           </div>
         </>
       )}

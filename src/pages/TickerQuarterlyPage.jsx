@@ -15,6 +15,8 @@ const RESIZE_KEY_QTR_FIGMA = 'odin_ticker_quarterly_resize_figma';
 const RESIZE_KEY_QTR_POSNEG = 'odin_ticker_quarterly_resize_posneg';
 const RESIZE_KEY_QTR_MAIN = 'odin_ticker_quarterly_resize_main';
 const RETURNS_DEFAULT_START = '1980-01-01';
+const DEFAULT_START_YEAR = 2018;
+const DEFAULT_END_YEAR = 2026;
 const BENCHMARK = 'SPY';
 const PERF_COLS = [
   { label: '1M', period: 'Last Month' },
@@ -43,13 +45,6 @@ const RELATED_INDEX_LINKS = [
   { slug: 'nasdaq-100', label: 'Nasdaq' }
 ];
 const TABLE_PAGE_SIZE = 30;
-const TABLE_RANGE_OPTIONS = [
-  { value: '1', label: '1Y' },
-  { value: '3', label: '3Y' },
-  { value: '5', label: '5Y' },
-  { value: '10', label: '10Y' },
-  { value: 'max', label: 'Max' }
-];
 
 function fmtPct(v) {
   if (v == null || !Number.isFinite(Number(v))) return '—';
@@ -65,7 +60,7 @@ function pctTone(v) {
 }
 
 function parseYear(period) {
-  const m = String(period || '').match(/^(\d{4})/);
+  const m = String(period || '').match(/(\d{4})/);
   return m ? Number(m[1]) : null;
 }
 
@@ -240,7 +235,10 @@ export default function TickerQuarterlyPage() {
   const [statsRows, setStatsRows] = useState([]);
   const [statsRowsSpy, setStatsRowsSpy] = useState([]);
   const [detailRows, setDetailRows] = useState([]);
-  const [tableRange, setTableRange] = useState('max');
+  const [chartStartYear, setChartStartYear] = useState(String(DEFAULT_START_YEAR));
+  const [chartEndYear, setChartEndYear] = useState(String(DEFAULT_END_YEAR));
+  const [tableStartYear, setTableStartYear] = useState(String(DEFAULT_START_YEAR));
+  const [tableEndYear, setTableEndYear] = useState(String(DEFAULT_END_YEAR));
   const [tablePage, setTablePage] = useState(1);
 
   useEffect(() => {
@@ -344,25 +342,76 @@ export default function TickerQuarterlyPage() {
     };
   }, [sym]);
 
-  const tableRows = useMemo(() => {
-    const rows = (Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [])
-      .map((r) => ({
-        period: r?.period,
-        startDate: r?.startDate,
-        endDate: r?.endDate,
-        startClose: r?.startPrice,
-        endClose: r?.endPrice,
-        returnPct: r?.totalReturn,
-        year: parseYear(r?.period)
-      }))
-      .filter((r) => r.period);
+  const quarterlyRowsNormalized = useMemo(
+    () =>
+      (Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [])
+        .map((r) => ({
+          period: r?.period,
+          startDate: r?.startDate,
+          endDate: r?.endDate,
+          startClose: r?.startPrice,
+          endClose: r?.endPrice,
+          returnPct: r?.totalReturn,
+          year: (() => {
+            const fromPeriod = parseYear(r?.period);
+            if (Number.isFinite(fromPeriod)) return fromPeriod;
+            const fromStart = Number(String(r?.startDate || '').slice(0, 4));
+            if (Number.isFinite(fromStart)) return fromStart;
+            const fromEnd = Number(String(r?.endDate || '').slice(0, 4));
+            if (Number.isFinite(fromEnd)) return fromEnd;
+            return null;
+          })()
+        }))
+        .filter((r) => r.period && Number.isFinite(r.year)),
+    [quarterlyReturnsRaw]
+  );
+  const quarterlyRowsForChart = useMemo(
+    () =>
+      (Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [])
+        .map((r) => {
+          const year = (() => {
+            const fromPeriod = parseYear(r?.period);
+            if (Number.isFinite(fromPeriod)) return fromPeriod;
+            const fromStart = Number(String(r?.startDate || '').slice(0, 4));
+            if (Number.isFinite(fromStart)) return fromStart;
+            const fromEnd = Number(String(r?.endDate || '').slice(0, 4));
+            if (Number.isFinite(fromEnd)) return fromEnd;
+            return null;
+          })();
+          return {
+            raw: r,
+            year
+          };
+        })
+        .filter((x) => Number.isFinite(x.year)),
+    [quarterlyReturnsRaw]
+  );
+  const quarterYearOptions = useMemo(() => {
+    const years = Array.from(new Set(quarterlyRowsNormalized.map((r) => r.year).filter(Number.isFinite))).sort(
+      (a, b) => a - b
+    );
+    return years.length ? years : Array.from({ length: 2026 - 1980 + 1 }, (_, i) => 1980 + i);
+  }, [quarterlyRowsNormalized]);
 
-    if (tableRange === 'max') return rows;
-    const years = Number(tableRange);
-    if (!Number.isFinite(years) || years <= 0) return rows;
-    const cutoff = new Date().getFullYear() - years + 1;
-    return rows.filter((r) => Number.isFinite(r.year) && r.year >= cutoff);
-  }, [quarterlyReturnsRaw, tableRange]);
+  const quarterlyChartRows = useMemo(() => {
+    const startY = Number(chartStartYear);
+    const endY = Number(chartEndYear);
+    if (!Number.isFinite(startY) || !Number.isFinite(endY)) return quarterlyRowsForChart.map((x) => x.raw);
+    const lo = Math.min(startY, endY);
+    const hi = Math.max(startY, endY);
+    return quarterlyRowsForChart
+      .filter((x) => x.year >= lo && x.year <= hi)
+      .map((x) => x.raw);
+  }, [chartEndYear, chartStartYear, quarterlyRowsForChart]);
+
+  const tableRows = useMemo(() => {
+    const startY = Number(tableStartYear);
+    const endY = Number(tableEndYear);
+    if (!Number.isFinite(startY) || !Number.isFinite(endY)) return quarterlyRowsNormalized;
+    const lo = Math.min(startY, endY);
+    const hi = Math.max(startY, endY);
+    return quarterlyRowsNormalized.filter((r) => r.year >= lo && r.year <= hi);
+  }, [quarterlyRowsNormalized, tableEndYear, tableStartYear]);
 
   const tableTotalPages = useMemo(() => Math.max(1, Math.ceil(tableRows.length / TABLE_PAGE_SIZE)), [tableRows.length]);
   const tablePageSafe = useMemo(() => Math.min(Math.max(1, tablePage), tableTotalPages), [tablePage, tableTotalPages]);
@@ -373,11 +422,60 @@ export default function TickerQuarterlyPage() {
 
   useEffect(() => {
     setTablePage(1);
-  }, [sym, tableRange]);
+  }, [sym, tableStartYear, tableEndYear]);
 
   useEffect(() => {
     setTablePage((p) => Math.min(Math.max(1, p), tableTotalPages));
   }, [tableTotalPages]);
+
+  useEffect(() => {
+    if (!quarterYearOptions.length) return;
+    const hasDefaultStart = quarterYearOptions.includes(DEFAULT_START_YEAR);
+    const hasDefaultEnd = quarterYearOptions.includes(DEFAULT_END_YEAR);
+    const nextStart = hasDefaultStart ? DEFAULT_START_YEAR : quarterYearOptions[0];
+    const nextEnd = hasDefaultEnd ? DEFAULT_END_YEAR : quarterYearOptions[quarterYearOptions.length - 1];
+    setChartStartYear((prev) =>
+      quarterYearOptions.includes(Number(prev)) ? prev : String(nextStart)
+    );
+    setChartEndYear((prev) =>
+      quarterYearOptions.includes(Number(prev)) ? prev : String(nextEnd)
+    );
+    setTableStartYear((prev) =>
+      quarterYearOptions.includes(Number(prev)) ? prev : String(nextStart)
+    );
+    setTableEndYear((prev) =>
+      quarterYearOptions.includes(Number(prev)) ? prev : String(nextEnd)
+    );
+  }, [quarterYearOptions]);
+
+  const chartRangeControls = (
+    <div className="ticker-page__custom-range" aria-label="Quarterly chart year range">
+      <span className="ticker-page__label ticker-page__label--inline">Start year</span>
+      <select
+        className="ticker-page__date-inp"
+        value={chartStartYear}
+        onChange={(e) => setChartStartYear(e.target.value)}
+      >
+        {quarterYearOptions.map((y) => (
+          <option key={`chart-start-${y}`} value={String(y)}>
+            {y}
+          </option>
+        ))}
+      </select>
+      <span className="ticker-page__label ticker-page__label--inline">End year</span>
+      <select
+        className="ticker-page__date-inp"
+        value={chartEndYear}
+        onChange={(e) => setChartEndYear(e.target.value)}
+      >
+        {quarterYearOptions.map((y) => (
+          <option key={`chart-end-${y}`} value={String(y)}>
+            {y}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
   const symU = String(sym || '').toUpperCase();
   const myDetail = useMemo(() => detailRows.find((r) => String(r.Symbol || r.symbol || '').toUpperCase().trim() === symU) || null, [detailRows, symU]);
@@ -433,38 +531,56 @@ export default function TickerQuarterlyPage() {
         <div className="ticker-page__main">
           <TickerAnnualReturnsFigma
             symbol={symU}
-            annualReturns={quarterlyReturnsRaw}
+            annualReturns={quarterlyChartRows}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_QTR_FIGMA}
             resizeDefaultHeight={260}
             periodMode="quarterly"
+            toolbarControls={chartRangeControls}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_QTR_POSNEG} defaultHeight={260}>
             <TickerAnnualReturnsPosNeg
               symbol={symU}
-              annualReturns={quarterlyReturnsRaw}
+              annualReturns={quarterlyChartRows}
               asOfDate={asOfDate}
               periodMode="quarterly"
+              suppressChartDateFilter
             />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_QTR_MAIN} defaultHeight={288}>
-            <TickerQuarterlyReturnsChart symbol={symU} quarterlyReturns={quarterlyReturnsRaw} asOfDate={asOfDate} />
+            <TickerQuarterlyReturnsChart symbol={symU} quarterlyReturns={quarterlyChartRows} asOfDate={asOfDate} />
           </TickerChartResizeScope>
 
           <section className="statistic-data__card">
             <div className="statistic-data__table-head">
               <h2 className="statistic-data__table-title">Quarterly Returns</h2>
               <div className="statistic-data__head-actions">
-                <label className="statistic-data__range">
-                  <span>Range</span>
-                  <select value={tableRange} onChange={(e) => setTableRange(e.target.value)}>
-                    {TABLE_RANGE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
+                <div className="ticker-page__custom-range" aria-label="Quarterly table year range">
+                  <span className="ticker-page__label ticker-page__label--inline">Start year</span>
+                  <select
+                    className="ticker-page__date-inp"
+                    value={tableStartYear}
+                    onChange={(e) => setTableStartYear(e.target.value)}
+                  >
+                    {quarterYearOptions.map((y) => (
+                      <option key={`table-start-${y}`} value={String(y)}>
+                        {y}
                       </option>
                     ))}
                   </select>
-                </label>
+                  <span className="ticker-page__label ticker-page__label--inline">End year</span>
+                  <select
+                    className="ticker-page__date-inp"
+                    value={tableEndYear}
+                    onChange={(e) => setTableEndYear(e.target.value)}
+                  >
+                    {quarterYearOptions.map((y) => (
+                      <option key={`table-end-${y}`} value={String(y)}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
             <div className="statistic-data__table-wrap">

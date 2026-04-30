@@ -740,6 +740,7 @@ export default function TickerPage() {
   const [longRangeBusy, setLongRangeBusy] = useState(false);
   const [tailRows, setTailRows] = useState([]);
   const [newsPage, setNewsPage] = useState(1);
+  const [chartHoverOhlc, setChartHoverOhlc] = useState(null);
   const [tickerNewsBusy, setTickerNewsBusy] = useState(false);
   const [tickerNewsError, setTickerNewsError] = useState('');
   const [tickerNewsItems, setTickerNewsItems] = useState([]);
@@ -1313,6 +1314,20 @@ export default function TickerPage() {
   const annualReturnsRaw = returnsSym?.performance?.annualReturns;
   const quarterlyReturnsRaw = returnsSym?.performance?.quarterlyReturns;
   const monthlyReturnsRaw = returnsSym?.performance?.monthlyReturns;
+  const annualReturnsDefaultRange = useMemo(() => {
+    const rows = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
+    return rows.filter((r) => {
+      const y = Number(String(r?.period || '').slice(0, 4));
+      return Number.isFinite(y) && y >= 2018 && y <= 2026;
+    });
+  }, [annualReturnsRaw]);
+  const quarterlyReturnsDefaultRange = useMemo(() => {
+    const rows = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
+    return rows.filter((r) => {
+      const y = Number(String(r?.period || '').slice(0, 4));
+      return Number.isFinite(y) && y >= 2020 && y <= 2026;
+    });
+  }, [quarterlyReturnsRaw]);
   const tickerSelectOptions = useMemo(() => {
     const base = [sym, BENCHMARK, ...(detailRows || []).map((r) => String(r.symbol || '').toUpperCase().trim())];
     return [...new Set(base.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
@@ -1985,6 +2000,12 @@ export default function TickerPage() {
                   <span className={'ticker-num ' + pctClass(headerChgPct)}>{formatPct(headerChgPct)}</span>
                 ) : null}
                 <span className="ticker-chart-legend__sig">Signal: {lastSignal}</span>
+                {chartHoverOhlc ? (
+                  <span className="ticker-chart-legend__sig">
+                    O:{chartHoverOhlc.open != null ? formatPx(chartHoverOhlc.open) : '—'} H:{chartHoverOhlc.high != null ? formatPx(chartHoverOhlc.high) : '—'} L:{chartHoverOhlc.low != null ? formatPx(chartHoverOhlc.low) : '—'} C:{chartHoverOhlc.close != null ? formatPx(chartHoverOhlc.close) : '—'}
+                    {chartHoverOhlc.volume != null ? ` Vol:${Math.round(chartHoverOhlc.volume).toLocaleString('en-US')}` : ''}
+                  </span>
+                ) : null}
               </div>
               <div
                 ref={chartPlotHostRef}
@@ -2004,7 +2025,12 @@ export default function TickerPage() {
                     <TradingChartLoader label="Loading chart…" sublabel={`${sym} · OHLC & signals`} />
                   </div>
                 ) : sortedChart.length ? (
-                  <TickerLightweightChart rows={sortedChart} height={plotHeight} chartType={mainChartType} />
+                  <TickerLightweightChart
+                    rows={sortedChart}
+                    height={plotHeight}
+                    chartType={mainChartType}
+                    onHoverOhlcChange={setChartHoverOhlc}
+                  />
                 ) : (
                   <div className="ticker-sparkline ticker-sparkline--empty">No OHLC rows in this range.</div>
                 )}
@@ -2117,16 +2143,16 @@ export default function TickerPage() {
 
           <TickerAnnualReturnsFigma
             symbol={sym}
-            annualReturns={annualReturnsRaw}
+            annualReturns={annualReturnsDefaultRange}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
-            <TickerAnnualReturnsPosNeg symbol={sym} annualReturns={annualReturnsRaw} asOfDate={asOfDate} />
+            <TickerAnnualReturnsPosNeg symbol={sym} annualReturns={annualReturnsDefaultRange} asOfDate={asOfDate} />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_QUARTERLY} defaultHeight={288}>
-            <TickerQuarterlyReturnsChart symbol={sym} quarterlyReturns={quarterlyReturnsRaw} asOfDate={asOfDate} />
+            <TickerQuarterlyReturnsChart symbol={sym} quarterlyReturns={quarterlyReturnsDefaultRange} asOfDate={asOfDate} />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
             <TickerMonthlyReturnsChart symbol={sym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} />

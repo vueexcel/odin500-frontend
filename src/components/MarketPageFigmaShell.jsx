@@ -115,6 +115,7 @@ function LeftSnapshotStack({ selectedKeys, onToggleSeries, onSelectGroupAll, onC
                 <input
                   type="checkbox"
                   className={'mkt-mini-card__check mkt-mini-card__check--' + r.tone}
+                  style={{ accentColor: r.color }}
                   checked={checked}
                   onChange={() => onToggleSeries(r.key)}
                   aria-label={`Show ${r.label} in chart`}

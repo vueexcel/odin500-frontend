@@ -123,6 +123,11 @@ export default function MarketHeatmapPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [hoverSymbol, setHoverSymbol] = useState('');
   const [scaleSpan, setScaleSpan] = useState(3);
+  const [colorFade, setColorFade] = useState({
+    negFade: 45,
+    neutralFade: 0,
+    posFade: 42
+  });
   const [zoom, setZoom] = useState(1);
   const [tablePage, setTablePage] = useState(1);
   const mainRef = useRef(null);
@@ -514,12 +519,83 @@ export default function MarketHeatmapPage() {
                   rows={filteredRows}
                   scaleMin={scaleMin}
                   scaleMax={scaleMax}
+                  colorFade={colorFade}
                   highlightSymbol={hoverSymbol}
                   finvizStrict
                 />
               </div>
             )}
           </div>
+
+          <footer className="heatmap-scale-bar">
+            <div className="heatmap-scale-bar__hint" aria-live="polite">
+              <div>Use mouse wheel to zoom in and out. Drag zoomed map to pan it.</div>
+              <div>Double-click a ticker to display detailed information in a new window.</div>
+              <div>
+                Hover mouse cursor over a ticker to see its main competitors in a stacked view with a 3-month history
+                graph.
+              </div>
+            </div>
+            <div className="heatmap-scale-bar__legend">
+              <div
+                className="heatmap-scale-bar__gradient"
+                style={{
+                  background: `linear-gradient(90deg, ${returnToHeatColor(-3, scaleMin, scaleMax, colorFade)} 0%, ${returnToHeatColor(0, scaleMin, scaleMax, colorFade)} 50%, ${returnToHeatColor(3, scaleMin, scaleMax, colorFade)} 100%)`
+                }}
+              />
+              <div className="heatmap-scale-bar__ticks">
+                {['-3%', '-2%', '-1%', '0%', '+1%', '+2%', '+3%'].map((lbl) => (
+                  <span key={lbl} className="heatmap-scale-bar__lbl">
+                    {lbl}
+                  </span>
+                ))}
+              </div>
+              <div className="heatmap-scale-bar__controller">
+                <div className="heatmap-scale-bar__controller-row">
+                  <label htmlFor="heatmap-fade-green">Green fade {colorFade.posFade}%</label>
+                  <input
+                    id="heatmap-fade-green"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={colorFade.posFade}
+                    onChange={(e) =>
+                      setColorFade((prev) => ({ ...prev, posFade: Number(e.target.value) }))
+                    }
+                  />
+                </div>
+                <div className="heatmap-scale-bar__controller-row">
+                  <label htmlFor="heatmap-fade-neutral">Neutral fade {colorFade.neutralFade}%</label>
+                  <input
+                    id="heatmap-fade-neutral"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={colorFade.neutralFade}
+                    onChange={(e) =>
+                      setColorFade((prev) => ({ ...prev, neutralFade: Number(e.target.value) }))
+                    }
+                  />
+                </div>
+                <div className="heatmap-scale-bar__controller-row">
+                  <label htmlFor="heatmap-fade-red">Red fade {colorFade.negFade}%</label>
+                  <input
+                    id="heatmap-fade-red"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={colorFade.negFade}
+                    onChange={(e) =>
+                      setColorFade((prev) => ({ ...prev, negFade: Number(e.target.value) }))
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          </footer>
 
           <section className="heatmap-bottom-table" aria-labelledby="heatmap-bottom-table-title">
             <div className="heatmap-bottom-table__head">
@@ -630,37 +706,6 @@ export default function MarketHeatmapPage() {
               </button>
             </div>
           </section>
-
-          <footer className="heatmap-scale-bar">
-            <div className="heatmap-scale-bar__swatches">
-              {[-3, -2, -1, 0, 1, 2, 3].map((k) => {
-                const v = (k / 3) * scaleSpan;
-                const lbl =
-                  Math.abs(v) < 0.05 ? '0' : v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1);
-                return (
-                  <div key={k} className="heatmap-scale-bar__cell">
-                    <span
-                      className="heatmap-scale-bar__chip"
-                      style={{ background: returnToHeatColor(v, scaleMin, scaleMax) }}
-                    />
-                    <span className="heatmap-scale-bar__lbl">{lbl}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="heatmap-scale-bar__slider">
-              <label htmlFor="heatmap-span">Color scale ±{scaleSpan}%</label>
-              <input
-                id="heatmap-span"
-                type="range"
-                min="1"
-                max="15"
-                step="0.5"
-                value={scaleSpan}
-                onChange={(e) => setScaleSpan(Number(e.target.value))}
-              />
-            </div>
-          </footer>
         </main>
       </div>
     </div>

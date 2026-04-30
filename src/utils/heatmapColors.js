@@ -37,20 +37,38 @@ function mixHex(a, b, t) {
  * Treemap / dense heatmap: discrete red → slate → green (Finviz-style).
  * Used by `SectorTreemap`, `MarketHeatmapPage`, tooltips.
  */
-export function returnToHeatColor(pct, scaleMin = -3, scaleMax = 3) {
+export function returnToHeatColor(pct, scaleMin = -3, scaleMax = 3, fade = {}) {
   const x = parseHeatNumber(pct);
   if (!Number.isFinite(x)) return '#475569';
-  const lo = Math.min(scaleMin, scaleMax);
-  const hi = Math.max(scaleMin, scaleMax);
-  const t = hi === lo ? 0.5 : (x - lo) / (hi - lo);
-  const u = Math.max(0, Math.min(1, t));
-  if (u <= 0.15) return '#b91c1c';
-  if (u <= 0.35) return '#ef4444';
-  if (u <= 0.45) return '#fca5a5';
-  if (u <= 0.55) return '#64748b';
-  if (u <= 0.65) return '#86efac';
-  if (u <= 0.85) return '#22c55e';
-  return '#15803d';
+  const negFade = Math.max(0, Math.min(100, Number(fade.negFade ?? 100))) / 100;
+  const neutralFade = Math.max(0, Math.min(100, Number(fade.neutralFade ?? 100))) / 100;
+  const posFade = Math.max(0, Math.min(100, Number(fade.posFade ?? 100))) / 100;
+  const neutralBase = mixHex('#3a3a3a', '#1A1A1A', neutralFade);
+  const tune = (hex, tone) => mixHex(neutralBase, hex, tone);
+  const lo = Math.min(scaleMin, scaleMax, -3);
+  const hi = Math.max(scaleMin, scaleMax, 3);
+  const v = Math.max(lo, Math.min(hi, x));
+  const stops = [
+    { p: -3, c: tune('#FF0000', negFade) }, // strong negative
+    { p: -1.5, c: tune('#B20000', negFade) }, // moderate negative
+    { p: -0.5, c: tune('#5C0000', negFade) }, // slight negative
+    { p: 0, c: neutralBase }, // neutral
+    { p: 0.5, c: tune('#005C02', posFade) }, // slight positive
+    { p: 1.5, c: tune('#009B06', posFade) }, // moderate positive
+    { p: 3, c: tune('#00C805', posFade) } // strong positive
+  ];
+  if (v <= stops[0].p) return stops[0].c;
+  if (v >= stops[stops.length - 1].p) return stops[stops.length - 1].c;
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i];
+    const b = stops[i + 1];
+    if (v <= b.p) {
+      const span = b.p - a.p;
+      const t = span <= 0 ? 0 : (v - a.p) / span;
+      return mixHex(a.c, b.c, t);
+    }
+  }
+  return stops[stops.length - 1].c;
 }
 
 /**

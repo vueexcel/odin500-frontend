@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { warmWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
-import { AppHeader } from './AppHeader.jsx';
+// import { AppHeader } from './AppHeader.jsx';
 import { AppSidebar } from './AppSidebar.jsx';
 import { AppRightRail } from './AppRightRail.jsx';
 import { SiteFooter } from './SiteFooter.jsx';
@@ -81,13 +81,14 @@ export function ProtectedLayout() {
     }
   }, [isMobile, sidebarExpanded]);
 
-  const toggleTheme = () => {
-    setTheme((curr) => (curr === 'dark' ? 'light' : 'dark'));
-  };
+  useEffect(() => {
+    if (!isMobile) return;
+    setMobileLeftOpen(false);
+  }, [location.pathname, location.search, isMobile]);
 
   return (
     <div className="app-shell">
-      <AppHeader compact theme={theme} onToggleTheme={toggleTheme} />
+      {/* <AppHeader compact theme={theme} onToggleTheme={toggleTheme} /> */}
       <div className="app-body">
         {isMobile && (mobileLeftOpen || mobileRightOpen) ? (
           <button
@@ -117,14 +118,24 @@ export function ProtectedLayout() {
           <>
             <button
               type="button"
-              className="app-mobile-fab app-mobile-fab--left"
-              aria-label="Open menu"
+              className="app-mobile-fab app-mobile-fab--left app-mobile-fab--nav"
+              aria-label={mobileLeftOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              aria-expanded={mobileLeftOpen}
+              aria-controls="app-sidebar-main"
               onClick={() => {
                 setMobileRightOpen(false);
                 setMobileLeftOpen((v) => !v);
               }}
             >
-              <span className="app-mobile-fab__bars" aria-hidden>≡</span>
+              <span className="app-mobile-fab__nav-ico" aria-hidden>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  {mobileLeftOpen ? (
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  ) : (
+                    <path d="M4 7h16M4 12h16M4 17h16" />
+                  )}
+                </svg>
+              </span>
             </button>
             <button
               type="button"
