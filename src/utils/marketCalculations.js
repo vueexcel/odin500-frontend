@@ -113,6 +113,27 @@ export function calcRangeReturnPct(rows) {
   return Number.isFinite(start) && Number.isFinite(end) && start !== 0 ? ((end / start) - 1) * 100 : 0;
 }
 
+/** Last close, absolute change first→last close, and total return % over the same sorted window as `calcRangeReturnPct`. */
+export function calcRangeSnapshot(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const out = [];
+  for (const row of rows) {
+    const t = rowTimeMs(row);
+    const close = Number(row.Close ?? row.close ?? row.AdjClose ?? row.adjClose ?? row.adj_close);
+    if (!Number.isFinite(t) || !Number.isFinite(close)) continue;
+    out.push({ t, close });
+  }
+  if (!out.length) return null;
+  out.sort((a, b) => a.t - b.t);
+  const firstClose = out[0].close;
+  const lastClose = out[out.length - 1].close;
+  const chgPct =
+    out.length >= 2 && Number.isFinite(firstClose) && firstClose !== 0
+      ? ((lastClose / firstClose) - 1) * 100
+      : 0;
+  return { close: lastClose, chg: lastClose - firstClose, chgPct };
+}
+
 export function fmtPrice(v) {
   if (!Number.isFinite(Number(v))) return '—';
   return Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

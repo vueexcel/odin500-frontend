@@ -18,6 +18,7 @@ import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
+import { DEFAULT_INDEX_ROUTE_SLUG } from '../utils/tickerUrlSync.js';
 
 const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
 const MAX_SIGNAL_RANGE_DAYS = 40000;
@@ -652,7 +653,7 @@ export default function IndexPage() {
     (nextSlug) => {
       const s = sanitizeIndexSlug(nextSlug);
       setActiveSlug(s || 'sp500');
-      if (!s) navigate('/indices');
+      if (!s) navigate(`/indices/${encodeURIComponent(DEFAULT_INDEX_ROUTE_SLUG)}`);
       else navigate('/indices/' + encodeURIComponent(s));
     },
     [navigate]

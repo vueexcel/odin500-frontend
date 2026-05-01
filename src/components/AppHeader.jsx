@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import odinLogo from '../assets/odin500-logo.svg';
 import odinLogoLight from '../assets/odin500-logo-light.svg';
 import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { clearApiCache, clearAuthToken, fetchWithAuth } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
+import {
+  DEFAULT_INDEX_ROUTE_SLUG,
+  DEFAULT_TICKER_ROUTE_SYMBOL,
+  isMainIndicesRoutePath,
+  isMainTickerRoutePath
+} from '../utils/tickerUrlSync.js';
 
 const NAV_ITEMS = [
-  { to: '/market', label: 'Market' },
-  { to: '/ticker', label: 'Ticker' },
-  { to: '/indices', label: 'Indices' },
+  { to: '/market', label: 'Market', end: true },
+  { to: `/ticker/${DEFAULT_TICKER_ROUTE_SYMBOL}`, label: 'Ticker', activePrefix: '/ticker' },
+  { to: `/indices/${DEFAULT_INDEX_ROUTE_SLUG}`, label: 'Indices', activePrefix: '/indices' },
   { to: '/market-movers', label: 'Market Movers' },
   { to: '/heatmap', label: 'Heatmap' },
   { to: '/odin-signals', label: 'Odin Signals' },
@@ -71,6 +77,7 @@ function IconMoon() {
 
 export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = null }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -174,19 +181,28 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
           </div>
 
           <nav className="app-header-nav-figma" aria-label="Primary">
-            {NAV_ITEMS.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/market'}
-                className={({ isActive }) =>
-                  'app-header-nav-link' + (isActive ? ' app-header-nav-link--active' : '')
-                }
-                onClick={(e) => handleNavClick(e, item.to)}
-              >
-                {item.label}
-              </NavLink>
-            ))}
+            {NAV_ITEMS.map((item) => {
+              const prefixActive =
+                item.activePrefix === '/ticker'
+                  ? isMainTickerRoutePath(location.pathname)
+                  : item.activePrefix === '/indices'
+                    ? isMainIndicesRoutePath(location.pathname)
+                    : null;
+              return (
+                <NavLink
+                  key={item.to + item.label}
+                  to={item.to}
+                  end={item.end === true}
+                  className={({ isActive }) => {
+                    const on = prefixActive != null ? prefixActive : isActive;
+                    return 'app-header-nav-link' + (on ? ' app-header-nav-link--active' : '');
+                  }}
+                  onClick={(e) => handleNavClick(e, item.to)}
+                >
+                  {item.label}
+                </NavLink>
+              );
+            })}
           </nav>
 
           <div className="app-header-utilities">
@@ -314,16 +330,28 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
         </div>
 
         <nav className="main-nav">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => 'main-nav-link' + (isActive ? ' active' : '')}
-              onClick={(e) => handleNavClick(e, item.to)}
-            >
-              {item.label}
-            </NavLink>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const prefixActive =
+              item.activePrefix === '/ticker'
+                ? isMainTickerRoutePath(location.pathname)
+                : item.activePrefix === '/indices'
+                  ? isMainIndicesRoutePath(location.pathname)
+                  : null;
+            return (
+              <NavLink
+                key={item.to + item.label}
+                to={item.to}
+                end={item.end === true}
+                className={({ isActive }) => {
+                  const on = prefixActive != null ? prefixActive : isActive;
+                  return 'main-nav-link' + (on ? ' active' : '');
+                }}
+                onClick={(e) => handleNavClick(e, item.to)}
+              >
+                {item.label}
+              </NavLink>
+            );
+          })}
         </nav>
 
         <div className="header-actions">

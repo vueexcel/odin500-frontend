@@ -27,6 +27,7 @@ import AboutPage from './pages/AboutPage.jsx';
 import AccountsPage from './pages/AccountsPage.jsx';
 import './index.css';
 import { initAuthSessionOnLoad } from './store/apiStore.js';
+import { DEFAULT_INDEX_ROUTE_SLUG, DEFAULT_TICKER_ROUTE_SYMBOL } from './utils/tickerUrlSync.js';
 
 initAuthSessionOnLoad();
 
@@ -62,18 +63,40 @@ function AppRoutes() {
       >
         <Route path="/market" element={<App />} />
         <Route path="/tickers" element={<Navigate to="/odin-signals" replace />} />
-        <Route path="/ticker/:symbol?" element={<TickerPage />} />
-        <Route path="/indices/:indexSlug?" element={<IndexPage />} />
+        <Route path="/ticker" element={<Navigate to={`/ticker/${DEFAULT_TICKER_ROUTE_SYMBOL}`} replace />} />
+        <Route path="/ticker/:symbol" element={<TickerPage />} />
+        <Route path="/indices" element={<Navigate to={`/indices/${DEFAULT_INDEX_ROUTE_SLUG}`} replace />} />
+        <Route path="/indices/:indexSlug" element={<IndexPage />} />
         <Route path="/heatmap" element={<MarketHeatmapPage />} />
         <Route path="/market-movers" element={<MarketMoversPage />} />
         <Route path="/news" element={<NewsPage />} />
         <Route path="/odin-signals" element={<OdinSignalsPage />} />
         <Route path="/statistic-data" element={<StatisticDataPage />} />
-        <Route path="/ticker-annual/:symbol?" element={<TickerAnnualPage />} />
-        <Route path="/ticker-quarterly/:symbol?" element={<TickerQuarterlyPage />} />
-        <Route path="/ticker-monthly/:symbol?" element={<TickerMonthlyPage />} />
-        <Route path="/ticker-weekly/:symbol?" element={<TickerWeeklyPage />} />
-        <Route path="/ticker-daily/:symbol?" element={<TickerDailyPage />} />
+        <Route
+          path="/ticker-annual"
+          element={<Navigate to={`/ticker-annual/${DEFAULT_TICKER_ROUTE_SYMBOL}`} replace />}
+        />
+        <Route path="/ticker-annual/:symbol" element={<TickerAnnualPage />} />
+        <Route
+          path="/ticker-quarterly"
+          element={<Navigate to={`/ticker-quarterly/${DEFAULT_TICKER_ROUTE_SYMBOL}`} replace />}
+        />
+        <Route path="/ticker-quarterly/:symbol" element={<TickerQuarterlyPage />} />
+        <Route
+          path="/ticker-monthly"
+          element={<Navigate to={`/ticker-monthly/${DEFAULT_TICKER_ROUTE_SYMBOL}`} replace />}
+        />
+        <Route path="/ticker-monthly/:symbol" element={<TickerMonthlyPage />} />
+        <Route
+          path="/ticker-weekly"
+          element={<Navigate to={`/ticker-weekly/${DEFAULT_TICKER_ROUTE_SYMBOL}`} replace />}
+        />
+        <Route path="/ticker-weekly/:symbol" element={<TickerWeeklyPage />} />
+        <Route
+          path="/ticker-daily"
+          element={<Navigate to={`/ticker-daily/${DEFAULT_TICKER_ROUTE_SYMBOL}`} replace />}
+        />
+        <Route path="/ticker-daily/:symbol" element={<TickerDailyPage />} />
         <Route path="/historical-data" element={<HistoricalDataPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/premium" element={<Pricing />} />

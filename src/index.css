@@ -2989,6 +2989,13 @@ a.app-right-rail__btn {
   gap: 4px;
 }
 
+.mkt-mini-card__tf {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
 .mkt-mini-card__tiny-btn {
   height: 18px;
   border-radius: 4px;
@@ -3673,24 +3680,57 @@ a.app-right-rail__btn {
   text-anchor: middle;
 }
 
-.np-chart-badges {
-  position: absolute;
-  right: 4px;
-  top: 46%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.np-chart-stack {
+  position: relative;
+  width: 100%;
 }
 
-.np-chart-badge {
-  min-width: 102px;
-  color: #fff;
-  font-size: 14px;
-  line-height: 1;
-  padding: 6px 8px;
+.np-chart-axis-tags {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.np-chart-axis-badge {
+  position: absolute;
+  right: 4px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 112px;
+  padding: 7px 10px 7px 14px;
   border-radius: 2px;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.05;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: opacity 0.1s ease;
+}
+
+.np-chart-axis-badge__tick {
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  margin-top: -5px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 5px 6px 5px 0;
+  border-color: transparent;
+  pointer-events: none;
+}
+
+.np-chart-axis-badge__sym {
+  flex: 1;
+  min-width: 0;
+  letter-spacing: 0.02em;
+}
+
+.np-chart-axis-badge__val {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 h1 {
@@ -3962,10 +4002,11 @@ button:disabled {
     height: 360px;
   }
 
-  .np-chart-badge {
-    min-width: 88px;
+  .np-chart-axis-badge {
+    min-width: 96px;
     font-size: 12px;
-    padding: 5px 7px;
+    padding: 6px 8px 6px 12px;
+    gap: 8px;
   }
 
   .filters {
@@ -4050,15 +4091,12 @@ button:disabled {
     height: 300px;
   }
 
-  .np-chart-badges {
-    right: 2px;
-    gap: 3px;
-  }
-
-  .np-chart-badge {
-    min-width: 74px;
+  .np-chart-axis-badge {
+    min-width: 78px;
     font-size: 11px;
-    padding: 4px 6px;
+    padding: 5px 6px 5px 11px;
+    gap: 6px;
+    right: 2px;
   }
 }
 
@@ -7021,6 +7059,18 @@ button:disabled {
   color: var(--ticker-muted);
 }
 
+.ticker-rs-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.ticker-rs-controls__select {
+  min-width: 220px;
+}
+
 .ticker-lw-chart {
   position: relative;
   width: 100%;
@@ -7560,6 +7610,18 @@ button:disabled {
 @media (max-width: 900px) {
   .ticker-annual-figma__split {
     grid-template-columns: 1fr;
+  }
+
+  .ticker-rs-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .ticker-rs-controls__select {
+    min-width: 0;
+    width: 100%;
   }
 }
 
@@ -9461,6 +9523,10 @@ button:disabled {
 [data-theme="light"] .mkt-watch-card__row--head,
 [data-theme="light"] .mkt-summary-card__table thead th {
   color: #475569;
+}
+
+[data-theme="light"] .mkt-mini-card__tf {
+  color: #64748b;
 }
 
 [data-theme="light"] .mkt-mini-card__tiny-btn {

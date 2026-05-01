@@ -11,8 +11,8 @@ import { DEFAULT_SELECTED_KEYS, META_BY_KEY, MARKET_SERIES } from './marketSerie
 import { returnToSummaryTableHeatColor, summaryTableTextOnFill } from '../utils/heatmapColors.js';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import {
-  calcLatestDelta,
   calcRangeReturnPct,
+  calcRangeSnapshot,
   fmtAbsSigned,
   fmtPctSigned,
   fmtPrice,
@@ -36,59 +36,56 @@ function groupRows(groupId) {
   return MARKET_SERIES.filter((s) => s.group === groupId);
 }
 
-async function fetchLatestForTicker(ticker, loadOhlcRows = null) {
-  try {
-    const r = await fetchJsonCached({
-      path: '/api/market/ohlc?symbol=' + encodeURIComponent(ticker) + '&limit=8',
-      method: 'GET',
-      ttlMs: 30 * 1000
-    });
-    const rows = Array.isArray(r?.data?.data) ? r.data.data : Array.isArray(r?.data) ? r.data : [];
-    const latest = calcLatestDelta(rows);
-    if (latest) return latest;
-  } catch {
-    /* fall through to POST fallback */
-  }
-  if (typeof loadOhlcRows === 'function') {
-    const end = new Date();
-    const { start, end: endIso } = tfRange('1D');
-    const rows = await loadOhlcRows(ticker, start, endIso || end.toISOString().slice(0, 10));
-    return calcLatestDelta(rows);
-  }
-  return null;
-}
-
-function LeftSnapshotStack({ selectedKeys, onToggleSeries, onSelectGroupAll, onClearGroup, loadOhlcRows }) {
+function LeftSnapshotStack({
+  selectedKeys,
+  onToggleSeries,
+  onSelectGroupAll,
+  onClearGroup,
+  loadOhlcRows,
+  timeframe,
+  refreshMs
+}) {
   const [rowsByGroup, setRowsByGroup] = useState({});
 
   useEffect(() => {
     let cancel = false;
     async function load() {
-      if (!getAuthToken()) return;
+      if (!getAuthToken() || typeof loadOhlcRows !== 'function') return;
+      const { start, end } = tfRange(timeframe || '6M');
       const out = {};
       for (const g of LEFT_GROUPS) {
-        const rows = groupRows(g.id);
-        const vals = await Promise.allSettled(rows.map((r) => fetchLatestForTicker(r.ticker, loadOhlcRows)));
+        const seriesRows = groupRows(g.id);
+        const vals = await Promise.allSettled(
+          seriesRows.map((r) =>
+            loadOhlcRows(r.ticker, start, end).then((data) => calcRangeSnapshot(data))
+          )
+        );
         out[g.id] = Object.fromEntries(
-          rows.map((r, i) => [r.key, vals[i].status === 'fulfilled' ? vals[i].value : null])
+          seriesRows.map((r, i) => [r.key, vals[i].status === 'fulfilled' ? vals[i].value : null])
         );
       }
       if (!cancel) setRowsByGroup(out);
     }
     load();
-    const t = window.setInterval(load, 60 * 1000);
+    let timer = null;
+    if (refreshMs > 0) timer = window.setInterval(load, refreshMs);
     return () => {
       cancel = true;
-      window.clearInterval(t);
+      if (timer) window.clearInterval(timer);
     };
-  }, [loadOhlcRows]);
+  }, [loadOhlcRows, timeframe, refreshMs]);
 
   return (
     <aside className="mkt-left">
       {LEFT_GROUPS.map((g) => (
         <section key={g.id} className="mkt-mini-card">
           <header className="mkt-mini-card__head">
-            <span>{g.title}</span>
+            <span>
+              {g.title}
+              <span className="mkt-mini-card__tf" title="Same date range as the performance chart">
+                {timeframe}
+              </span>
+            </span>
             <span className="mkt-mini-card__head-actions">
               <button type="button" className="mkt-mini-card__tiny-btn" onClick={() => onSelectGroupAll(g.id)}>
                 All
@@ -98,17 +95,17 @@ function LeftSnapshotStack({ selectedKeys, onToggleSeries, onSelectGroupAll, onC
               </button>
             </span>
           </header>
-          <div className="mkt-mini-card__subhead">
+          <div className="mkt-mini-card__subhead" title="Last close and total move over the chart timeframe">
             <span>M</span>
             <span>Name</span>
-            <span>Price</span>
-            <span>Chg</span>
+            <span>Last</span>
+            <span>Δ</span>
             <span>%</span>
           </div>
           {groupRows(g.id).map((r) => {
             const v = rowsByGroup[g.id]?.[r.key];
-            const up = Number(v?.chg) > 0;
-            const down = Number(v?.chg) < 0;
+            const up = Number(v?.chgPct) > 0;
+            const down = Number(v?.chgPct) < 0;
             const checked = selectedKeys.includes(r.key);
             return (
               <div key={r.key} className="mkt-mini-card__row">
@@ -455,6 +452,8 @@ export function MarketPageFigmaShell() {
         onSelectGroupAll={onSelectGroupAll}
         onClearGroup={onClearGroup}
         loadOhlcRows={loadOhlcRows}
+        timeframe={timeframe}
+        refreshMs={refreshMs}
       />
       <main className="mkt-center">
         <div className="mkt-options">

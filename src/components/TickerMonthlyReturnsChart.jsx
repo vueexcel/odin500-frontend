@@ -5,6 +5,7 @@ import { DataInfoTip } from './DataInfoTip.jsx';
 import { formatWeekAxisDate, isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
+import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
 
 const COL_BAR = '#2563eb';
 const COL_AVG = '#f97316';
@@ -355,7 +356,8 @@ export function TickerMonthlyReturnsChart({
   }, [navigate, periodMode]);
 
   const onOpenPeriodPage = useCallback(() => {
-    const suffix = String(symbol || '').trim() ? '/' + encodeURIComponent(String(symbol || '').trim()) : '';
+    const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
+    const suffix = '/' + encodeURIComponent(symPart);
     const base =
       periodMode === 'weekly'
         ? '/ticker-weekly'

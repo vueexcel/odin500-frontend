@@ -1,17 +1,56 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createChart, PriceScaleMode } from 'lightweight-charts';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import TradingChartLoader from './TradingChartLoader.jsx';
 import { fetchWithAuth, getAuthToken } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
-import { META_BY_KEY, TICKER_BY_KEY, MARKET_SERIES } from './marketSeriesRegistry.js';
+import { META_BY_KEY, TICKER_BY_KEY } from './marketSeriesRegistry.js';
 import { TF_OPTIONS, tfRange, normalizeRows } from '../utils/marketCalculations.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 
 function fmtPct(v) {
   const n = Number(v || 0);
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+}
+
+/** Readable text on solid hex fill (axis badges). */
+function textColorOnHex(hex) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ''));
+  if (!m) return '#ffffff';
+  const r = parseInt(m[1], 16) / 255;
+  const g = parseInt(m[2], 16) / 255;
+  const b = parseInt(m[3], 16) / 255;
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return L > 0.55 ? '#0f172a' : '#ffffff';
+}
+
+/** Keep stacked badges readable when Y levels are close (TradingView-style). */
+function layoutBadgeTopsPx(keys, getRawY, containerHeight, minGap = 22, pad = 10) {
+  const h = Number(containerHeight);
+  if (!Number.isFinite(h) || h <= 0) return {};
+  let items = keys
+    .map((key) => {
+      const raw = getRawY(key);
+      const y = raw == null ? null : Number(raw);
+      return { key, y: Number.isFinite(y) ? y : null };
+    })
+    .filter((x) => x.y != null);
+  items.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < items.length; i++) {
+    const prevTop = items[i - 1].y + minGap;
+    if (items[i].y < prevTop) items[i].y = prevTop;
+  }
+  for (let i = items.length - 2; i >= 0; i--) {
+    const nextTop = items[i + 1].y - minGap;
+    if (items[i].y > nextTop) items[i].y = nextTop;
+  }
+  const out = {};
+  for (const it of items) {
+    const clamped = Math.min(Math.max(it.y, pad), h - pad);
+    out[it.key] = clamped;
+  }
+  return out;
 }
 
 export function NormalizedPerformanceCard({
@@ -31,6 +70,7 @@ export function NormalizedPerformanceCard({
   const chartHostRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRefs = useRef(new Map());
+  const [axisBadgeTops, setAxisBadgeTops] = useState({});
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const tf = timeframe || tfLocal;
   const setTf = onTimeframeChange || setTfLocal;
@@ -114,7 +154,65 @@ export function NormalizedPerformanceCard({
     return out;
   }, [activeKeys, series]);
 
+  const lastRef = useRef(last);
+  lastRef.current = last;
+  const activeKeysRef = useRef(activeKeys);
+  activeKeysRef.current = activeKeys;
+
+  const updateAxisBadgePositions = useCallback(() => {
+    const chart = chartRef.current;
+    const host = chartHostRef.current;
+    if (!chart || !host) return;
+    const keys = activeKeysRef.current;
+    const lastVals = lastRef.current;
+    const height = host.clientHeight;
+    const getRawY = (key) => {
+      const line = seriesRefs.current.get(key);
+      const val = lastVals[key];
+      if (!line || !Number.isFinite(val)) return null;
+      const y = line.priceToCoordinate(val);
+      return y == null ? null : Number(y);
+    };
+    setAxisBadgeTops(layoutBadgeTopsPx(keys, getRawY, height));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (loading) return;
+    const chart = chartRef.current;
+    const host = chartHostRef.current;
+    if (!chart || !host) return;
+
+    const run = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => updateAxisBadgePositions());
+      });
+    };
+
+    run();
+    const ro = new ResizeObserver(() => run());
+    ro.observe(host);
+
+    const ts = chart.timeScale();
+    const onRange = () => run();
+    ts.subscribeVisibleLogicalRangeChange(onRange);
+    ts.subscribeVisibleTimeRangeChange(onRange);
+
+    return () => {
+      ro.disconnect();
+      ts.unsubscribeVisibleLogicalRangeChange(onRange);
+      ts.unsubscribeVisibleTimeRangeChange(onRange);
+    };
+  }, [loading, updateAxisBadgePositions, chartTheme]);
+
   useEffect(() => {
+    if (loading) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => updateAxisBadgePositions());
+    });
+  }, [loading, series, activeKeys, last, axisMode, updateAxisBadgePositions]);
+
+  useEffect(() => {
+    if (loading) return;
     const el = chartHostRef.current;
     if (!el) return;
     const isLight = chartTheme === 'light';
@@ -166,13 +264,21 @@ export function NormalizedPerformanceCard({
     });
     ro.observe(el);
 
+    requestAnimationFrame(() => {
+      if (!chartRef.current || !chartHostRef.current) return;
+      chartRef.current.applyOptions({
+        width: chartHostRef.current.clientWidth,
+        height: chartHostRef.current.clientHeight || 390
+      });
+    });
+
     return () => {
       ro.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRefs.current = new Map();
     };
-  }, [chartTheme]);
+  }, [chartTheme, loading]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -244,7 +350,10 @@ export function NormalizedPerformanceCard({
     } else {
       chart.timeScale().fitContent();
     }
-  }, [series, activeKeys, axisMode]);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => updateAxisBadgePositions());
+    });
+  }, [series, activeKeys, axisMode, loading, chartTheme, updateAxisBadgePositions]);
 
   return (
     <section className="np-card" aria-label="Normalized performance">
@@ -308,24 +417,40 @@ export function NormalizedPerformanceCard({
             <TradingChartLoader label="Loading chart…" sublabel="Normalized performance" />
           </div>
         ) : (
-          <div
-            ref={chartHostRef}
-            className="np-chart np-chart--interactive"
-            role="img"
-            aria-label="Normalized performance chart. Drag to pan, wheel or pinch to zoom."
-          />
-        )}
-        <div className="np-chart-badges">
-          {activeKeys.map((k) => {
-            const s = META_BY_KEY[k];
-            if (!s) return null;
-            return (
-            <div key={s.key} className="np-chart-badge" style={{ background: s.badge }}>
-              <strong>{s.key}</strong>&nbsp;&nbsp;{fmtPct(last[s.key])}
+          <div className="np-chart-stack">
+            <div
+              ref={chartHostRef}
+              className="np-chart np-chart--interactive"
+              role="img"
+              aria-label="Normalized performance chart. Drag to pan, wheel or pinch to zoom."
+            />
+            <div className="np-chart-axis-tags" aria-hidden="true">
+              {activeKeys.map((k) => {
+                const s = META_BY_KEY[k];
+                if (!s) return null;
+                const top = axisBadgeTops[k];
+                const bg = s.color;
+                const fg = textColorOnHex(bg);
+                return (
+                  <div
+                    key={s.key}
+                    className="np-chart-axis-badge"
+                    style={{
+                      top: top == null ? -9999 : top,
+                      opacity: top == null ? 0 : 1,
+                      background: bg,
+                      color: fg
+                    }}
+                  >
+                    <span className="np-chart-axis-badge__tick" style={{ borderRightColor: bg }} />
+                    <span className="np-chart-axis-badge__sym">{s.key}</span>
+                    <span className="np-chart-axis-badge__val">{fmtPct(last[s.key])}</span>
+                  </div>
+                );
+              })}
             </div>
-            );
-          })}
-        </div>
+          </div>
+        )}
       </div>
     </section>
   );

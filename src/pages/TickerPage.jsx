@@ -19,7 +19,7 @@ import {
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { toDateInput } from '../utils/misc.js';
-import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
+import { DEFAULT_TICKER_ROUTE_SYMBOL, sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 
 const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
@@ -701,7 +701,7 @@ export default function TickerPage() {
     noindex: Boolean(location.search),
     breadcrumbItems: [
       { name: 'Market', path: '/market' },
-      { name: 'Ticker', path: '/ticker' },
+      { name: 'Ticker', path: `/ticker/${encodeURIComponent(DEFAULT_TICKER_ROUTE_SYMBOL)}` },
       { name: String(sym).toUpperCase(), path: `/ticker/${canonicalSym}` }
     ]
   });
@@ -802,7 +802,7 @@ export default function TickerPage() {
       setSymbolRefreshToken((v) => v + 1);
       setActiveSymbol(s || 'AAPL');
       if (!s) {
-        navigate('/ticker');
+        navigate(`/ticker/${encodeURIComponent(DEFAULT_TICKER_ROUTE_SYMBOL)}`);
         return;
       }
       if (s === sym) return;
@@ -2173,12 +2173,11 @@ export default function TickerPage() {
               </p>
             </DataInfoTip>
           </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div className="ticker-rs-controls">
             <select
-              className="ticker-page__date-inp"
+              className="ticker-page__date-inp ticker-rs-controls__select"
               value={relativeIndexKey}
               onChange={(e) => setRelativeIndexKey(e.target.value)}
-              style={{ minWidth: 220 }}
             >
               {RELATIVE_INDEX_OPTIONS.map((opt) => (
                 <option key={`rs-index-${opt.key}`} value={opt.key}>
@@ -2187,10 +2186,9 @@ export default function TickerPage() {
               ))}
             </select>
             <select
-              className="ticker-page__date-inp"
+              className="ticker-page__date-inp ticker-rs-controls__select"
               value={relativeTickerSymbol}
               onChange={(e) => setRelativeTickerSymbol(e.target.value)}
-              style={{ minWidth: 220 }}
             >
               {tickerSelectOptions.map((opt) => (
                 <option key={`rs-ticker-${opt}`} value={opt}>

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
+import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
 
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
 const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
@@ -325,8 +326,8 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
   }, [navigate]);
 
   const onOpenQuarterlyPage = useCallback(() => {
-    const suffix = String(symbol || '').trim() ? '/' + encodeURIComponent(String(symbol || '').trim()) : '';
-    navigate('/ticker-quarterly' + suffix);
+    const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
+    navigate('/ticker-quarterly/' + encodeURIComponent(symPart));
   }, [navigate, symbol]);
 
   if (!rows.length) {

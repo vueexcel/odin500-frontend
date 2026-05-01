@@ -5,6 +5,7 @@ import { DataInfoTip } from './DataInfoTip.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
+import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
 
 const DEFAULT_YEAR = 2025;
 const COL_INC = '#2563eb';
@@ -423,7 +424,8 @@ export function TickerMonthlyReturnsWaterfallDonut({
     }, 150);
   }, [navigate, periodMode]);
   const onOpenPeriodPage = useCallback(() => {
-    const suffix = String(symbol || '').trim() ? '/' + encodeURIComponent(String(symbol || '').trim()) : '';
+    const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
+    const suffix = '/' + encodeURIComponent(symPart);
     const base = periodMode === 'weekly' ? '/ticker-weekly' : '/ticker-monthly';
     navigate(base + suffix);
   }, [navigate, periodMode, symbol]);

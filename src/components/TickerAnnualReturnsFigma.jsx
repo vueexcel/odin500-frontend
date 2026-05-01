@@ -6,6 +6,7 @@ import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import { formatWeekAxisDate, isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
 import { periodModeNouns } from '../utils/periodModeNouns.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
+import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
 
 /** Match `TickerLightweightChart` / dark ticker cards. */
 const COL_BAR = '#2563eb';
@@ -404,7 +405,8 @@ export function TickerAnnualReturnsFigma({
   }, [navigate, periodMode]);
 
   const onOpenPeriodPage = useCallback(() => {
-    const suffix = String(symbol || '').trim() ? '/' + encodeURIComponent(String(symbol || '').trim()) : '';
+    const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
+    const suffix = '/' + encodeURIComponent(symPart);
     const path =
       periodMode === 'quarterly'
         ? '/ticker-quarterly'

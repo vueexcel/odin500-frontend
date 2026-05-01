@@ -5,6 +5,7 @@ import odinLogo from '../assets/odin500-logo.svg';
 import odinLogoLight from '../assets/odin500-logo-light.svg';
 import { fetchWithAuth } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
+import { DEFAULT_TICKER_ROUTE_SYMBOL, isMainTickerRoutePath } from '../utils/tickerUrlSync.js';
 
 function IconGlobe() {
   return (
@@ -201,7 +202,9 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
     /^\/(?:ticker|ticker-annual|ticker-quarterly|ticker-monthly|ticker-weekly|ticker-daily)\/([^/?#]+)$/i
   );
   const activeTickerSymbol = tickerPathMatch?.[1] ? decodeURIComponent(tickerPathMatch[1]).trim().toUpperCase() : '';
-  const tickerSuffix = activeTickerSymbol ? `/${encodeURIComponent(activeTickerSymbol)}` : '';
+  const tickerSuffix = activeTickerSymbol
+    ? `/${encodeURIComponent(activeTickerSymbol)}`
+    : `/${encodeURIComponent(DEFAULT_TICKER_ROUTE_SYMBOL)}`;
   const annualTo = `/ticker-annual${tickerSuffix}`;
   const quarterlyTo = `/ticker-quarterly${tickerSuffix}`;
   const monthlyTo = `/ticker-monthly${tickerSuffix}`;
@@ -380,7 +383,13 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
 
             
             <nav className="app-sidebar__nav" aria-label="Page">
-              <NavRow to="/ticker" icon={IconPeople} label="Tickers" onClick={(e) => handleNavClick(e, '/ticker')} />
+              <NavRow
+                to={`/ticker/${DEFAULT_TICKER_ROUTE_SYMBOL}`}
+                icon={IconPeople}
+                label="Tickers"
+                active={isMainTickerRoutePath(location.pathname)}
+                onClick={(e) => handleNavClick(e, `/ticker/${DEFAULT_TICKER_ROUTE_SYMBOL}`)}
+              />
             </nav>
 
             <nav className="app-sidebar__nav" aria-label="Statistics">
