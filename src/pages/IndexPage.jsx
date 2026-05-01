@@ -34,6 +34,12 @@ const RESIZE_KEY_QUARTERLY = 'odin_index_resize_quarterly';
 const RESIZE_KEY_MONTHLY = 'odin_index_resize_monthly';
 const RESIZE_KEY_MONTHLY_ADV = 'odin_index_resize_monthly_waterfall';
 
+/** Default chart year windows (index returns sections). */
+const INDEX_ANNUAL_CHART_DEFAULT_START_YEAR = 2018;
+const INDEX_ANNUAL_CHART_DEFAULT_END_YEAR = 2026;
+const INDEX_QUARTERLY_CHART_DEFAULT_START_YEAR = 2022;
+const INDEX_QUARTERLY_CHART_DEFAULT_END_YEAR = 2026;
+
 const MAX_NEWS_ITEMS = 120;
 const NEWS_PAGE_SIZE = 5;
 const INDEX_TICKERS_PAGE_SIZE = 50;
@@ -93,6 +99,16 @@ function sanitizeIndexSlug(raw) {
   };
   if (aliases[s]) return aliases[s];
   return s;
+}
+
+function parseYearFromAnnualPeriod(period) {
+  const m = String(period || '').match(/(\d{4})/);
+  return m ? Number(m[1]) : NaN;
+}
+
+function parseYearFromQuarterlyPeriod(period) {
+  const m = String(period || '').match(/^(\d{4})-Q/i);
+  return m ? Number(m[1]) : NaN;
 }
 
 function pickNum(row, keys) {
@@ -599,6 +615,15 @@ export default function IndexPage() {
   const [draftChartEnd, setDraftChartEnd] = useState('');
   const [mainChartType, setMainChartType] = useState('line');
 
+  const [indexAnnualChartStartYear, setIndexAnnualChartStartYear] = useState(INDEX_ANNUAL_CHART_DEFAULT_START_YEAR);
+  const [indexAnnualChartEndYear, setIndexAnnualChartEndYear] = useState(INDEX_ANNUAL_CHART_DEFAULT_END_YEAR);
+  const [indexQuarterlyChartStartYear, setIndexQuarterlyChartStartYear] = useState(
+    INDEX_QUARTERLY_CHART_DEFAULT_START_YEAR
+  );
+  const [indexQuarterlyChartEndYear, setIndexQuarterlyChartEndYear] = useState(
+    INDEX_QUARTERLY_CHART_DEFAULT_END_YEAR
+  );
+
   const chartBodyRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const chartPlotHostRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const mediaChartHeight = useMediaChartHeight();
@@ -901,6 +926,10 @@ export default function IndexPage() {
     setRelativeLeftKey(`IDX:${slug}`);
     setRelativeRightKey('SPX');
     setIndexTickersPage(1);
+    setIndexAnnualChartStartYear(INDEX_ANNUAL_CHART_DEFAULT_START_YEAR);
+    setIndexAnnualChartEndYear(INDEX_ANNUAL_CHART_DEFAULT_END_YEAR);
+    setIndexQuarterlyChartStartYear(INDEX_QUARTERLY_CHART_DEFAULT_START_YEAR);
+    setIndexQuarterlyChartEndYear(INDEX_QUARTERLY_CHART_DEFAULT_END_YEAR);
   }, [slug]);
 
   const dynamicSym = returnsSym?.performance?.dynamicPeriods || [];
@@ -908,6 +937,142 @@ export default function IndexPage() {
   const annualReturnsRaw = returnsSym?.performance?.annualReturns;
   const quarterlyReturnsRaw = returnsSym?.performance?.quarterlyReturns;
   const monthlyReturnsRaw = returnsSym?.performance?.monthlyReturns;
+
+  const indexAnnualYearOptions = useMemo(() => {
+    const raw = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
+    let minY = 9999;
+    let maxY = 0;
+    for (const r of raw) {
+      const y = parseYearFromAnnualPeriod(r?.period);
+      if (Number.isFinite(y)) {
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+    }
+    if (minY > maxY) {
+      const out = [];
+      for (let y = INDEX_ANNUAL_CHART_DEFAULT_START_YEAR; y <= INDEX_ANNUAL_CHART_DEFAULT_END_YEAR; y++) out.push(y);
+      return out;
+    }
+    const out = [];
+    for (let y = minY; y <= maxY; y++) out.push(y);
+    return out;
+  }, [annualReturnsRaw]);
+
+  const indexQuarterlyYearOptions = useMemo(() => {
+    const raw = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
+    let minY = 9999;
+    let maxY = 0;
+    for (const r of raw) {
+      const y = parseYearFromQuarterlyPeriod(r?.period);
+      if (Number.isFinite(y)) {
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+    }
+    if (minY > maxY) {
+      const out = [];
+      for (let y = INDEX_QUARTERLY_CHART_DEFAULT_START_YEAR; y <= INDEX_QUARTERLY_CHART_DEFAULT_END_YEAR; y++) out.push(y);
+      return out;
+    }
+    const out = [];
+    for (let y = minY; y <= maxY; y++) out.push(y);
+    return out;
+  }, [quarterlyReturnsRaw]);
+
+  useEffect(() => {
+    if (!indexAnnualYearOptions.length) return;
+    const lo = indexAnnualYearOptions[0];
+    const hi = indexAnnualYearOptions[indexAnnualYearOptions.length - 1];
+    setIndexAnnualChartStartYear((s) => Math.min(Math.max(s, lo), hi));
+    setIndexAnnualChartEndYear((e) => Math.min(Math.max(e, lo), hi));
+  }, [indexAnnualYearOptions]);
+
+  useEffect(() => {
+    if (!indexQuarterlyYearOptions.length) return;
+    const lo = indexQuarterlyYearOptions[0];
+    const hi = indexQuarterlyYearOptions[indexQuarterlyYearOptions.length - 1];
+    setIndexQuarterlyChartStartYear((s) => Math.min(Math.max(s, lo), hi));
+    setIndexQuarterlyChartEndYear((e) => Math.min(Math.max(e, lo), hi));
+  }, [indexQuarterlyYearOptions]);
+
+  const annualReturnsFiltered = useMemo(() => {
+    const raw = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
+    const lo = Math.min(indexAnnualChartStartYear, indexAnnualChartEndYear);
+    const hi = Math.max(indexAnnualChartStartYear, indexAnnualChartEndYear);
+    return raw.filter((r) => {
+      const y = parseYearFromAnnualPeriod(r?.period);
+      return Number.isFinite(y) && y >= lo && y <= hi;
+    });
+  }, [annualReturnsRaw, indexAnnualChartStartYear, indexAnnualChartEndYear]);
+
+  const quarterlyReturnsFiltered = useMemo(() => {
+    const raw = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
+    const lo = Math.min(indexQuarterlyChartStartYear, indexQuarterlyChartEndYear);
+    const hi = Math.max(indexQuarterlyChartStartYear, indexQuarterlyChartEndYear);
+    return raw.filter((r) => {
+      const y = parseYearFromQuarterlyPeriod(r?.period);
+      return Number.isFinite(y) && y >= lo && y <= hi;
+    });
+  }, [quarterlyReturnsRaw, indexQuarterlyChartStartYear, indexQuarterlyChartEndYear]);
+
+  const indexAnnualChartYearToolbar = (
+    <div className="ticker-page__custom-range" aria-label="Annual returns chart year range">
+      <span className="ticker-page__label ticker-page__label--inline">Start year</span>
+      <select
+        className="ticker-page__date-inp"
+        value={indexAnnualChartStartYear}
+        onChange={(e) => setIndexAnnualChartStartYear(Number(e.target.value))}
+      >
+        {indexAnnualYearOptions.map((y) => (
+          <option key={`idx-ann-start-${y}`} value={y}>
+            {y}
+          </option>
+        ))}
+      </select>
+      <span className="ticker-page__label ticker-page__label--inline">End year</span>
+      <select
+        className="ticker-page__date-inp"
+        value={indexAnnualChartEndYear}
+        onChange={(e) => setIndexAnnualChartEndYear(Number(e.target.value))}
+      >
+        {indexAnnualYearOptions.map((y) => (
+          <option key={`idx-ann-end-${y}`} value={y}>
+            {y}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  const indexQuarterlyChartYearToolbar = (
+    <div className="ticker-page__custom-range" aria-label="Quarterly returns chart year range">
+      <span className="ticker-page__label ticker-page__label--inline">Start year</span>
+      <select
+        className="ticker-page__date-inp"
+        value={indexQuarterlyChartStartYear}
+        onChange={(e) => setIndexQuarterlyChartStartYear(Number(e.target.value))}
+      >
+        {indexQuarterlyYearOptions.map((y) => (
+          <option key={`idx-qtr-start-${y}`} value={y}>
+            {y}
+          </option>
+        ))}
+      </select>
+      <span className="ticker-page__label ticker-page__label--inline">End year</span>
+      <select
+        className="ticker-page__date-inp"
+        value={indexQuarterlyChartEndYear}
+        onChange={(e) => setIndexQuarterlyChartEndYear(Number(e.target.value))}
+      >
+        {indexQuarterlyYearOptions.map((y) => (
+          <option key={`idx-qtr-end-${y}`} value={y}>
+            {y}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
   const loadRelativeSeries = useCallback(
     async (option) => {
@@ -1684,16 +1849,28 @@ export default function IndexPage() {
 
           <TickerAnnualReturnsFigma
             symbol={displaySym}
-            annualReturns={annualReturnsRaw}
+            annualReturns={annualReturnsFiltered}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
+            toolbarControls={indexAnnualChartYearToolbar}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
-            <TickerAnnualReturnsPosNeg symbol={displaySym} annualReturns={annualReturnsRaw} asOfDate={asOfDate} />
+            <TickerAnnualReturnsPosNeg
+              symbol={displaySym}
+              annualReturns={annualReturnsFiltered}
+              asOfDate={asOfDate}
+              suppressChartDateFilter
+            />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_QUARTERLY} defaultHeight={288}>
-            <TickerQuarterlyReturnsChart symbol={displaySym} quarterlyReturns={quarterlyReturnsRaw} asOfDate={asOfDate} />
+            <TickerQuarterlyReturnsChart
+              symbol={displaySym}
+              quarterlyReturns={quarterlyReturnsFiltered}
+              quarterlyReturnsAll={quarterlyReturnsRaw}
+              asOfDate={asOfDate}
+              toolbarControls={indexQuarterlyChartYearToolbar}
+            />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
             <TickerMonthlyReturnsChart symbol={displaySym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} />
@@ -1851,52 +2028,7 @@ export default function IndexPage() {
               )}
             </p>
 
-            <div className="ticker-subh-with-tip">
-              <h3 className="ticker-subh ticker-subh--flex">Performance returns</h3>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  From <code className="ticker-data-tip__code">POST /api/market/index-returns</code> →{' '}
-                  <code className="ticker-data-tip__code">performance.dynamicPeriods</code>. Benchmark uses{' '}
-                  <code className="ticker-data-tip__code">POST /api/market/ticker-returns</code> for {BENCHMARK}.
-                </p>
-              </DataInfoTip>
-            </div>
-            <div className="ticker-perf-wrap">
-              <table className="ticker-perf">
-                <thead>
-                  <tr>
-                    <th />
-                    {PERF_COLS.map((c) => (
-                      <th key={c.label}>{c.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <th scope="row">Total return</th>
-                    {PERF_COLS.map((c) => {
-                      const v = pickDynamic(dynamicSym, c.period);
-                      return (
-                        <td key={c.label} className={pctClass(v)}>
-                          {formatPct(v)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr>
-                    <th scope="row">Benchmark ({BENCHMARK})</th>
-                    {PERF_COLS.map((c) => {
-                      const v = pickDynamic(dynamicSpy, c.period);
-                      return (
-                        <td key={c.label + '-spy'} className={pctClass(v)}>
-                          {formatPct(v)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            
 
             <div className="ticker-subh-with-tip">
               <h3 className="ticker-subh ticker-subh--flex">

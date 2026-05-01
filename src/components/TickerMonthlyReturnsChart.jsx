@@ -360,10 +360,10 @@ export function TickerMonthlyReturnsChart({
     const suffix = '/' + encodeURIComponent(symPart);
     const base =
       periodMode === 'weekly'
-        ? '/ticker-weekly'
+        ? '/statistic/ticker-weekly'
         : periodMode === 'daily'
-          ? '/ticker-daily'
-          : '/ticker-monthly';
+          ? '/statistic/ticker-daily'
+          : '/statistic/ticker-monthly';
     navigate(base + suffix);
   }, [navigate, periodMode, symbol]);
 

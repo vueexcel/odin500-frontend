@@ -20,6 +20,7 @@ import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { toDateInput } from '../utils/misc.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL, sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
+import { pickRelatedByCategory, RELATED_INDEX_LINKS } from '../utils/relatedTickers.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 
 const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
@@ -88,12 +89,6 @@ const RELATIVE_INDEX_OPTIONS = [
   { key: 'nasdaq-composite', label: 'Nasdaq Composite', apiIndex: 'nasdaq composite' },
   { key: 'nasdaq-100', label: 'Nasdaq 100', apiIndex: 'Nasdaq 100' }
 ];
-const RELATED_INDEX_LINKS = [
-  { slug: 'dow-jones', label: 'Dow Jones' },
-  { slug: 'sp500', label: 'S&P 500' },
-  { slug: 'nasdaq-100', label: 'Nasdaq' }
-];
-
 function yesterdayIsoForLongTable() {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -140,20 +135,6 @@ function mergeTickerReturns(prev, patch) {
       customRange: pick('customRange') ?? []
     }
   };
-}
-
-function describeTickerIndex(rawIndex) {
-  const s = String(rawIndex || '').trim();
-  if (!s) return 'Other';
-  const lower = s.toLowerCase();
-  if (lower.includes('s&p') || lower.includes('sp500') || lower.includes('snp') || lower.includes('sp 500')) {
-    return 'S&P 500';
-  }
-  if (lower.includes('dow')) return 'Dow Jones';
-  if (lower.includes('nasdaq')) return 'Nasdaq';
-  if (lower.includes('etf')) return 'ETF';
-  if (lower === 'us') return 'Other';
-  return s;
 }
 
 function pickNum(row, keys) {
@@ -454,38 +435,6 @@ function qtdFromRows(sortedAsc) {
     const d = new Date(iso + 'T12:00:00');
     return d >= qStart;
   });
-}
-
-function pickCompetitors(detailRows, sym, mySector, limit = 6) {
-  const u = sym.toUpperCase();
-  const rows = Array.isArray(detailRows) ? detailRows : [];
-  const same = rows.filter(
-    (r) =>
-      String(r.Symbol || r.symbol || '')
-        .toUpperCase()
-        .trim() !== u &&
-      mySector &&
-      String(r.Sector || r.sector || '').trim() === mySector
-  );
-  const rest = rows.filter(
-    (r) =>
-      String(r.Symbol || r.symbol || '')
-        .toUpperCase()
-        .trim() !== u
-  );
-  const merged = [...same, ...rest];
-  const seen = new Set();
-  const out = [];
-  for (const r of merged) {
-    const s = String(r.Symbol || r.symbol || '')
-      .toUpperCase()
-      .trim();
-    if (!s || seen.has(s)) continue;
-    seen.add(s);
-    out.push(s);
-    if (out.length >= limit) break;
-  }
-  return out;
 }
 
 function ohlcRowsFromPayload(payload) {
@@ -1302,11 +1251,24 @@ export default function TickerPage() {
   const sector = String(myDetail?.Sector || myDetail?.sector || '').trim();
   const industry = String(myDetail?.Industry || myDetail?.industry || '').trim();
   const indexLabel = String(myDetail?.Index || myDetail?.index || '').trim() || 'US';
-  const relatedTickersSourceLabel = describeTickerIndex(indexLabel);
 
   const competitors = useMemo(
-    () => pickCompetitors(detailRows, sym, sector, 6),
-    [detailRows, sym, sector]
+    () =>
+      pickRelatedByCategory(
+        detailRows,
+        sym,
+        sector,
+        String(
+          myDetail?.SubIndustry ||
+            myDetail?.subIndustry ||
+            myDetail?.subindustry ||
+            myDetail?.Industry ||
+            myDetail?.industry ||
+            ''
+        ).trim(),
+        10
+      ),
+    [detailRows, sym, sector, myDetail]
   );
 
   const dynamicSym = returnsSym?.performance?.dynamicPeriods || [];
@@ -2348,56 +2310,6 @@ export default function TickerPage() {
               )}
             </p>
 
-            <div className="ticker-subh-with-tip">
-              <h3 className="ticker-subh ticker-subh--flex">Performance returns</h3>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  Rows use <code className="ticker-data-tip__code">POST /api/market/ticker-returns</code> →{' '}
-                  <code className="ticker-data-tip__code">performance.dynamicPeriods</code>.
-                </p>
-                <p className="ticker-data-tip__p">
-                  Each cell is <strong>totalReturn</strong> (percent price change from the period’s first applicable
-                  close to the last close the server found inside the window). Benchmark row repeats the same logic for{' '}
-                  <strong>{BENCHMARK}</strong>.
-                </p>
-              </DataInfoTip>
-            </div>
-            <div className="ticker-perf-wrap">
-              <table className="ticker-perf">
-                <thead>
-                  <tr>
-                    <th />
-                    {PERF_COLS.map((c) => (
-                      <th key={c.label}>{c.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <th scope="row">Total return</th>
-                    {PERF_COLS.map((c) => {
-                      const v = pickDynamic(dynamicSym, c.period);
-                      return (
-                        <td key={c.label} className={pctClass(v)}>
-                          {formatPct(v)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr>
-                    <th scope="row">Benchmark ({BENCHMARK})</th>
-                    {PERF_COLS.map((c) => {
-                      const v = pickDynamic(dynamicSpy, c.period);
-                      return (
-                        <td key={c.label + '-spy'} className={pctClass(v)}>
-                          {formatPct(v)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
 
             <div className="ticker-subh-with-tip">
               <h3 className="ticker-subh ticker-subh--flex">

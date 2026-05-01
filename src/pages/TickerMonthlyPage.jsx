@@ -10,6 +10,7 @@ import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
+import { pickRelatedByCategory, RELATED_INDEX_LINKS } from '../utils/relatedTickers.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
@@ -44,11 +45,6 @@ const COMPARE_ROWS = [
   { key: '5Y', period: 'Last 5 years' },
   { key: '10Y', period: 'Last 10 years' },
   { key: '20Y', period: 'Last 20 years' }
-];
-const RELATED_INDEX_LINKS = [
-  { slug: 'dow-jones', label: 'Dow Jones' },
-  { slug: 'sp500', label: 'S&P 500' },
-  { slug: 'nasdaq-100', label: 'Nasdaq' }
 ];
 const TABLE_PAGE_SIZE = 30;
 const PAGER_SIBLING_COUNT = 1;
@@ -193,32 +189,6 @@ function qtdFromRows(sortedAsc) {
     const iso = rowDateToTimeKey(r);
     return iso ? new Date(iso + 'T12:00:00') >= qStart : false;
   });
-}
-function pickCompetitors(detailRows, sym, mySector, limit = 6) {
-  const u = String(sym || '').toUpperCase();
-  const rows = Array.isArray(detailRows) ? detailRows : [];
-  const same = rows.filter((r) => String(r.Symbol || r.symbol || '').toUpperCase().trim() !== u && mySector && String(r.Sector || r.sector || '').trim() === mySector);
-  const rest = rows.filter((r) => String(r.Symbol || r.symbol || '').toUpperCase().trim() !== u);
-  const merged = [...same, ...rest];
-  const out = [];
-  const seen = new Set();
-  for (const r of merged) {
-    const s = String(r.Symbol || r.symbol || '').toUpperCase().trim();
-    if (!s || seen.has(s)) continue;
-    seen.add(s);
-    out.push(s);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-function describeTickerIndex(rawIndex) {
-  const s = String(rawIndex || '').trim();
-  if (!s) return 'Other';
-  const lower = s.toLowerCase();
-  if (lower.includes('s&p') || lower.includes('sp500') || lower.includes('snp') || lower.includes('sp 500')) return 'S&P 500';
-  if (lower.includes('dow')) return 'Dow Jones';
-  if (lower.includes('nasdaq')) return 'Nasdaq';
-  return s;
 }
 function IconTrendUp({ className }) {
   return (
@@ -366,13 +336,13 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
   usePageSeo({
     title: `${String(sym).toUpperCase()} ${modeLabel} Returns | Odin500`,
     description: `${modeLabel} return charts and table for ${String(sym).toUpperCase()} on Odin500.`,
-    canonicalPath: `/ticker-${modeSlug}/${String(sym || 'aapl').toLowerCase()}`
+    canonicalPath: `/statistic/ticker-${modeSlug}/${String(sym || 'aapl').toLowerCase()}`
   });
 
   const onSymbolChange = useCallback((next) => {
     const s = sanitizeTickerPageInput(next) || 'AAPL';
     setSym(s);
-    navigate(`/ticker-${modeSlug}/` + encodeURIComponent(s));
+    navigate(`/statistic/ticker-${modeSlug}/` + encodeURIComponent(s));
   }, [navigate, modeSlug]);
 
   useEffect(() => {
@@ -744,9 +714,24 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
   const symU = String(sym || '').toUpperCase();
   const myDetail = useMemo(() => detailRows.find((r) => String(r.Symbol || r.symbol || '').toUpperCase().trim() === symU) || null, [detailRows, symU]);
   const sector = String(myDetail?.Sector || myDetail?.sector || '').trim();
-  const indexLabel = String(myDetail?.Index || myDetail?.index || '').trim() || 'US';
-  const relatedTickersSourceLabel = describeTickerIndex(indexLabel);
-  const competitors = useMemo(() => pickCompetitors(detailRows, symU, sector, 6), [detailRows, symU, sector]);
+  const competitors = useMemo(
+    () =>
+      pickRelatedByCategory(
+        detailRows,
+        symU,
+        sector,
+        String(
+          myDetail?.SubIndustry ||
+            myDetail?.subIndustry ||
+            myDetail?.subindustry ||
+            myDetail?.Industry ||
+            myDetail?.industry ||
+            ''
+        ).trim(),
+        6
+      ),
+    [detailRows, symU, sector, myDetail]
+  );
   const highs = statsRows.map((r) => pickNum(r, ['High', 'high'])).filter((v) => v != null);
   const lows = statsRows.map((r) => pickNum(r, ['Low', 'low'])).filter((v) => v != null);
   const vols = statsRows.map((r) => pickNum(r, ['Volume', 'volume', 'VOLUME'])).filter((v) => v != null);
@@ -977,21 +962,18 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
             </div>
             <p className="ticker-page__label ticker-kd-comp-label">
               <span>RELATED TICKERS</span>
-              <span className="ticker-kd-comp-label__links">{RELATED_INDEX_LINKS.map((idx) => <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">{idx.label}</Link>)}</span>
+              <span className="ticker-kd-comp-label__links">
+                {RELATED_INDEX_LINKS.map((idx) => (
+                  <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">
+                    {idx.label}
+                  </Link>
+                ))}
+              </span>
             </p>
             <p className="ticker-kd-comp">
               {competitors.length ? competitors.map((t) => <Link key={t} to={`/ticker/${encodeURIComponent(t)}`} className="ticker-kd-comp__a">{t}</Link>) : <span className="ticker-page__muted">—</span>}
             </p>
-            <div className="ticker-subh-with-tip"><h3 className="ticker-subh ticker-subh--flex">Performance returns</h3></div>
-            <div className="ticker-perf-wrap">
-              <table className="ticker-perf">
-                <thead><tr><th />{PERF_COLS.map((c) => <th key={c.label}>{c.label}</th>)}</tr></thead>
-                <tbody>
-                  <tr><th scope="row">Total return</th>{PERF_COLS.map((c) => { const v = pickDynamic(dynamicSym, c.period); return <td key={c.label} className={pctClass(v)}>{formatPct(v)}</td>; })}</tr>
-                  <tr><th scope="row">Benchmark ({BENCHMARK})</th>{PERF_COLS.map((c) => { const v = pickDynamic(dynamicSpy, c.period); return <td key={c.label + '-spy'} className={pctClass(v)}>{formatPct(v)}</td>; })}</tr>
-                </tbody>
-              </table>
-            </div>
+            
             <div className="ticker-subh-with-tip"><h3 className="ticker-subh ticker-subh--flex">vs {BENCHMARK} (total return %, then difference)</h3></div>
             <div className="ticker-compare">
               <div className="ticker-compare__head"><span /><span>{symU}</span><span>{BENCHMARK}</span><span>Diff</span></div>

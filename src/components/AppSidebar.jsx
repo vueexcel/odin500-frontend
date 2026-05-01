@@ -5,7 +5,12 @@ import odinLogo from '../assets/odin500-logo.svg';
 import odinLogoLight from '../assets/odin500-logo-light.svg';
 import { fetchWithAuth } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
-import { DEFAULT_TICKER_ROUTE_SYMBOL, isMainTickerRoutePath } from '../utils/tickerUrlSync.js';
+import { prefetchRouteChunks } from '../utils/routePrefetch.js';
+import {
+  DEFAULT_INDEX_ROUTE_SLUG,
+  DEFAULT_TICKER_ROUTE_SYMBOL,
+  isMainTickerRoutePath
+} from '../utils/tickerUrlSync.js';
 
 function IconGlobe() {
   return (
@@ -172,12 +177,15 @@ function NavRow({ to, onClick, icon: Icon, label, badge, badgeTone, active = fal
   );
 
   if (to) {
+    const warm = () => prefetchRouteChunks(to);
     return (
       <NavLink
         to={to}
         end={to === '/market'}
         className={({ isActive }) => 'app-sidebar__row' + (isActive || active ? ' app-sidebar__row--active' : '')}
         onClick={onClick}
+        onMouseEnter={warm}
+        onFocus={warm}
       >
         {content}
       </NavLink>
@@ -198,25 +206,27 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
   const [displayName, setDisplayName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const accountWrapRef = useRef(null);
-  const tickerPathMatch = location.pathname.match(
-    /^\/(?:ticker|ticker-annual|ticker-quarterly|ticker-monthly|ticker-weekly|ticker-daily)\/([^/?#]+)$/i
-  );
+  const tickerPathMatch =
+    location.pathname.match(/^\/ticker\/([^/?#]+)$/i) ||
+    location.pathname.match(
+      /^\/statistic\/ticker-(?:annual|quarterly|monthly|weekly|daily)\/([^/?#]+)$/i
+    );
   const activeTickerSymbol = tickerPathMatch?.[1] ? decodeURIComponent(tickerPathMatch[1]).trim().toUpperCase() : '';
   const tickerSuffix = activeTickerSymbol
     ? `/${encodeURIComponent(activeTickerSymbol)}`
     : `/${encodeURIComponent(DEFAULT_TICKER_ROUTE_SYMBOL)}`;
-  const annualTo = `/ticker-annual${tickerSuffix}`;
-  const quarterlyTo = `/ticker-quarterly${tickerSuffix}`;
-  const monthlyTo = `/ticker-monthly${tickerSuffix}`;
-  const weeklyTo = `/ticker-weekly${tickerSuffix}`;
-  const dailyTo = `/ticker-daily${tickerSuffix}`;
+  const annualTo = `/statistic/ticker-annual${tickerSuffix}`;
+  const quarterlyTo = `/statistic/ticker-quarterly${tickerSuffix}`;
+  const monthlyTo = `/statistic/ticker-monthly${tickerSuffix}`;
+  const weeklyTo = `/statistic/ticker-weekly${tickerSuffix}`;
+  const dailyTo = `/statistic/ticker-daily${tickerSuffix}`;
   const statSection =
     location.pathname === '/statistic-data' ? new URLSearchParams(location.search).get('section') || '' : '';
-  const annualPageActive = location.pathname.startsWith('/ticker-annual');
-  const quarterlyPageActive = location.pathname.startsWith('/ticker-quarterly');
-  const monthlyPageActive = location.pathname.startsWith('/ticker-monthly');
-  const weeklyPageActive = location.pathname.startsWith('/ticker-weekly');
-  const dailyPageActive = location.pathname.startsWith('/ticker-daily');
+  const annualPageActive = location.pathname.startsWith('/statistic/ticker-annual');
+  const quarterlyPageActive = location.pathname.startsWith('/statistic/ticker-quarterly');
+  const monthlyPageActive = location.pathname.startsWith('/statistic/ticker-monthly');
+  const weeklyPageActive = location.pathname.startsWith('/statistic/ticker-weekly');
+  const dailyPageActive = location.pathname.startsWith('/statistic/ticker-daily');
   const isStatsRoute =
     annualPageActive || quarterlyPageActive || monthlyPageActive || weeklyPageActive || dailyPageActive || location.pathname === '/statistic-data';
   const isIndicesRoute = location.pathname.startsWith('/indices');
@@ -323,6 +333,8 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
             aria-label="Open account page"
             title="Account"
             onClick={() => navigate('/accounts')}
+            onMouseEnter={() => prefetchRouteChunks('/accounts')}
+            onFocus={() => prefetchRouteChunks('/accounts')}
           >
             {avatarUrl ? (
               <img src={avatarUrl} alt="" className="header-avatar-image" aria-hidden />
@@ -360,6 +372,8 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
                 aria-expanded={indicesOpen}
                 aria-controls="app-sidebar-indices-options"
                 onClick={() => setIndicesOpen((v) => !v)}
+                onMouseEnter={() => prefetchRouteChunks(`/indices/${DEFAULT_INDEX_ROUTE_SLUG}`)}
+                onFocus={() => prefetchRouteChunks(`/indices/${DEFAULT_INDEX_ROUTE_SLUG}`)}
               >
                 <span className="app-sidebar__row-icon">
                   <IconGrid />
@@ -399,6 +413,20 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
                 aria-expanded={statsOpen}
                 aria-controls="app-sidebar-stats-options"
                 onClick={() => setStatsOpen((v) => !v)}
+                onMouseEnter={() => {
+                  prefetchRouteChunks(annualTo);
+                  prefetchRouteChunks(quarterlyTo);
+                  prefetchRouteChunks(monthlyTo);
+                  prefetchRouteChunks(weeklyTo);
+                  prefetchRouteChunks(dailyTo);
+                }}
+                onFocus={() => {
+                  prefetchRouteChunks(annualTo);
+                  prefetchRouteChunks(quarterlyTo);
+                  prefetchRouteChunks(monthlyTo);
+                  prefetchRouteChunks(weeklyTo);
+                  prefetchRouteChunks(dailyTo);
+                }}
               >
                 <span className="app-sidebar__row-icon">
                   <IconBarChart />
@@ -448,6 +476,8 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
               className="app-sidebar__account-btn"
               aria-label="Open account page"
               onClick={() => navigate('/accounts')}
+              onMouseEnter={() => prefetchRouteChunks('/accounts')}
+              onFocus={() => prefetchRouteChunks('/accounts')}
             >
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="header-avatar-image" aria-hidden />

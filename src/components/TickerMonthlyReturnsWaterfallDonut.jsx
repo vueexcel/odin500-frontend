@@ -426,7 +426,7 @@ export function TickerMonthlyReturnsWaterfallDonut({
   const onOpenPeriodPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
     const suffix = '/' + encodeURIComponent(symPart);
-    const base = periodMode === 'weekly' ? '/ticker-weekly' : '/ticker-monthly';
+    const base = periodMode === 'weekly' ? '/statistic/ticker-weekly' : '/statistic/ticker-monthly';
     navigate(base + suffix);
   }, [navigate, periodMode, symbol]);
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];

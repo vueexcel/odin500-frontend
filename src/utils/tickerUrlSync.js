@@ -7,7 +7,7 @@ export const DEFAULT_TICKER_ROUTE_SYMBOL = 'AAPL';
 /** Canonical `/indices/:slug` when no slug is provided (matches Index page default). */
 export const DEFAULT_INDEX_ROUTE_SLUG = 'sp500';
 
-/** True for main ticker page `/ticker`, `/ticker/SYM` — not `/ticker-annual`, etc. */
+/** True for main ticker page `/ticker`, `/ticker/SYM` — not `/statistic/ticker-*` stats routes. */
 export function isMainTickerRoutePath(pathname) {
   const p = String(pathname || '');
   return p === '/ticker' || /^\/ticker\/[^/]+/.test(p);

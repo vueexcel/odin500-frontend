@@ -409,14 +409,14 @@ export function TickerAnnualReturnsFigma({
     const suffix = '/' + encodeURIComponent(symPart);
     const path =
       periodMode === 'quarterly'
-        ? '/ticker-quarterly'
+        ? '/statistic/ticker-quarterly'
         : periodMode === 'monthly'
-          ? '/ticker-monthly'
+          ? '/statistic/ticker-monthly'
           : periodMode === 'weekly'
-            ? '/ticker-weekly'
+            ? '/statistic/ticker-weekly'
             : periodMode === 'daily'
-              ? '/ticker-daily'
-              : '/ticker-annual';
+              ? '/statistic/ticker-daily'
+              : '/statistic/ticker-annual';
     navigate(path + suffix);
   }, [navigate, periodMode, symbol]);
 

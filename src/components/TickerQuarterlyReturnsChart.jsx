@@ -76,10 +76,19 @@ function csvEscape(s) {
 
 /**
  * Two grouped quarterly bar charts (by year | by quarter), dark UI + per-panel info tips.
- * @param {{ symbol: string, quarterlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, showOpenPeriodPageButton?: boolean }} props
+ * @param {{ symbol: string, quarterlyReturns?: unknown[], quarterlyReturnsAll?: unknown[], asOfDate?: string, plotHeight?: number, showOpenPeriodPageButton?: boolean, toolbarControls?: import('react').ReactNode }} props
  */
-export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate, plotHeight, showOpenPeriodPageButton = false }) {
+export function TickerQuarterlyReturnsChart({
+  symbol,
+  quarterlyReturns,
+  quarterlyReturnsAll,
+  asOfDate,
+  plotHeight,
+  showOpenPeriodPageButton = false,
+  toolbarControls = null
+}) {
   const navigate = useNavigate();
+  const rowsAll = useMemo(() => buildRows(quarterlyReturnsAll ?? quarterlyReturns), [quarterlyReturnsAll, quarterlyReturns]);
   const rows = useMemo(() => buildRows(quarterlyReturns), [quarterlyReturns]);
   const [showTable, setShowTable] = useState(false);
   const filteredRows = useMemo(() => rows, [rows]);
@@ -327,10 +336,10 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
 
   const onOpenQuarterlyPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
-    navigate('/ticker-quarterly/' + encodeURIComponent(symPart));
+    navigate('/statistic/ticker-quarterly/' + encodeURIComponent(symPart));
   }, [navigate, symbol]);
 
-  if (!rows.length) {
+  if (!rowsAll.length) {
     return (
       <div className="ticker-quarterly">
         <div className="ticker-annual-figma__section">
@@ -354,7 +363,7 @@ export function TickerQuarterlyReturnsChart({ symbol, quarterlyReturns, asOfDate
           <span className="ticker-annual-figma__badge">Quarterly returns</span>
         </div>
         <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
-          <div className="ticker-annual-figma__left" />
+          <div className="ticker-annual-figma__left">{toolbarControls}</div>
           <div className="ticker-annual-figma__right">
             <button
               type="button"

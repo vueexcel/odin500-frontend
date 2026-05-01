@@ -5,6 +5,7 @@ import odinLogoLight from '../assets/odin500-logo-light.svg';
 import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { clearApiCache, clearAuthToken, fetchWithAuth } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
+import { prefetchRouteChunks } from '../utils/routePrefetch.js';
 import {
   DEFAULT_INDEX_ROUTE_SLUG,
   DEFAULT_TICKER_ROUTE_SYMBOL,
@@ -175,7 +176,13 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
         <div className="app-header-top-accent" aria-hidden />
         <div className="app-header-inner app-header-inner--figma">
           <div className="app-header-left-figma">
-            <NavLink to="/market" className="app-header-wordmark-link" title="Odin500 home">
+            <NavLink
+              to="/market"
+              className="app-header-wordmark-link"
+              title="Odin500 home"
+              onMouseEnter={() => prefetchRouteChunks('/market')}
+              onFocus={() => prefetchRouteChunks('/market')}
+            >
               <img src={headerLogo} alt="Odin500" className="app-header-logo-img" />
             </NavLink>
           </div>
@@ -188,6 +195,7 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
                   : item.activePrefix === '/indices'
                     ? isMainIndicesRoutePath(location.pathname)
                     : null;
+              const warm = () => prefetchRouteChunks(item.to);
               return (
                 <NavLink
                   key={item.to + item.label}
@@ -198,6 +206,8 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
                     return 'app-header-nav-link' + (on ? ' app-header-nav-link--active' : '');
                   }}
                   onClick={(e) => handleNavClick(e, item.to)}
+                  onMouseEnter={warm}
+                  onFocus={warm}
                 >
                   {item.label}
                 </NavLink>
@@ -337,6 +347,7 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
                 : item.activePrefix === '/indices'
                   ? isMainIndicesRoutePath(location.pathname)
                   : null;
+            const warm = () => prefetchRouteChunks(item.to);
             return (
               <NavLink
                 key={item.to + item.label}
@@ -347,6 +358,8 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
                   return 'main-nav-link' + (on ? ' active' : '');
                 }}
                 onClick={(e) => handleNavClick(e, item.to)}
+                onMouseEnter={warm}
+                onFocus={warm}
               >
                 {item.label}
               </NavLink>
