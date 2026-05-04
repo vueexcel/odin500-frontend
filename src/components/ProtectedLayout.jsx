@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { warmWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
 // import { AppHeader } from './AppHeader.jsx';
+import { AppMainTopBar } from './AppMainTopBar.jsx';
 import { AppSidebar } from './AppSidebar.jsx';
 import { AppRightRail } from './AppRightRail.jsx';
 import { SiteFooter } from './SiteFooter.jsx';
@@ -78,6 +79,10 @@ export function ProtectedLayout() {
     setMobileLeftOpen(false);
   }, [location.pathname, location.search, isMobile]);
 
+  const toggleTheme = () => {
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  };
+
   return (
     <div className="app-shell">
       {/* <AppHeader compact theme={theme} onToggleTheme={toggleTheme} /> */}
@@ -100,6 +105,7 @@ export function ProtectedLayout() {
           onRequestClose={() => setMobileLeftOpen(false)}
         />
         <div className="app-main-column">
+          <AppMainTopBar theme={theme} onToggleTheme={toggleTheme} />
           <div className="app-main-scroll">
             <Outlet />
             <SiteFooter />

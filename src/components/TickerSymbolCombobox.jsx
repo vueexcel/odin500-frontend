@@ -1,13 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
 import { TICKER_SEARCH_DEBOUNCE_MS } from '../config/tickerSearch.js';
 import { fetchJsonCached } from '../store/apiStore.js';
-import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
+import { sanitizeTickerPageInput, sanitizeTickerSearchInput } from '../utils/tickerUrlSync.js';
+
+function IconSearchLeading() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="2" />
+      <path d="M20 20l-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Normalize input for API query (symbol-only vs name/symbol search). */
+function queryForSearch(variant, input) {
+  if (variant === 'header') return sanitizeTickerSearchInput(input).trim();
+  return sanitizeTickerPageInput(input);
+}
 
 export function TickerSymbolCombobox({
   symbol,
   onSymbolChange,
   inputId = 'ticker-page-symbol-input',
-  placeholder = 'Search ticker (e.g. NVDA)'
+  placeholder = 'Search ticker (e.g. NVDA)',
+  variant = 'default'
 }) {
   const [input, setInput] = useState(symbol);
   const [open, setOpen] = useState(false);
@@ -27,7 +43,7 @@ export function TickerSymbolCombobox({
 
   useEffect(() => {
     if (!open) return;
-    const q = sanitizeTickerPageInput(input);
+    const q = queryForSearch(variant, input);
     if (!q) {
       setItems([]);
       setLoading(false);
@@ -54,7 +70,7 @@ export function TickerSymbolCombobox({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [input, open]);
+  }, [input, open, variant]);
 
   useEffect(() => {
     if (!open) return;
@@ -84,7 +100,7 @@ export function TickerSymbolCombobox({
   function onKeyDown(e) {
     if (!open) {
       if (e.key === 'ArrowDown') {
-        const q = sanitizeTickerPageInput(input);
+        const q = queryForSearch(variant, input);
         if (q) setOpen(true);
       }
       return;
@@ -114,47 +130,86 @@ export function TickerSymbolCombobox({
         pick(items[highlight]);
         return;
       }
-      const q = sanitizeTickerPageInput(input);
+      const q = queryForSearch(variant, input);
       if (!q) return;
-      const exact = items.find((it) => String(it.symbol || '').toUpperCase() === q);
+      const symToken = sanitizeTickerPageInput(q);
+      if (!symToken) return;
+      const exact = items.find((it) => String(it.symbol || '').toUpperCase() === symToken);
       if (exact) pick(exact);
       else if (items.length === 1) pick(items[0]);
       else {
-        onSymbolChange(q);
-        setInput(q);
+        onSymbolChange(symToken);
+        setInput(symToken);
         setOpen(false);
         setHighlight(-1);
       }
     }
   }
 
-  const qActive = sanitizeTickerPageInput(input);
+  const qActive = queryForSearch(variant, input);
+  const isHeader = variant === 'header';
+  /* Header: only --header class so base .ticker-symbol-search__input (28px / padding) never applies. */
+  const inputClass = isHeader ? 'ticker-symbol-search__input--header' : 'ticker-symbol-search__input';
+  const inputAria = isHeader ? 'Search tickers by symbol or company name' : 'Ticker symbol';
+
+  const onInputChange = (e) => {
+    const v = isHeader ? sanitizeTickerSearchInput(e.target.value) : sanitizeTickerPageInput(e.target.value);
+    setInput(v);
+    setOpen(true);
+  };
 
   return (
-    <div className="ticker-symbol-search" ref={wrapRef}>
-      <input
-        id={inputId}
-        className="ticker-symbol-search__input"
-        type="text"
-        autoComplete="off"
-        spellCheck={false}
-        aria-label="Ticker symbol"
-        aria-autocomplete="list"
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        value={input}
-        onChange={(e) => {
-          setInput(sanitizeTickerPageInput(e.target.value));
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-      />
+    <div
+      className={'ticker-symbol-search' + (isHeader ? ' ticker-symbol-search--header' : '')}
+      ref={wrapRef}
+    >
+      {isHeader ? (
+        <div className="ticker-symbol-search__shell">
+          <span className="ticker-symbol-search__leading" aria-hidden>
+            <IconSearchLeading />
+          </span>
+          <input
+            id={inputId}
+            className={inputClass}
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            aria-label={inputAria}
+            aria-autocomplete="list"
+            aria-expanded={open}
+            aria-controls={open ? listId : undefined}
+            value={input}
+            onChange={onInputChange}
+            onFocus={() => setOpen(true)}
+            onKeyDown={onKeyDown}
+            placeholder={placeholder}
+          />
+        </div>
+      ) : (
+        <input
+          id={inputId}
+          className={inputClass}
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          aria-label={inputAria}
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          value={input}
+          onChange={onInputChange}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+        />
+      )}
       {open && qActive ? (
         <div
           id={listId}
-          className="ticker-symbol-search__dropdown"
+          className={
+            'ticker-symbol-search__dropdown' +
+            (isHeader ? ' ticker-symbol-search__dropdown--header' : '')
+          }
           role="listbox"
           aria-label="Ticker matches"
         >
@@ -165,6 +220,7 @@ export function TickerSymbolCombobox({
           ) : (
             items.map((row, idx) => {
               const sym = String(row.symbol || '').toUpperCase();
+              const co = row.company_name ? String(row.company_name) : '';
               return (
                 <button
                   key={sym ? sym + '-' + idx : 'row-' + idx}
@@ -173,13 +229,21 @@ export function TickerSymbolCombobox({
                   aria-selected={idx === highlight}
                   className={
                     'ticker-symbol-search__item' +
+                    (isHeader ? ' ticker-symbol-search__item--header' : '') +
                     (idx === highlight ? ' ticker-symbol-search__item--active' : '')
                   }
                   onMouseEnter={() => setHighlight(idx)}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => pick(row)}
                 >
-                  {sym}
+                  {isHeader && co ? (
+                    <span className="ticker-symbol-search__item-text">
+                      <span className="ticker-symbol-search__sym">{sym}</span>
+                      <span className="ticker-symbol-search__co">{co}</span>
+                    </span>
+                  ) : (
+                    sym
+                  )}
                 </button>
               );
             })
