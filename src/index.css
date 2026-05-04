@@ -225,6 +225,24 @@ body {
 .header-search {
   width: 220px;
   height: 34px;
+  box-sizing: border-box;
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.header-search::placeholder {
+  color: #94a3b8;
+}
+
+[data-theme='light'] .header-search {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+
+[data-theme='light'] .header-search::placeholder {
+  color: #64748b;
 }
 
 .header-signout {
@@ -1952,6 +1970,19 @@ a.app-right-rail__btn {
 .header-search-input:focus {
   outline: 2px solid #3b82f6;
   outline-offset: 0;
+}
+
+[data-theme='dark'] .header-search-input {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .header-search-input::placeholder {
+  color: #94a3b8;
+}
+
+[data-theme='dark'] .header-search-input:focus {
+  outline-color: #60a5fa;
 }
 
 .header-search-icon-btn {
@@ -3985,7 +4016,6 @@ button,
 select {
   height: 40px;
   border-radius: 63px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
   padding: 0 10px;
   font-size: 14px;
 }
@@ -5039,6 +5069,7 @@ button:disabled {
   max-width: 100%;
 }
 
+/* Page / body ticker combobox (not top bar — header uses __input--header / __dropdown--header). Dark theme first. */
 .ticker-symbol-search__input {
   display: block;
   width: 100%;
@@ -5048,17 +5079,17 @@ button:disabled {
   font-weight: 600;
   margin: 0;
   padding: 6px 10px;
-  color: #0f172a;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  color: #e2e8f0;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   line-height: 1.2;
 }
 
 .ticker-symbol-search__input:focus {
   outline: none;
-  border-color: #2d9cff;
-  box-shadow: 0 0 0 2px rgba(45, 156, 255, 0.2);
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
 .ticker-symbol-search__input::placeholder {
@@ -5074,17 +5105,17 @@ button:disabled {
   max-width: min(calc(100vw - 36px), 480px);
   max-height: 280px;
   overflow-y: auto;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   z-index: 40;
 }
 
 .ticker-symbol-search__status {
   padding: 12px 14px;
   font-size: 13px;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .ticker-symbol-search__item {
@@ -5097,8 +5128,8 @@ button:disabled {
   text-align: left;
   font-size: 15px;
   font-weight: 700;
-  color: #0f172a;
-  border-bottom: 1px solid #f1f5f9;
+  color: #e2e8f0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .ticker-symbol-search__item:last-child {
@@ -5107,6 +5138,41 @@ button:disabled {
 
 .ticker-symbol-search__item:hover,
 .ticker-symbol-search__item--active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='light'] .ticker-symbol-search__input {
+  color: #0f172a;
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+[data-theme='light'] .ticker-symbol-search__input::placeholder {
+  color: #64748b;
+}
+
+[data-theme='light'] .ticker-symbol-search__input:focus {
+  border-color: #2d9cff;
+  box-shadow: 0 0 0 2px rgba(45, 156, 255, 0.2);
+}
+
+[data-theme='light'] .ticker-symbol-search__dropdown {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+[data-theme='light'] .ticker-symbol-search__status {
+  color: #64748b;
+}
+
+[data-theme='light'] .ticker-symbol-search__item {
+  color: #0f172a;
+  border-bottom-color: #f1f5f9;
+}
+
+[data-theme='light'] .ticker-symbol-search__item:hover,
+[data-theme='light'] .ticker-symbol-search__item--active {
   background: #f8fafc;
 }
 

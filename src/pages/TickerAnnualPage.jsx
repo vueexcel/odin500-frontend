@@ -794,7 +794,7 @@ export default function TickerAnnualPage() {
               </dl>
             </div>
             <p className="ticker-page__label ticker-kd-comp-label">
-              <span>RELATED TICKERS</span>
+              <span>RELATED INDICES</span>
               <span className="ticker-kd-comp-label__links">
                 {RELATED_INDEX_LINKS.map((idx) => (
                   <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">
@@ -803,7 +803,9 @@ export default function TickerAnnualPage() {
                 ))}
               </span>
             </p>
-            <p className="ticker-kd-comp">
+            <p className="ticker-page__label ticker-kd-comp-label">
+            <span>RELATED TICKERS</span>
+            <span className="ticker-kd-comp-label__links">
               {competitors.length ? (
                 competitors.map((t) => (
                   <Link key={t} to={`/ticker/${encodeURIComponent(t)}`} className="ticker-kd-comp__a">
@@ -812,7 +814,7 @@ export default function TickerAnnualPage() {
                 ))
               ) : (
                 <span className="ticker-page__muted">—</span>
-              )}
+              )}</span>
             </p>
 
             
