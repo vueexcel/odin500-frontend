@@ -581,29 +581,29 @@ function ChartTypeToolbarDropdown({ chartType, onChartTypeChange }) {
   );
 }
 
-function ChartToolbarIcons() {
-  const c = 'ticker-chart-toolbar__ico';
-  return (
-    <div className="ticker-chart-toolbar__icons" aria-hidden>
-      <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M3 21l6-6 4 4 8-8M21 7V3h-4" />
-      </svg>
-      <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M4 20L20 4M4 4v4m0-4h4M20 20v-4m0 4h-4" />
-      </svg>
-      <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <rect x="4" y="4" width="16" height="16" rx="1" />
-        <path d="M4 12h16M12 4v16" />
-      </svg>
-      <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M4 18h16M4 12h10M4 6h14" />
-      </svg>
-      <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
-      </svg>
-    </div>
-  );
-}
+// function ChartToolbarIcons() {
+//   const c = 'ticker-chart-toolbar__ico';
+//   return (
+//     <div className="ticker-chart-toolbar__icons" aria-hidden>
+//       <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+//         <path d="M3 21l6-6 4 4 8-8M21 7V3h-4" />
+//       </svg>
+//       <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+//         <path d="M4 20L20 4M4 4v4m0-4h4M20 20v-4m0 4h-4" />
+//       </svg>
+//       <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+//         <rect x="4" y="4" width="16" height="16" rx="1" />
+//         <path d="M4 12h16M12 4v16" />
+//       </svg>
+//       <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+//         <path d="M4 18h16M4 12h10M4 6h14" />
+//       </svg>
+//       <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+//         <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+//       </svg>
+//     </div>
+//   );
+// }
 
 function pctClass(n) {
   if (n == null || !Number.isFinite(n)) return '';
@@ -1806,7 +1806,7 @@ export default function TickerPage() {
         <div className="ticker-page__main">
           <section className="ticker-card ticker-card--main-chart" aria-labelledby="snapshot-chart-title">
             <div className="ticker-chart-toolbar">
-              <ChartToolbarIcons />
+              {/* <ChartToolbarIcons /> */}
               <ChartTypeToolbarDropdown chartType={mainChartType} onChartTypeChange={setMainChartType} />
               <div className="ticker-chart-toolbar__sep" />
               <button type="button" className="ticker-chart-toolbar__pill">
@@ -1954,20 +1954,28 @@ export default function TickerPage() {
             </div>
 
             <div ref={chartBodyRef} className="ticker-chart-body">
+              
               <div className="ticker-chart-legend">
-                <span className="ticker-chart-legend__sym">{sym}</span>
-                <span className="ticker-chart-legend__name">{company}</span>
-                <span>{formatPx(headerClose)} USD</span>
-                {headerChgPct != null && Number.isFinite(headerChgPct) ? (
-                  <span className={'ticker-num ' + pctClass(headerChgPct)}>{formatPct(headerChgPct)}</span>
-                ) : null}
-                <span className="ticker-chart-legend__sig">Signal: {lastSignal}</span>
+              <div className="new-one">
+                <div className="ticker-chart-legend__quote-pill">
+                  <span className="ticker-chart-legend__sym">{sym}</span>
+                  <span className="ticker-chart-legend__name">{company}</span>
+                  <span className="ticker-chart-legend__price">{formatPx(headerClose)} USD</span>
+                  {headerChgAbs != null && Number.isFinite(headerChgAbs) ? (
+                    <span className={'ticker-chart-legend__chg ' + pctClass(headerChgAbs)}>
+                      {(headerChgAbs >= 0 ? '+' : '') + formatPx(headerChgAbs)}
+                    </span>
+                  ) : null}
+                  {headerChgPct != null && Number.isFinite(headerChgPct) ? (
+                    <span className={'ticker-chart-legend__chg ' + pctClass(headerChgPct)}>{formatPct(headerChgPct)}</span>
+                  ) : null}
+                </div>
                 {chartHoverOhlc ? (
                   <span className="ticker-chart-legend__sig">
                     O:{chartHoverOhlc.open != null ? formatPx(chartHoverOhlc.open) : '—'} H:{chartHoverOhlc.high != null ? formatPx(chartHoverOhlc.high) : '—'} L:{chartHoverOhlc.low != null ? formatPx(chartHoverOhlc.low) : '—'} C:{chartHoverOhlc.close != null ? formatPx(chartHoverOhlc.close) : '—'}
-                    {chartHoverOhlc.volume != null ? ` Vol:${Math.round(chartHoverOhlc.volume).toLocaleString('en-US')}` : ''}
                   </span>
                 ) : null}
+              </div>
               </div>
               <div
                 ref={chartPlotHostRef}

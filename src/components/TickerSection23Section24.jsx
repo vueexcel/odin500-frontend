@@ -293,7 +293,7 @@ export function TickerSection23Section24({
         <table className="ticker-s23__table">
           <thead>
             <tr>
-              <th  style={{color: 'black'}}> Time</th>
+              <th> Time</th>
               <th>{activeGroup.benchLabel}</th>
               <th>{ticker || 'Ticker'}</th>
               <th>Difference</th>

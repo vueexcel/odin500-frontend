@@ -19,6 +19,11 @@ npm run build
 
 Serve `dist/` behind a reverse proxy that forwards `/api` to the backend, or set `window.TRADING_API_ORIGIN` / `localStorage.trading_api_origin` to the API base URL.
 
+## Google sign-in (Supabase OAuth)
+
+- **Supabase → Authentication → URL configuration → Redirect URLs:** include `http://localhost:5173/auth/callback` and your production `https://<your-domain>/auth/callback` (must match the app origin used in the browser).
+- **Google Cloud Console** (OAuth 2.0 client): **Authorized redirect URI** for the web client must be `https://<project-ref>.supabase.co/auth/v1/callback` (Supabase handles the exchange; not your Vite URL).
+
 ## Environment overrides
 
 - `window.TRADING_API_ORIGIN` — API base URL (no trailing slash)

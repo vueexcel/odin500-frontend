@@ -33,7 +33,7 @@ function chartOptionsForTheme(theme, height) {
   }
   return {
     layout: {
-      background: { color: '#0d1520' },
+      background: { color: 'rgba(255, 255, 255, 0.03)' },
       textColor: '#94a3b8',
       attributionLogo: false
     },
@@ -173,8 +173,8 @@ export function TickerLightweightChart({ rows, height = 320, chartType = 'line',
       if (t) byTime.set(t, row);
     }
     const linePts = candles0.map((c) => ({ time: c.time, value: c.close }));
-    const upCol = chartTheme === 'light' ? 'rgba(22, 163, 74, 0.5)' : 'rgba(34, 197, 94, 0.45)';
-    const downCol = chartTheme === 'light' ? 'rgba(220, 38, 38, 0.5)' : 'rgba(239, 68, 68, 0.45)';
+    const upCol = chartTheme === 'light' ? 'rgba(100, 116, 139, 0.28)' : 'rgba(148, 163, 184, 0.2)';
+    const downCol = chartTheme === 'light' ? 'rgba(100, 116, 139, 0.28)' : 'rgba(148, 163, 184, 0.2)';
     const volumes0 = candles0
       .map((c) => {
         const row = byTime.get(c.time);

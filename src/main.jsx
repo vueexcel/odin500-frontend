@@ -12,6 +12,7 @@ const App = lazy(() => import('./App.jsx'));
 const LoginPage = lazy(() => import('./pages/LoginPage.jsx'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage.jsx'));
 const SignupPage = lazy(() => import('./pages/SignupPage.jsx'));
+const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage.jsx'));
 const SignupVerifyEmailPage = lazy(() => import('./pages/SignupVerifyEmailPage.jsx'));
 const SignupEnterCodePage = lazy(() => import('./pages/SignupEnterCodePage.jsx'));
 const SignupUsernamePage = lazy(() => import('./pages/SignupUsernamePage.jsx'));
@@ -55,6 +56,7 @@ function AppRoutes() {
       <Route path="/signup/enter-code" element={<SignupEnterCodePage />} />
       <Route path="/signup/username" element={<SignupUsernamePage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route
         element={
           <ProtectedRoute>

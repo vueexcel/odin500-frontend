@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Moon, Sun, X } from 'lucide-react';
 import odinLogo from '../assets/odin500-logo.svg';
 import odinLogoLight from '../assets/odin500-logo-light.svg';
 import heroImage from '../assets/Hero.png';
+import { getSupabaseBrowserClient } from '../lib/supabaseBrowserClient.js';
 
 export const AuthShellThemeContext = createContext('dark');
 
@@ -70,6 +71,7 @@ function AppleMark({ className }) {
 }
 
 export function AuthSplitShell({ title = 'Welcome Back!', children }) {
+  const navigate = useNavigate();
   const [theme, setTheme] = useState(() => {
     try {
       const saved = localStorage.getItem('odin_theme');
@@ -95,6 +97,18 @@ export function AuthSplitShell({ title = 'Welcome Back!', children }) {
   const toggleTheme = useCallback(() => {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
   }, []);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      const sb = await getSupabaseBrowserClient();
+      await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/auth/callback` }
+      });
+    } catch {
+      navigate('/login?error=oauth', { replace: true });
+    }
+  }, [navigate]);
 
   const isDark = theme === 'dark';
 
@@ -190,6 +204,7 @@ export function AuthSplitShell({ title = 'Welcome Back!', children }) {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <button
                 type="button"
+                onClick={handleGoogleSignIn}
                 className={`flex items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold transition-colors ${
                   isDark
                     ? 'bg-[#0f1f33] text-white ring-1 ring-white/10 hover:bg-slate-800/90'
