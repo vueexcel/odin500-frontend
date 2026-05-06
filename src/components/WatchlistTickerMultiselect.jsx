@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TICKER_SEARCH_DEBOUNCE_MS } from '../config/tickerSearch.js';
 import {
@@ -27,7 +27,11 @@ function dbg(...args) {
  *   selected: WatchlistTickerPick[],
  *   onChange: (next: WatchlistTickerPick[]) => void,
  *   disabled?: boolean,
- *   placeholder?: string
+ *   placeholder?: string,
+ *   footerCancelLabel?: string,
+ *   footerSubmitLabel?: string,
+ *   onFooterCancel?: () => void,
+ *   onFooterSubmit?: () => void,
  * }} props
  */
 export function WatchlistTickerMultiselect({
@@ -35,7 +39,11 @@ export function WatchlistTickerMultiselect({
   selected,
   onChange,
   disabled = false,
-  placeholder = 'Search symbol or company…'
+  placeholder = 'Search symbol or company…',
+  footerCancelLabel = 'Cancel',
+  footerSubmitLabel = 'Submit',
+  onFooterCancel,
+  onFooterSubmit
 }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -156,21 +164,46 @@ export function WatchlistTickerMultiselect({
     };
   }, [qNorm, open]);
 
+  const closeDropdownOnly = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const handleFooterCancel = useCallback(() => {
+    if (onFooterCancel) {
+      setOpen(false);
+      setQuery('');
+      requestAnimationFrame(() => {
+        const inp = anchorRef.current?.querySelector('input');
+        if (inp instanceof HTMLInputElement) inp.blur();
+        onFooterCancel();
+      });
+    } else {
+      closeDropdownOnly();
+    }
+  }, [onFooterCancel, closeDropdownOnly]);
+
+  const handleFooterSubmit = useCallback(() => {
+    setOpen(false);
+    setQuery('');
+    requestAnimationFrame(() => {
+      const inp = anchorRef.current?.querySelector('input');
+      if (inp instanceof HTMLInputElement) inp.blur();
+      if (onFooterSubmit) onFooterSubmit();
+    });
+  }, [onFooterSubmit]);
+
+  /** Close when clicking outside the anchor + portaled menu (reliable `contains` check). */
   useEffect(() => {
     if (!open) return;
-    function onPointerDownCapture(e) {
+    function handlePointerDown(e) {
       if (e.button !== 0 && e.button !== undefined) return;
-      const path = e.composedPath();
-      for (const node of path) {
-        if (node === document || node === window) break;
-        if (!(node instanceof Element)) continue;
-        if (wrapRef.current?.contains(node)) return;
-        if (dropdownRef.current?.contains(node)) return;
-      }
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (wrapRef.current?.contains(t) || dropdownRef.current?.contains(t)) return;
       setOpen(false);
     }
-    document.addEventListener('pointerdown', onPointerDownCapture, true);
-    return () => document.removeEventListener('pointerdown', onPointerDownCapture, true);
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
   }, [open]);
 
   function toggleRow(row) {
@@ -219,8 +252,9 @@ export function WatchlistTickerMultiselect({
       ? createPortal(
           <div
             ref={dropdownRef}
+            id={idPrefix + '-dropdown-root'}
             className="wl-ticker-ms__dropdown wl-ticker-ms__dropdown--portal"
-            role="listbox"
+            role="presentation"
             style={{
               position: 'fixed',
               top: ddRect.top,
@@ -230,46 +264,72 @@ export function WatchlistTickerMultiselect({
               zIndex: 450
             }}
           >
-            {loading ? (
-              <div className="wl-ticker-ms__status">Searching…</div>
-            ) : searchErr ? (
-              <div className="wl-ticker-ms__status wl-ticker-ms__status--err">{searchErr}</div>
-            ) : !qNorm && mergedRows.length === 0 ? (
-              <div className="wl-ticker-ms__status">Type to search symbols or companies</div>
-            ) : mergedRows.length === 0 ? (
-              <div className="wl-ticker-ms__status">No matches</div>
-            ) : (
-              <ul className="wl-ticker-ms__list">
-                {mergedRows.map((row) => {
-                  const checked = selectedById.has(String(row.id));
-                  return (
-                    <li key={row.id} className="wl-ticker-ms__item">
-                      <label className="wl-ticker-ms__row">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={() => toggleRow(row)}
-                        />
-                        <span className="wl-ticker-ms__row-text">
-                          <span className="wl-ticker-ms__sym">{row.symbol}</span>
-                          {row.company_name ? (
-                            <span className="wl-ticker-ms__co">{row.company_name}</span>
-                          ) : null}
-                        </span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <div className="wl-ticker-ms__dropdown-scroll" role="listbox" aria-label="Ticker search results">
+              {loading ? (
+                <div className="wl-ticker-ms__status">Searching…</div>
+              ) : searchErr ? (
+                <div className="wl-ticker-ms__status wl-ticker-ms__status--err">{searchErr}</div>
+              ) : !qNorm && mergedRows.length === 0 ? (
+                <div className="wl-ticker-ms__status">Type to search symbols or companies</div>
+              ) : mergedRows.length === 0 ? (
+                <div className="wl-ticker-ms__status">No matches</div>
+              ) : (
+                <ul className="wl-ticker-ms__list">
+                  {mergedRows.map((row) => {
+                    const checked = selectedById.has(String(row.id));
+                    return (
+                      <li key={row.id} className="wl-ticker-ms__item">
+                        <label className="wl-ticker-ms__row">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() => toggleRow(row)}
+                          />
+                          <span className="wl-ticker-ms__row-text">
+                            <span className="wl-ticker-ms__sym">{row.symbol}</span>
+                            {row.company_name ? (
+                              <span className="wl-ticker-ms__co">{row.company_name}</span>
+                            ) : null}
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <div className="wl-ticker-ms__dropdown-foot" role="group" aria-label="Search actions">
+              <button
+                type="button"
+                className="wl-ticker-ms__foot-btn wl-ticker-ms__foot-btn--ghost"
+                disabled={disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFooterCancel();
+                }}
+              >
+                {footerCancelLabel}
+              </button>
+              <button
+                type="button"
+                className="wl-ticker-ms__foot-btn wl-ticker-ms__foot-btn--primary"
+                disabled={disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFooterSubmit();
+                }}
+              >
+                {footerSubmitLabel}
+              </button>
+            </div>
           </div>,
           document.body
         )
       : null;
 
   return (
-    <div className="wl-ticker-ms" ref={wrapRef}>
+    <div className="wl-ticker-ms" ref={wrapRef} id={idPrefix + '-ms-wrap'}>
       <label className="wl-ticker-ms__label" htmlFor={inputId}>
         Tickers
       </label>

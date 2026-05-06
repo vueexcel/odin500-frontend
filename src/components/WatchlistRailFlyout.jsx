@@ -580,17 +580,15 @@ export function WatchlistRailFlyout({ open, onClose }) {
             My Watchlists
           </h2>
           <div className="wl-flyout__head-actions" ref={settingsRef}>
-            {selected?.kind === 'user' && selected?.watchlistId ? (
               <button
                 type="button"
                 className="wl-flyout__iconbtn"
                 title="Add tickers to this watchlist"
                 aria-label="Add tickers to this watchlist"
-                onClick={openUpdateForSelectedUserList}
+                onClick={openCreatePanel}
               >
                 <IcoPlus className="wl-flyout__iconbtn-svg" />
               </button>
-            ) : null}
             <button
               type="button"
               className={'wl-flyout__iconbtn' + (settingsOpen ? ' wl-flyout__iconbtn--active' : '')}
@@ -800,6 +798,10 @@ export function WatchlistRailFlyout({ open, onClose }) {
                 selected={createTickers}
                 onChange={setCreateTickers}
                 disabled={createBusy}
+                footerCancelLabel="Cancel"
+                footerSubmitLabel={createBusy ? 'Saving…' : 'Create'}
+                onFooterCancel={closeManageUi}
+                onFooterSubmit={submitCreate}
               />
               {createErr ? <p className="wl-manage-err">{createErr}</p> : null}
             </div>
@@ -939,6 +941,10 @@ export function WatchlistRailFlyout({ open, onClose }) {
                 selected={updateEditTickers}
                 onChange={setUpdateEditTickers}
                 disabled={updateBusy}
+                footerCancelLabel="Cancel"
+                footerSubmitLabel={updateBusy ? 'Saving…' : 'Apply changes'}
+                onFooterCancel={closeManageUi}
+                onFooterSubmit={submitUpdateWatchlist}
               />
               {updateErr ? <p className="wl-manage-err">{updateErr}</p> : null}
             </div>

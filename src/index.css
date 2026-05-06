@@ -1260,11 +1260,65 @@ a.app-right-rail__btn {
 }
 
 .wl-ticker-ms__dropdown--portal {
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   overflow-x: hidden;
   box-shadow:
     0 16px 48px rgba(0, 0, 0, 0.65),
     0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.wl-ticker-ms__dropdown-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.wl-ticker-ms__dropdown-foot {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: #12151a;
+}
+
+.wl-ticker-ms__foot-btn {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.wl-ticker-ms__foot-btn--ghost {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: transparent;
+  color: #e2e8f0;
+}
+
+.wl-ticker-ms__foot-btn--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.wl-ticker-ms__foot-btn--primary {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.18);
+  color: #e0f2fe;
+}
+
+.wl-ticker-ms__foot-btn--primary:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.28);
+}
+
+.wl-ticker-ms__foot-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .wl-ticker-ms__status {
@@ -1638,6 +1692,30 @@ a.app-right-rail__btn {
   box-shadow:
     0 16px 48px rgba(15, 23, 42, 0.12),
     0 0 0 1px #e2e8f0;
+}
+
+[data-theme="light"] .wl-ticker-ms__dropdown-foot {
+  background: #ffffff;
+  border-top-color: #e2e8f0;
+}
+
+[data-theme="light"] .wl-ticker-ms__foot-btn--ghost {
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+[data-theme="light"] .wl-ticker-ms__foot-btn--ghost:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+[data-theme="light"] .wl-ticker-ms__foot-btn--primary {
+  border-color: rgba(37, 99, 235, 0.45);
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+[data-theme="light"] .wl-ticker-ms__foot-btn--primary:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.2);
 }
 
 [data-theme="light"] .wl-ticker-ms__status {
