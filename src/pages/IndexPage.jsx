@@ -1601,19 +1601,29 @@ export default function IndexPage() {
 
             <div ref={chartBodyRef} className="ticker-chart-body">
               <div className="ticker-chart-legend">
-                <span className="ticker-chart-legend__sym">{displaySym}</span>
-                <span className="ticker-chart-legend__name">{activeMeta.label}</span>
-                <span>{formatPx(headerClose)} USD</span>
-                {headerChgPct != null && Number.isFinite(headerChgPct) ? (
-                  <span className={'ticker-num ' + pctClass(headerChgPct)}>{formatPct(headerChgPct)}</span>
-                ) : null}
-                <span className="ticker-chart-legend__sig">Signal: {lastSignal}</span>
-                {chartHoverOhlc ? (
-                  <span className="ticker-chart-legend__sig">
-                    O:{chartHoverOhlc.open != null ? formatPx(chartHoverOhlc.open) : '—'} H:{chartHoverOhlc.high != null ? formatPx(chartHoverOhlc.high) : '—'} L:{chartHoverOhlc.low != null ? formatPx(chartHoverOhlc.low) : '—'} C:{chartHoverOhlc.close != null ? formatPx(chartHoverOhlc.close) : '—'}
-                    {chartHoverOhlc.volume != null ? ` Vol:${Math.round(chartHoverOhlc.volume).toLocaleString('en-US')}` : ''}
-                  </span>
-                ) : null}
+                <div className="new-one">
+                  <div className="ticker-chart-legend__quote-pills">
+                    <span className="ticker-chart-legend__sym">{displaySym}</span>
+                    <span className="ticker-chart-legend__name">{activeMeta.label}</span>
+                    <span className="ticker-chart-legend__price">{formatPx(headerClose)} USD</span>
+                    {headerChgAbs != null && Number.isFinite(headerChgAbs) ? (
+                      <span className={'ticker-chart-legend__chg ' + pctClass(headerChgAbs)}>
+                        {(headerChgAbs >= 0 ? '+' : '') + formatPx(headerChgAbs)}
+                      </span>
+                    ) : null}
+                    {headerChgPct != null && Number.isFinite(headerChgPct) ? (
+                      <span className={'ticker-chart-legend__chg ' + pctClass(headerChgPct)}>{formatPct(headerChgPct)}</span>
+                    ) : null}
+                  </div>
+                </div>
+                
+                <span className="ticker-chart-legend__sigs">Signal: {lastSignal}</span>
+                  {chartHoverOhlc ? (
+                    <span className="ticker-chart-legend__sigs ticker-chart-legend__ohlc-hover">
+                      O:{chartHoverOhlc.open != null ? formatPx(chartHoverOhlc.open) : '—'} H:{chartHoverOhlc.high != null ? formatPx(chartHoverOhlc.high) : '—'} L:{chartHoverOhlc.low != null ? formatPx(chartHoverOhlc.low) : '—'} C:{chartHoverOhlc.close != null ? formatPx(chartHoverOhlc.close) : '—'}
+                      {chartHoverOhlc.volume != null ? ` Vol:${Math.round(chartHoverOhlc.volume).toLocaleString('en-US')}` : ''}
+                    </span>
+                  ) : null}
               </div>
               <div
                 ref={chartPlotHostRef}
@@ -1686,9 +1696,9 @@ export default function IndexPage() {
               <h2 className="ticker-card__h ticker-card__h--flex" id="index-news-h">
                 News
               </h2>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">General trading headlines (same feed as ticker page).</p>
-              </DataInfoTip>
+              <Link to="/news" className="ticker-outline-btn ticker-outline-btn--sm">
+                View News
+              </Link>
             </div>
             {newsBusy ? <p className="ticker-page__news-sample-note">Loading general trading news…</p> : null}
             {!newsBusy && newsError ? <p className="ticker-page__news-sample-note">{newsError}</p> : null}

@@ -1815,7 +1815,7 @@ export default function TickerPage() {
               
               <div className="ticker-chart-legend">
               <div className="new-one">
-                <div className="ticker-chart-legend__quote-pill">
+                <div className="ticker-chart-legend__quote-pills">
                   <span className="ticker-chart-legend__sym">{sym}</span>
                   <span className="ticker-chart-legend__name">{company}</span>
                   <span className="ticker-chart-legend__price">{formatPx(headerClose)} USD</span>
@@ -1828,12 +1828,13 @@ export default function TickerPage() {
                     <span className={'ticker-chart-legend__chg ' + pctClass(headerChgPct)}>{formatPct(headerChgPct)}</span>
                   ) : null}
                 </div>
-                {chartHoverOhlc ? (
-                  <span className="ticker-chart-legend__sig">
+                
+              </div>
+              {chartHoverOhlc ? (
+                  <span className="ticker-chart-legend__sigs">
                     O:{chartHoverOhlc.open != null ? formatPx(chartHoverOhlc.open) : '—'} H:{chartHoverOhlc.high != null ? formatPx(chartHoverOhlc.high) : '—'} L:{chartHoverOhlc.low != null ? formatPx(chartHoverOhlc.low) : '—'} C:{chartHoverOhlc.close != null ? formatPx(chartHoverOhlc.close) : '—'}
                   </span>
                 ) : null}
-              </div>
               </div>
               <div
                 ref={chartPlotHostRef}

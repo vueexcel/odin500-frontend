@@ -6615,9 +6615,14 @@ button:disabled {
   letter-spacing: 0.01em;
 }
 
-.ticker-chart-legend__sig {
+/* .ticker-chart-legend__sig {
   font-size: 0.72rem;
   color: #94a3b8;
+} */
+.ticker-chart-legend__sigs {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-left: 11px;
 }
 
 .ticker-page {
@@ -7395,6 +7400,7 @@ button:disabled {
   border: 1px solid rgba(148, 163, 184, 0.14);
   border-radius: 8px;
   cursor: pointer;
+  margin-bottom: 10px;
 }
 
 .app-dropdown__btn:hover {
@@ -7594,10 +7600,22 @@ button:disabled {
   padding-top: 4px;
 }
 
-.new-one{
+.new-one {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   border-left: 5px solid var(--colors-primary-500, rgba(28, 133, 246, 1));
   margin-left: 11px;
   border-radius: 12px;
+  padding-left: 8px;
+}
+
+.ticker-chart-legend__ohlc-hover {
+  max-width: min(92vw, 520px);
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .chart-date-apply {
@@ -7984,6 +8002,19 @@ button:disabled {
   background: rgba(59, 77, 103, 0.78);
   border: 1px solid rgba(148, 163, 184, 0.2);
   box-shadow: 0 6px 16px rgba(3, 11, 22, 0.3);
+}
+
+.ticker-chart-legend__quote-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px 0 10px;
+  border-radius: 10px;
+  background: rgba(59, 77, 103, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 6px 16px rgba(3, 11, 22, 0.3);
+  margin-left: -9px;
 }
 
 .ticker-chart-legend__price {
@@ -9718,7 +9749,7 @@ button:disabled {
 [data-theme="light"] .ticker-page__ccy,
 [data-theme="light"] .ticker-page__sub,
 [data-theme="light"] .ticker-page__muted,
-[data-theme="light"] .ticker-chart-legend__sig,
+[data-theme="light"] .ticker-chart-legend__sigs,
 [data-theme="light"] .ticker-news-list__meta,
 [data-theme="light"] .ticker-page__news-sample-note {
   color: #64748b;
@@ -9802,6 +9833,12 @@ button:disabled {
 }
 
 [data-theme="light"] .ticker-chart-legend__quote-pill {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: #dbe3ef;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+}
+
+[data-theme="light"] .ticker-chart-legend__quote-pills {
   background: rgba(255, 255, 255, 0.95);
   border-color: #dbe3ef;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
