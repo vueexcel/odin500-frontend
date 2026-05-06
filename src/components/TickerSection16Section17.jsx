@@ -10,16 +10,15 @@ function pctClass(v) {
 }
 
 function cellColor(v) {
-  if (v == null || !Number.isFinite(v)) return '#e2e8f0';
-  if (v <= -6) return '#ef4444';
-  if (v <= -3) return '#fca5a5';
-  if (v < 0) return '#ffcc80';
-  if (v < 1.5) return '#fff59d';
-  if (v < 3.5) return '#dce775';
-  if (v < 6) return '#a5d6a7';
-  return '#66bb6a';
+  if (v == null || !Number.isFinite(v)) return '#475569';
+if (v <= -6) return '#7c2d12';   // deep burnt orange
+if (v <= -3) return '#c2410c';   // burnt sienna
+if (v < 0)   return '#ea580c';   // amber-orange
+if (v < 1.5) return '#4d7c0f';   // olive-lime
+if (v < 3.5) return '#3f6212';   // sage green
+if (v < 6)   return '#365314';   // deep sage
+return        '#1a2e05';         // forest sage
 }
-
 function labelColor(bg) {
   const dark = new Set(['#ef4444', '#66bb6a']);
   return dark.has(bg) ? '#ffffff' : '#0f172a';

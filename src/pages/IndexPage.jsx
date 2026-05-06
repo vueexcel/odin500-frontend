@@ -8,6 +8,7 @@ import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyR
 import { TickerQuarterlyReturnsChart } from '../components/TickerQuarterlyReturnsChart.jsx';
 import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
+import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import {
   IconChartTypeDropdown,
@@ -438,75 +439,17 @@ function IconChevronDown({ className }) {
   );
 }
 
-function IconTrendUp({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="#00c805" strokeWidth="2" aria-hidden>
-      <path d="M4 14l6-6 4 4 6-8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 4h6v6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconTrendDown({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth="2" aria-hidden>
-      <path d="M4 10l6 6 4-4 6 6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 20h6v-6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function ChartTypeToolbarDropdown({ chartType, onChartTypeChange }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-  const currentLabel = TICKER_CHART_TYPE_OPTIONS.find((o) => o.id === chartType)?.label ?? 'Line';
   return (
-    <div className="ticker-chart-toolbar__chart-type-wrap" ref={wrapRef}>
-      <button
-        type="button"
-        className="ticker-chart-toolbar__chart-type-btn"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={'Chart type: ' + currentLabel}
-        title="Chart type"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <IconChartTypeDropdown className="ticker-chart-toolbar__chart-type-ico" />
-        <span className="ticker-chart-toolbar__chart-type-label">{currentLabel}</span>
-        <IconChevronDown className="ticker-chart-toolbar__chev" />
-      </button>
-      {open ? (
-        <ul className="ticker-chart-toolbar__chart-type-menu" role="menu">
-          {TICKER_CHART_TYPE_OPTIONS.map((opt) => (
-            <li key={opt.id} role="none">
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={chartType === opt.id}
-                className={
-                  'ticker-chart-toolbar__chart-type-item' +
-                  (chartType === opt.id ? ' ticker-chart-toolbar__chart-type-item--active' : '')
-                }
-                onClick={() => {
-                  onChartTypeChange(opt.id);
-                  setOpen(false);
-                }}
-              >
-                {opt.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    <ThemedDropdown
+      value={chartType}
+      options={TICKER_CHART_TYPE_OPTIONS}
+      onChange={onChartTypeChange}
+      title="Chart type"
+      ariaLabelPrefix="Chart type"
+      labelFallback="Line"
+      icon={<IconChartTypeDropdown className="app-dropdown__chart-type-icon" />}
+    />
   );
 }
 
@@ -613,6 +556,7 @@ export default function IndexPage() {
   const [appliedCustomRange, setAppliedCustomRange] = useState(null);
   const [draftChartStart, setDraftChartStart] = useState('');
   const [draftChartEnd, setDraftChartEnd] = useState('');
+  const [isCustomRangePopupOpen, setIsCustomRangePopupOpen] = useState(false);
   const [mainChartType, setMainChartType] = useState('line');
 
   const [indexAnnualChartStartYear, setIndexAnnualChartStartYear] = useState(INDEX_ANNUAL_CHART_DEFAULT_START_YEAR);
@@ -688,6 +632,7 @@ export default function IndexPage() {
     const n = normalizeCustomChartRange(draftChartStart, draftChartEnd, asOfDate);
     if (!n) return;
     setAppliedCustomRange(n);
+    setIsCustomRangePopupOpen(false);
   }, [draftChartStart, draftChartEnd, asOfDate]);
 
   const resetCustomChartRange = useCallback(() => {
@@ -695,7 +640,17 @@ export default function IndexPage() {
     const r = rangeForTimeframe(timeframe, asOfDate, ohlcTickerBounds);
     setDraftChartStart(r.start);
     setDraftChartEnd(r.end);
+    setIsCustomRangePopupOpen(false);
   }, [timeframe, asOfDate, ohlcTickerBounds]);
+
+  useEffect(() => {
+    if (!isCustomRangePopupOpen) return;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setIsCustomRangePopupOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isCustomRangePopupOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1016,63 +971,28 @@ export default function IndexPage() {
     });
   }, [quarterlyReturnsRaw, indexQuarterlyChartStartYear, indexQuarterlyChartEndYear]);
 
-  const indexAnnualChartYearToolbar = (
-    <div className="ticker-page__custom-range" aria-label="Annual returns chart year range">
-      <span className="ticker-page__label ticker-page__label--inline">Start year</span>
-      <select
-        className="ticker-page__date-inp"
-        value={indexAnnualChartStartYear}
-        onChange={(e) => setIndexAnnualChartStartYear(Number(e.target.value))}
-      >
-        {indexAnnualYearOptions.map((y) => (
-          <option key={`idx-ann-start-${y}`} value={y}>
-            {y}
-          </option>
-        ))}
-      </select>
-      <span className="ticker-page__label ticker-page__label--inline">End year</span>
-      <select
-        className="ticker-page__date-inp"
-        value={indexAnnualChartEndYear}
-        onChange={(e) => setIndexAnnualChartEndYear(Number(e.target.value))}
-      >
-        {indexAnnualYearOptions.map((y) => (
-          <option key={`idx-ann-end-${y}`} value={y}>
-            {y}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-
-  const indexQuarterlyChartYearToolbar = (
-    <div className="ticker-page__custom-range" aria-label="Quarterly returns chart year range">
-      <span className="ticker-page__label ticker-page__label--inline">Start year</span>
-      <select
-        className="ticker-page__date-inp"
-        value={indexQuarterlyChartStartYear}
-        onChange={(e) => setIndexQuarterlyChartStartYear(Number(e.target.value))}
-      >
-        {indexQuarterlyYearOptions.map((y) => (
-          <option key={`idx-qtr-start-${y}`} value={y}>
-            {y}
-          </option>
-        ))}
-      </select>
-      <span className="ticker-page__label ticker-page__label--inline">End year</span>
-      <select
-        className="ticker-page__date-inp"
-        value={indexQuarterlyChartEndYear}
-        onChange={(e) => setIndexQuarterlyChartEndYear(Number(e.target.value))}
-      >
-        {indexQuarterlyYearOptions.map((y) => (
-          <option key={`idx-qtr-end-${y}`} value={y}>
-            {y}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
+  // const indexQuarterlyChartYearToolbar = (
+  //   <div className="ticker-annual-figma__range-controls" aria-label="Quarterly returns chart year range">
+  //     <span className="ticker-annual-figma__range-label">Start year</span>
+  //     <ThemedDropdown
+  //       size="sm"
+  //       value={String(indexQuarterlyChartStartYear)}
+  //       options={indexQuarterlyYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+  //       onChange={(v) => setIndexQuarterlyChartStartYear(Number(v))}
+  //       title="Start year"
+  //       ariaLabelPrefix="Start year"
+  //     />
+  //     <span className="ticker-annual-figma__range-label">End year</span>
+  //     <ThemedDropdown
+  //       size="sm"
+  //       value={String(indexQuarterlyChartEndYear)}
+  //       options={indexQuarterlyYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+  //       onChange={(v) => setIndexQuarterlyChartEndYear(Number(v))}
+  //       title="End year"
+  //       ariaLabelPrefix="End year"
+  //     />
+  //   </div>
+  // );
 
   const loadRelativeSeries = useCallback(
     async (option) => {
@@ -1484,6 +1404,7 @@ export default function IndexPage() {
             </option>
           ))}
         </select>
+        
         <DataInfoTip align="start">
           <p className="ticker-data-tip__p">
             <strong>Index dashboard</strong> loads returns and the main chart from{' '}
@@ -1524,17 +1445,9 @@ export default function IndexPage() {
             </DataInfoTip>
           </div>
           <div className="ticker-page__header-actions">
-            <button type="button" className="ticker-outline-btn">
-              <IconBell className="ticker-outline-btn__ico" /> My Alerts
-            </button>
+            
             <button type="button" className="ticker-outline-btn">
               <IconPlus className="ticker-outline-btn__ico" /> In My Watchlists
-            </button>
-            <button type="button" className="ticker-outline-btn">
-              <IconDocument className="ticker-outline-btn__ico" /> My Notes
-            </button>
-            <button type="button" className="ticker-outline-btn">
-              <IconPencil className="ticker-outline-btn__ico" /> Quotebox
             </button>
           </div>
         </div>
@@ -1563,17 +1476,7 @@ export default function IndexPage() {
             <p className="ticker-page__metric-label">Last Updated • {lastUpdatedFmt}</p>
           </div>
 
-          <div className="ticker-page__header-metric">
-            <div className="ticker-page__metric-price-line ticker-page__metric-price-line--sm">
-              <span className="ticker-page__metric-ghost">—</span>
-              <span className="ticker-page__ccy">USD</span>
-            </div>
-            <div className="ticker-page__metric-change">
-              <span className="ticker-page__metric-change--muted">—</span>
-            </div>
-            <p className="ticker-page__metric-label">Before Market • Intraday feed not connected</p>
-          </div>
-
+          
           <div className="ticker-page__header-metric">
             <div className="ticker-page__metric-value-row">
               <span className="ticker-page__metric-value">{seriesModeLabel}</span>
@@ -1593,67 +1496,15 @@ export default function IndexPage() {
             <p className="ticker-page__metric-label">API index</p>
           </div>
 
-          <div className="ticker-page__header-metric">
-            <p className="ticker-page__metric-value ticker-page__metric-value--multiline">—</p>
-            <p className="ticker-page__metric-label">Sector / industry</p>
-          </div>
-
-          <div className="ticker-page__header-metric ticker-page__header-metric--mcap">
-            <div className="ticker-page__metric-mcap-row">
-              <div>
-                <p className="ticker-page__metric-value">—</p>
-                <p className="ticker-page__metric-label">Market Cap</p>
-              </div>
-              <button type="button" className="ticker-page__metric-chev" aria-label="More on market cap">
-                <IconChevronRight className="ticker-page__metric-chev-ico" />
-              </button>
-            </div>
-          </div>
         </div>
       </header>
 
       <div className="ticker-page__grid">
         <div className="ticker-page__main">
           <section className="ticker-card ticker-card--main-chart" aria-labelledby="index-snapshot-chart-title">
-            <div className="ticker-chart-toolbar">
-              <ChartToolbarIcons />
-              <ChartTypeToolbarDropdown chartType={mainChartType} onChartTypeChange={setMainChartType} />
-              <div className="ticker-chart-toolbar__sep" />
-              <button type="button" className="ticker-chart-toolbar__pill">
-                Indicators <IconChevronDown className="ticker-chart-toolbar__chev" />
-              </button>
-              <button type="button" className="ticker-chart-toolbar__iconbtn" aria-label="Layout">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="3" y="3" width="8" height="8" rx="1" />
-                  <rect x="13" y="3" width="8" height="8" rx="1" />
-                  <rect x="3" y="13" width="8" height="8" rx="1" />
-                  <rect x="13" y="13" width="8" height="8" rx="1" />
-                </svg>
-              </button>
-              <button type="button" className="ticker-chart-toolbar__iconbtn" aria-label="Alert">
-                <IconBell className="ticker-chart-toolbar__bell" />
-              </button>
-              <button type="button" className="ticker-chart-toolbar__pill">
-                Replay
-              </button>
-              <span className="ticker-chart-toolbar__grow" />
-            </div>
-
             <div className="ticker-card__head">
               <div className="ticker-card__title-with-tip">
-                <button type="button" className="ticker-card__title-btn" id="index-snapshot-chart-title">
-                  Snapshot Chart
-                  <IconChevronDown className="ticker-card__title-chev" />
-                </button>
-                <DataInfoTip align="end">
-                  <p className="ticker-data-tip__p">
-                    <strong>Chart</strong>: from <code className="ticker-data-tip__code">index-returns.syntheticCloseSeries</code> (close level),
-                    filtered client-side to the selected window. No separate OHLC+signals call for indices.
-                  </p>
-                  <p className="ticker-data-tip__p">
-                    <strong>Window:</strong> {chartRangeLabel}. {chartModeHelp}
-                  </p>
-                </DataInfoTip>
+              <ChartTypeToolbarDropdown chartType={mainChartType} onChartTypeChange={setMainChartType} />
               </div>
               <div className="ticker-tf-with-tip">
                 <div className="ticker-tf-row">
@@ -1666,42 +1517,86 @@ export default function IndexPage() {
                       }
                       onClick={() => {
                         setAppliedCustomRange(null);
+                        setIsCustomRangePopupOpen(false);
                         setTimeframe(tf);
                       }}
                     >
                       {tf}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    className={'ticker-tf' + (appliedCustomRange || isCustomRangePopupOpen ? ' ticker-tf--active' : '')}
+                    onClick={() => setIsCustomRangePopupOpen(true)}
+                    aria-label="Open custom date range"
+                    title="Custom date range"
+                  >
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <rect x="3.5" y="5.5" width="17" height="15" rx="2.5" />
+                      <path d="M8 3.5v4M16 3.5v4M3.5 9.5h17" />
+                    </svg>
+                  </button>
                 </div>
                 <DataInfoTip align="end">
                   <p className="ticker-data-tip__p">Timeframe pills map to calendar ranges ending on index-returns as-of date.</p>
                 </DataInfoTip>
               </div>
-              <div className="ticker-page__custom-range">
-                <span className="ticker-page__label ticker-page__label--inline">Start date</span>
-                <input
-                  type="date"
-                  className="ticker-page__date-inp"
-                  value={draftChartStart}
-                  onChange={(e) => setDraftChartStart(e.target.value)}
-                  max={draftChartEnd || asOfDate}
-                />
-                <span className="ticker-page__label ticker-page__label--inline">End date</span>
-                <input
-                  type="date"
-                  className="ticker-page__date-inp"
-                  value={draftChartEnd}
-                  onChange={(e) => setDraftChartEnd(e.target.value)}
-                  min={draftChartStart}
-                  max={asOfDate}
-                />
-                <button type="button" className="ticker-outline-btn ticker-outline-btn--sm" onClick={applyCustomChartRange}>
-                  Submit
-                </button>
-                <button type="button" className="ticker-outline-btn ticker-outline-btn--sm" onClick={resetCustomChartRange}>
-                  Use timeframe
-                </button>
-              </div>
+              {isCustomRangePopupOpen ? (
+                <div className="wl-manage-overlay ticker-custom-range-popup__overlay" onClick={() => setIsCustomRangePopupOpen(false)}>
+                  <div
+                    className="wl-manage-modal ticker-custom-range-popup"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="index-custom-range-title"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="wl-manage-modal__head">
+                      <h3 id="index-custom-range-title" className="wl-manage-modal__title">
+                        Custom range
+                      </h3>
+                      <button
+                        type="button"
+                        className="wl-manage-modal__close"
+                        onClick={() => setIsCustomRangePopupOpen(false)}
+                        aria-label="Close custom range"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="wl-manage-modal__body ticker-custom-range-popup__body">
+                      <div className="ticker-custom-range-popup__field-row">
+                        <span className="ticker-page__label ticker-page__label--inline">Start date</span>
+                        <input
+                          type="date"
+                          className="ticker-page__date-inp ticker-custom-range-popup__date"
+                          value={draftChartStart}
+                          onChange={(e) => setDraftChartStart(e.target.value)}
+                          max={draftChartEnd || asOfDate}
+                        />
+                      </div>
+                      <div className="ticker-custom-range-popup__field-row">
+                        <span className="ticker-page__label ticker-page__label--inline">End date</span>
+                        <input
+                          type="date"
+                          className="ticker-page__date-inp ticker-custom-range-popup__date"
+                          value={draftChartEnd}
+                          onChange={(e) => setDraftChartEnd(e.target.value)}
+                          min={draftChartStart}
+                          max={asOfDate}
+                        />
+                      </div>
+                    </div>
+                    <div className="wl-manage-modal__foot ticker-custom-range-popup__foot">
+                      <button type="button" className="ticker-outline-btn ticker-outline-btn--sm ticker-custom-range-popup__btn" onClick={resetCustomChartRange}>
+                        Use timeframe
+                      </button>
+                      <button type="button" className="ticker-outline-btn ticker-outline-btn--sm ticker-custom-range-popup__btn" onClick={applyCustomChartRange}>
+                        Submit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div ref={chartBodyRef} className="ticker-chart-body">
@@ -1853,7 +1748,7 @@ export default function IndexPage() {
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
-            toolbarControls={indexAnnualChartYearToolbar}
+            enableInlineYearDropdowns
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
             <TickerAnnualReturnsPosNeg
@@ -1869,11 +1764,11 @@ export default function IndexPage() {
               quarterlyReturns={quarterlyReturnsFiltered}
               quarterlyReturnsAll={quarterlyReturnsRaw}
               asOfDate={asOfDate}
-              toolbarControls={indexQuarterlyChartYearToolbar}
+              // toolbarControls={indexQuarterlyChartYearToolbar}
             />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
-            <TickerMonthlyReturnsChart symbol={displaySym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} />
+            <TickerMonthlyReturnsChart symbol={displaySym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} suppressChartDateFilter />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY_ADV} defaultHeight={300}>
             <TickerMonthlyReturnsWaterfallDonut
@@ -1881,6 +1776,7 @@ export default function IndexPage() {
               symbol={displaySym}
               monthlyReturns={monthlyReturnsRaw}
               asOfDate={asOfDate}
+              suppressChartDateFilter
             />
           </TickerChartResizeScope>
           <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>
@@ -1960,8 +1856,12 @@ export default function IndexPage() {
               ))}
             </div>
             <div className="ticker-signal-foot">
-              <IconTrendUp className="ticker-signal-foot__ico" />
-              <IconTrendDown className="ticker-signal-foot__ico" />
+              <Link to="/odin-signals" className="ticker-signal-foot__link">
+                Learn more about Odin Signals
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <path d="M14 5h5v5M10 14l9-9M19 14v5H5V5h5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </Link>
             </div>
           </section>
 

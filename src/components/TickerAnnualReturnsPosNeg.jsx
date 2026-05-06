@@ -11,7 +11,7 @@ const BUCKETS_DARK = [
   { key: 'b25', legend: '1-2.5%', color: '#f97316' },
   { key: 'b5', legend: '2.5-5%', color: '#64748b' },
   { key: 'b10', legend: '5-10%', color: '#eab308' },
-  { key: 'bgt', legend: '>10%', color: '#172554' }
+  { key: 'bgt', legend: '>10%', color: '#2563eb' }
 ];
 
 /** Slightly deeper hues so dark labels read on light backgrounds. */
@@ -135,7 +135,7 @@ function BucketDonut({ counts, buckets, theme, plotHeight, emptyPeriodLower = 'y
           d={donutSegPath(R0, R1, d0, d1)}
           fill={meta.color}
           stroke={ringStroke}
-          strokeWidth="3"
+          strokeWidth="0"
           strokeLinejoin="round"
         />
         <text
@@ -292,22 +292,21 @@ export function TickerAnnualReturnsPosNeg({
           <span className="ticker-annual-figma__badge">
             {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive &amp; negative {pn.lower}
           </span>
-        </div>
-        {!suppressChartDateFilter ? (
-          <ChartDateApplyRow
-            idPrefix="annual-posneg"
-            maxDate={asOfDate}
-            mode={periodMode === 'daily' ? 'date' : 'year'}
-            minYear={1980}
-            maxYear={2026}
-            initialStart={periodMode === 'daily' ? '' : '2018'}
-            initialEnd={periodMode === 'daily' ? '' : String(asOfDate || '').slice(0, 4)}
-            onApply={({ start, end }) => setRangeApplied({ start, end })}
-          />
-        ) : null}
-        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
-          <div className="ticker-annual-figma__left" />
-          <div className="ticker-annual-figma__right">
+          <div className="ticker-annual-figma__actions ticker-annual-posneg__actions">
+            {!suppressChartDateFilter ? (
+              <div className="ticker-annual-posneg__range-inline">
+                <ChartDateApplyRow
+                  idPrefix="annual-posneg"
+                  maxDate={asOfDate}
+                  mode={periodMode === 'daily' ? 'date' : 'year'}
+                  minYear={1980}
+                  maxYear={2026}
+                  initialStart={periodMode === 'daily' ? '' : '2018'}
+                  initialEnd={periodMode === 'daily' ? '' : String(asOfDate || '').slice(0, 4)}
+                  onApply={({ start, end }) => setRangeApplied({ start, end })}
+                />
+              </div>
+            ) : null}
             <button
               type="button"
               className="ticker-annual-figma__btn"
@@ -321,11 +320,10 @@ export function TickerAnnualReturnsPosNeg({
             </button>
           </div>
         </div>
-
-        <div className="ticker-annual-donut__stage">
-          <div className="ticker-annual-donut__toggle-wrap" aria-label="Right panel mode">
-            <div className="ticker-annual-donut__toggle" role="tablist">
-              <button
+        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
+          <div className="ticker-annual-figma__left" />
+          <div className="ticker-annual-donut__toggle">
+            <button
                 type="button"
                 role="tab"
                 className={
@@ -349,9 +347,10 @@ export function TickerAnnualReturnsPosNeg({
               >
                 {negativeTabLabel}
               </button>
-            </div>
           </div>
+        </div>
 
+        <div className="ticker-annual-donut__stage">
           <div className="ticker-annual-donut__split">
             <div className="ticker-annual-donut__panel ticker-annual-figma__chart-card">
               <div className="ticker-annual-donut__panel-head">

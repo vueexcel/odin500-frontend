@@ -18,6 +18,7 @@ let cachePersistWarned = false;
 
 let refreshInFlight = null;
 let proactiveTimerId = null;
+const REFRESH_RETRY_DELAYS_MS = [0, 2000, 8000];
 
 function safeParse(json, fallback) {
   try {
@@ -199,30 +200,47 @@ export async function refreshSessionOnce() {
     const rt = getRefreshToken();
     if (!rt) return false;
 
-    try {
-      const response = await fetch(apiUrl('/api/auth/refresh'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: rt })
-      });
-      const payload = await response.json().catch(() => ({}));
+    let sawTransientFailure = false;
 
-      if (!response.ok || !payload.session) {
-        clearAuthToken();
-        clearApiCache();
-        return false;
+    for (let attempt = 0; attempt < REFRESH_RETRY_DELAYS_MS.length; attempt += 1) {
+      const delayMs = REFRESH_RETRY_DELAYS_MS[attempt];
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
 
-      applyAuthSession(payload.session);
-      return true;
-    } catch {
-      clearAuthToken();
-      clearApiCache();
-      return false;
-    } finally {
-      refreshInFlight = null;
+      try {
+        const response = await fetch(apiUrl('/api/auth/refresh'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: rt })
+        });
+        const payload = await response.json().catch(() => ({}));
+
+        if (response.ok && payload.session) {
+          applyAuthSession(payload.session);
+          return true;
+        }
+
+        // Invalid/expired/revoked refresh token responses should force logout.
+        if (response.status === 400 || response.status === 401) {
+          clearAuthToken();
+          clearApiCache();
+          return false;
+        }
+
+        // Other failures are treated as transient (5xx/proxy/runtime issues).
+        sawTransientFailure = true;
+      } catch {
+        sawTransientFailure = true;
+      }
     }
-  })();
+
+    // Do not clear auth on transient refresh failures; allow recovery on later attempts.
+    if (sawTransientFailure) return false;
+    return false;
+  })().finally(() => {
+    refreshInFlight = null;
+  });
 
   return refreshInFlight;
 }

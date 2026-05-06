@@ -2,13 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
-import { TickerAnnualReturnsPosNeg } from '../components/TickerAnnualReturnsPosNeg.jsx';
 import { TickerMonthlyReturnsChart } from '../components/TickerMonthlyReturnsChart.jsx';
 import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyReturnsWaterfallDonut.jsx';
-import { TickerQuarterlyReturnsChart } from '../components/TickerQuarterlyReturnsChart.jsx';
 import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
 import { TickerSection23Section24 } from '../components/TickerSection23Section24.jsx';
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
+import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import {
@@ -34,8 +33,7 @@ const CHART_H_MIN = 200;
 const CHART_H_MAX = 1400;
 
 const RESIZE_KEY_ANNUAL_FIGMA = 'odin_ticker_resize_annual_figma';
-const RESIZE_KEY_ANNUAL_POSNEG = 'odin_ticker_resize_annual_posneg';
-const RESIZE_KEY_QUARTERLY = 'odin_ticker_resize_quarterly';
+const RESIZE_KEY_QUARTERLY_FIGMA = 'odin_ticker_resize_quarterly_figma';
 const RESIZE_KEY_MONTHLY = 'odin_ticker_resize_monthly';
 const RESIZE_KEY_MONTHLY_ADV = 'odin_ticker_resize_monthly_waterfall';
 const RETURNS_DEFAULT_START = '2018-01-01';
@@ -501,83 +499,17 @@ function IconChevronRight({ className }) {
   );
 }
 
-function IconChevronDown({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path d="M6 9l6 6 6-6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconTrendUp({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="#00c805" strokeWidth="2" aria-hidden>
-      <path d="M4 14l6-6 4 4 6-8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 4h6v6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconTrendDown({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth="2" aria-hidden>
-      <path d="M4 10l6 6 4-4 6 6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 20h6v-6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function ChartTypeToolbarDropdown({ chartType, onChartTypeChange }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-  const currentLabel = TICKER_CHART_TYPE_OPTIONS.find((o) => o.id === chartType)?.label ?? 'Line';
   return (
-    <div className="ticker-chart-toolbar__chart-type-wrap" ref={wrapRef}>
-      <button
-        type="button"
-        className="ticker-chart-toolbar__chart-type-btn"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={'Chart type: ' + currentLabel}
-        title="Chart type"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <IconChartTypeDropdown className="ticker-chart-toolbar__chart-type-ico" />
-        <span className="ticker-chart-toolbar__chart-type-label">{currentLabel}</span>
-        <IconChevronDown className="ticker-chart-toolbar__chev" />
-      </button>
-      {open ? (
-        <ul className="ticker-chart-toolbar__chart-type-menu" role="menu">
-          {TICKER_CHART_TYPE_OPTIONS.map((opt) => (
-            <li key={opt.id} role="none">
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={chartType === opt.id}
-                className={
-                  'ticker-chart-toolbar__chart-type-item' +
-                  (chartType === opt.id ? ' ticker-chart-toolbar__chart-type-item--active' : '')
-                }
-                onClick={() => {
-                  onChartTypeChange(opt.id);
-                  setOpen(false);
-                }}
-              >
-                {opt.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    <ThemedDropdown
+      value={chartType}
+      options={TICKER_CHART_TYPE_OPTIONS}
+      onChange={onChartTypeChange}
+      title="Chart type"
+      ariaLabelPrefix="Chart type"
+      labelFallback="Line"
+      icon={<IconChartTypeDropdown className="app-dropdown__chart-type-icon" />}
+    />
   );
 }
 
@@ -700,6 +632,7 @@ export default function TickerPage() {
   const [appliedCustomRange, setAppliedCustomRange] = useState(null);
   const [draftChartStart, setDraftChartStart] = useState('');
   const [draftChartEnd, setDraftChartEnd] = useState('');
+  const [isCustomRangePopupOpen, setIsCustomRangePopupOpen] = useState(false);
   const [mainChartType, setMainChartType] = useState('area');
   const [ohlcTickerBounds, setOhlcTickerBounds] = useState(/** @type {{ min: string, max: string } | null} */ (null));
 
@@ -764,6 +697,7 @@ export default function TickerPage() {
     const n = normalizeCustomChartRange(draftChartStart, draftChartEnd, asOfDate);
     if (!n) return;
     setAppliedCustomRange(n);
+    setIsCustomRangePopupOpen(false);
   }, [draftChartStart, draftChartEnd, asOfDate]);
 
   const resetCustomChartRange = useCallback(() => {
@@ -771,7 +705,17 @@ export default function TickerPage() {
     const r = rangeForTimeframe(timeframe, asOfDate, ohlcTickerBounds);
     setDraftChartStart(r.start);
     setDraftChartEnd(r.end);
+    setIsCustomRangePopupOpen(false);
   }, [timeframe, asOfDate, ohlcTickerBounds]);
+
+  useEffect(() => {
+    if (!isCustomRangePopupOpen) return;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setIsCustomRangePopupOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isCustomRangePopupOpen]);
 
   const onSectionBenchmarkSymbolChange = useCallback((b) => {
     setBenchForLongTable(String(b || SECTION_LONG_DEFAULT_BENCHMARK).toUpperCase().trim());
@@ -1290,6 +1234,13 @@ export default function TickerPage() {
       return Number.isFinite(y) && y >= 2020 && y <= 2026;
     });
   }, [quarterlyReturnsRaw]);
+  const quarterlyReturnsCurrentRange = useMemo(() => {
+    const rows = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
+    return rows.filter((r) => {
+      const y = Number(String(r?.period || '').slice(0, 4));
+      return Number.isFinite(y) && y >= 2025 && y <= 2026;
+    });
+  }, [quarterlyReturnsRaw]);
   const tickerSelectOptions = useMemo(() => {
     const base = [sym, BENCHMARK, ...(detailRows || []).map((r) => String(r.symbol || '').toUpperCase().trim())];
     return [...new Set(base.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
@@ -1658,20 +1609,7 @@ export default function TickerPage() {
 
   return (
     <div className="ticker-page">
-      <div className="ticker-page__search-row">
-        <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId="ticker-dash-symbol" />
-        <DataInfoTip align="start">
-          <p className="ticker-data-tip__p">
-            <strong>Ticker selection</strong> drives every request on this page for one symbol.
-          </p>
-          <p className="ticker-data-tip__p">
-            Search uses <code className="ticker-data-tip__code">GET /api/tickers/search</code> (Supabase{' '}
-            <code className="ticker-data-tip__code">tickers</code>). Picking a symbol reloads chart, returns, OHLC
-            tail, and index metadata for that symbol.
-          </p>
-        </DataInfoTip>
-        {metaBusy || chartLoading ? <span className="ticker-page__loading-pill">Loading…</span> : null}
-      </div>
+
 
       {error ? (
         <div className="ticker-page__error" role="alert">
@@ -1707,16 +1645,7 @@ export default function TickerPage() {
           </div>
           <div className="ticker-page__header-actions">
             <button type="button" className="ticker-outline-btn">
-              <IconBell className="ticker-outline-btn__ico" /> My Alerts
-            </button>
-            <button type="button" className="ticker-outline-btn">
               <IconPlus className="ticker-outline-btn__ico" /> In My Watchlists
-            </button>
-            <button type="button" className="ticker-outline-btn">
-              <IconDocument className="ticker-outline-btn__ico" /> My Notes
-            </button>
-            <button type="button" className="ticker-outline-btn">
-              <IconPencil className="ticker-outline-btn__ico" /> Quotebox
             </button>
           </div>
         </div>
@@ -1745,40 +1674,10 @@ export default function TickerPage() {
             <p className="ticker-page__metric-label">Last Updated • {lastUpdatedFmt}</p>
           </div>
 
-          <div className="ticker-page__header-metric">
-            <div className="ticker-page__metric-price-line ticker-page__metric-price-line--sm">
-              <span className="ticker-page__metric-ghost">—</span>
-              <span className="ticker-page__ccy">USD</span>
-            </div>
-            <div className="ticker-page__metric-change">
-              <span className="ticker-page__metric-change--muted">—</span>
-            </div>
-            <p className="ticker-page__metric-label">Before Market • Intraday feed not connected</p>
-          </div>
-
-          <div className="ticker-page__header-metric">
-            <div className="ticker-page__metric-value-row">
-              <span className="ticker-page__metric-value">Not available from API</span>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  <strong>Earnings</strong> dates are not returned by the current ticker-details payload on this page.
-                </p>
-              </DataInfoTip>
-            </div>
-            <p className="ticker-page__metric-label">Next Earnings Date</p>
-          </div>
 
           <div className="ticker-page__header-metric">
             <div className="ticker-page__metric-value-row">
               <span className="ticker-page__metric-value">{sector || '—'}</span>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  <strong>Sector / industry</strong> come from <code className="ticker-data-tip__code">POST /api/market/ticker-details</code> with index{' '}
-                  <code className="ticker-data-tip__code">sp500</code> / period <code className="ticker-data-tip__code">last-1-year</code>, merged from the
-                  TickerDetails-style BigQuery view plus Supabase company-name backfill when needed.
-                </p>
-                <p className="ticker-data-tip__p">These are classification fields, not live market quotes.</p>
-              </DataInfoTip>
             </div>
             <p className="ticker-page__metric-label">Sector</p>
           </div>
@@ -1788,83 +1687,25 @@ export default function TickerPage() {
             <p className="ticker-page__metric-label">Industry</p>
           </div>
 
-          <div className="ticker-page__header-metric ticker-page__header-metric--mcap">
-            <div className="ticker-page__metric-mcap-row">
-              <div>
-                <p className="ticker-page__metric-value">—</p>
-                <p className="ticker-page__metric-label">Market Cap</p>
-              </div>
-              <button type="button" className="ticker-page__metric-chev" aria-label="More on market cap">
-                <IconChevronRight className="ticker-page__metric-chev-ico" />
-              </button>
-            </div>
-          </div>
+      
         </div>
       </header>
 
       <div className="ticker-page__grid">
         <div className="ticker-page__main">
           <section className="ticker-card ticker-card--main-chart" aria-labelledby="snapshot-chart-title">
-            <div className="ticker-chart-toolbar">
-              {/* <ChartToolbarIcons /> */}
-              <ChartTypeToolbarDropdown chartType={mainChartType} onChartTypeChange={setMainChartType} />
-              <div className="ticker-chart-toolbar__sep" />
-              <button type="button" className="ticker-chart-toolbar__pill">
-                Indicators <IconChevronDown className="ticker-chart-toolbar__chev" />
-              </button>
-              <button type="button" className="ticker-chart-toolbar__iconbtn" aria-label="Layout">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="3" y="3" width="8" height="8" rx="1" />
-                  <rect x="13" y="3" width="8" height="8" rx="1" />
-                  <rect x="3" y="13" width="8" height="8" rx="1" />
-                  <rect x="13" y="13" width="8" height="8" rx="1" />
-                </svg>
-              </button>
-              <button type="button" className="ticker-chart-toolbar__iconbtn" aria-label="Alert">
-                <IconBell className="ticker-chart-toolbar__bell" />
-              </button>
-              <button type="button" className="ticker-chart-toolbar__pill">
-                Replay
-              </button>
-              <span className="ticker-chart-toolbar__grow" />
-              <button type="button" className="ticker-chart-toolbar__iconbtn" aria-label="Undo">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M9 14L4 9l5-5M4 9h11a4 4 0 0 1 4 4v1" />
-                </svg>
-              </button>
-              <button type="button" className="ticker-chart-toolbar__iconbtn" aria-label="Redo">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M15 14l5-5-5-5M20 9H9a4 4 0 0 0-4 4v1" />
-                </svg>
-              </button>
-            </div>
+            {/* <div className="ticker-chart-toolbar">
+              <ChartTypeToolbarDropdown chartType={mainChartType} onChartTypeChange={setMainChartType} /> 
+            </div> */}
 
             <div className="ticker-card__head">
-              <div className="ticker-card__title-with-tip">
-                <button type="button" className="ticker-card__title-btn" id="snapshot-chart-title">
-                  Snapshot Chart
-                  <IconChevronDown className="ticker-card__title-chev" />
-                </button>
-                <DataInfoTip align="end">
-                  <p className="ticker-data-tip__p">
-                    <strong>Chart</strong>: TradingView <strong>Lightweight Charts™</strong> (open-source, Apache-2.0) —
-                    main series is <strong>user-selectable</strong> (trend icon in the chart toolbar): <strong>Line</strong> / <strong>Area</strong> (Close),{' '}
-                    <strong>Candles</strong>, or <strong>Bars</strong> (OHLC), plus volume histogram. Pan / zoom as usual.
-                  </p>
-                  <p className="ticker-data-tip__p">
-                    <strong>API:</strong> <code className="ticker-data-tip__code">POST /api/market/ohlc-signals-indicator</code>. Line &amp; area plot{' '}
-                    <strong>Close</strong>; candles &amp; bars use full OHLC. Crosshair reads the same row. <strong>Volume</strong> when present;{' '}
-                    <strong>signal</strong> joined on <strong>Date</strong> on the server.
-                  </p>
-                  <p className="ticker-data-tip__p">
-                    <strong>Window:</strong> {chartRangeLabel}. {chartModeHelp} Long ranges are clipped to {MAX_SIGNAL_RANGE_DAYS} calendar days to satisfy the API
-                    guard.
-                  </p>
-                </DataInfoTip>
-              </div>
+              
               <div className="ticker-page__search-row">
                 <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId="ticker-chart-symbol" />
-                <DataInfoTip align="start">
+                <ChartTypeToolbarDropdown chartType={mainChartType} onChartTypeChange={setMainChartType} />
+                
+              
+                {/* <DataInfoTip align="start">
                   <p className="ticker-data-tip__p">
                     <strong>Ticker selection</strong> drives every request on this page for one symbol.
                   </p>
@@ -1873,13 +1714,10 @@ export default function TickerPage() {
                     <code className="ticker-data-tip__code">tickers</code>). Picking a symbol reloads chart, returns, OHLC
                     tail, and index metadata for that symbol.
                   </p>
-                </DataInfoTip>
+                </DataInfoTip> */}
                 {chartLoading ? <span className="ticker-page__loading-pill">Loading chart…</span> : null}
                 {metaBusy && !chartLoading ? <span className="ticker-page__loading-pill">Loading data…</span> : null}
-                <span className="ticker-page__loading-pill" title="Frontend timing debug">
-                  chart:{apiTimings.chartMs ?? '—'}ms | core:{apiTimings.coreMs ?? '—'}ms | meta:{apiTimings.metaMs ?? '—'}ms | ohlc
-                  cache:{apiTimings.ohlcHits}/{apiTimings.ohlcMisses}
-                </span>
+                
               </div>
               <div className="ticker-tf-with-tip">
                 <div className="ticker-tf-row">
@@ -1893,64 +1731,84 @@ export default function TickerPage() {
                       }
                       onClick={() => {
                         setAppliedCustomRange(null);
+                        setIsCustomRangePopupOpen(false);
                         setTimeframe(tf);
                       }}
                     >
                       {tf}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    className={'ticker-tf' + (appliedCustomRange || isCustomRangePopupOpen ? ' ticker-tf--active' : '')}
+                    onClick={() => setIsCustomRangePopupOpen(true)}
+                    aria-label="Open custom date range"
+                    title="Custom date range"
+                  >
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <rect x="3.5" y="5.5" width="17" height="15" rx="2.5" />
+                      <path d="M8 3.5v4M16 3.5v4M3.5 9.5h17" />
+                    </svg>
+                  </button>
                 </div>
-                <DataInfoTip align="end">
-                  <p className="ticker-data-tip__p">
-                    <strong>Timeframe pills</strong> only change the chart when you are not using an applied custom date
-                    range.
-                  </p>
-                  <p className="ticker-data-tip__p">
-                    Each pill maps to an inclusive <code className="ticker-data-tip__code">[start_date, end_date]</code>{' '}
-                    ending on returns <strong>asOfDate</strong>. <strong>1D</strong> = last <strong>3</strong> Mon–Fri sessions;{' '}
-                    <strong>5D</strong> = last <strong>5</strong> Mon–Fri sessions (not 3+ weeks of calendar days). Other
-                    ranges use calendar rules as before.
-                  </p>
-                </DataInfoTip>
+                
               </div>
-              <div className="ticker-page__custom-range">
-                <span className="ticker-page__label ticker-page__label--inline">Start date</span>
-                <input
-                  type="date"
-                  className="ticker-page__date-inp"
-                  value={draftChartStart}
-                  onChange={(e) => setDraftChartStart(e.target.value)}
-                  max={draftChartEnd || asOfDate}
-                />
-                <span className="ticker-page__label ticker-page__label--inline">End date</span>
-                <input
-                  type="date"
-                  className="ticker-page__date-inp"
-                  value={draftChartEnd}
-                  onChange={(e) => setDraftChartEnd(e.target.value)}
-                  min={draftChartStart}
-                  max={asOfDate}
-                />
-                <button type="button" className="ticker-outline-btn ticker-outline-btn--sm" onClick={applyCustomChartRange}>
-                  Submit
-                </button>
-                <button type="button" className="ticker-outline-btn ticker-outline-btn--sm" onClick={resetCustomChartRange}>
-                  Use timeframe
-                </button>
-                <DataInfoTip align="start">
-                  <p className="ticker-data-tip__p">
-                    <strong>Custom range</strong> sends your dates as <code className="ticker-data-tip__code">start_date</code> and{' '}
-                    <code className="ticker-data-tip__code">end_date</code> on the same OHLC+signals endpoint as the chart.
-                  </p>
-                  <p className="ticker-data-tip__p">
-                    End date is clamped to <strong>{asOfDate}</strong> (latest available close from returns). If start
-                    &gt; end they are swapped. The span is clipped to the backend maximum ({MAX_SIGNAL_RANGE_DAYS} days).
-                  </p>
-                  <p className="ticker-data-tip__p">
-                    <strong>Submit</strong> locks this window; <strong>Use timeframe</strong> clears the lock and returns to the pill mapping.
-                  </p>
-                </DataInfoTip>
-              </div>
+              {isCustomRangePopupOpen ? (
+                <div className="wl-manage-overlay ticker-custom-range-popup__overlay" onClick={() => setIsCustomRangePopupOpen(false)}>
+                  <div
+                    className="wl-manage-modal ticker-custom-range-popup"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="ticker-custom-range-title"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="wl-manage-modal__head">
+                      <h3 id="ticker-custom-range-title" className="wl-manage-modal__title">
+                        Custom range
+                      </h3>
+                      <button
+                        type="button"
+                        className="wl-manage-modal__close"
+                        onClick={() => setIsCustomRangePopupOpen(false)}
+                        aria-label="Close custom range"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="wl-manage-modal__body ticker-custom-range-popup__body">
+                      <div className="ticker-custom-range-popup__field-row">
+                        <span className="ticker-page__label ticker-page__label--inline">Start date</span>
+                        <input
+                          type="date"
+                          className="ticker-page__date-inp ticker-custom-range-popup__date"
+                          value={draftChartStart}
+                          onChange={(e) => setDraftChartStart(e.target.value)}
+                          max={draftChartEnd || asOfDate}
+                        />
+                      </div>
+                      <div className="ticker-custom-range-popup__field-row">
+                        <span className="ticker-page__label ticker-page__label--inline">End date</span>
+                        <input
+                          type="date"
+                          className="ticker-page__date-inp ticker-custom-range-popup__date"
+                          value={draftChartEnd}
+                          onChange={(e) => setDraftChartEnd(e.target.value)}
+                          min={draftChartStart}
+                          max={asOfDate}
+                        />
+                      </div>
+                    </div>
+                    <div className="wl-manage-modal__foot ticker-custom-range-popup__foot">
+                      <button type="button" className="ticker-outline-btn ticker-outline-btn--sm ticker-custom-range-popup__btn" onClick={resetCustomChartRange}>
+                        Use timeframe
+                      </button>
+                      <button type="button" className="ticker-outline-btn ticker-outline-btn--sm ticker-custom-range-popup__btn" onClick={applyCustomChartRange}>
+                        Submit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div ref={chartBodyRef} className="ticker-chart-body">
@@ -2051,13 +1909,9 @@ export default function TickerPage() {
               <h2 className="ticker-card__h ticker-card__h--flex" id="ticker-news-h">
                 News
               </h2>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  <strong>News</strong> below is ticker-specific (company news) from Finnhub for{' '}
-                  <strong>{String(sym || '').toUpperCase()}</strong>.
-                </p>
-                <p className="ticker-data-tip__p">Headlines refresh whenever you change ticker.</p>
-              </DataInfoTip>
+              <Link to="/news" className="ticker-outline-btn ticker-outline-btn--sm">
+                View More
+              </Link>
             </div>
             {tickerNewsBusy ? <p className="ticker-page__news-sample-note">Loading ticker news…</p> : null}
             {!tickerNewsBusy && tickerNewsError ? <p className="ticker-page__news-sample-note">{tickerNewsError}</p> : null}
@@ -2117,24 +1971,29 @@ export default function TickerPage() {
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
+            hideStatsSection
           />
-          <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
-            <TickerAnnualReturnsPosNeg symbol={sym} annualReturns={annualReturnsDefaultRange} asOfDate={asOfDate} />
-          </TickerChartResizeScope>
-          <TickerChartResizeScope storageKey={RESIZE_KEY_QUARTERLY} defaultHeight={288}>
-            <TickerQuarterlyReturnsChart symbol={sym} quarterlyReturns={quarterlyReturnsDefaultRange} asOfDate={asOfDate} />
-          </TickerChartResizeScope>
+          <TickerAnnualReturnsFigma
+            symbol={sym}
+            annualReturns={quarterlyReturnsCurrentRange}
+            asOfDate={asOfDate}
+            resizeStorageKey={RESIZE_KEY_QUARTERLY_FIGMA}
+            resizeDefaultHeight={260}
+            periodMode="quarterly"
+            hideStatsSection
+          />
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
-            <TickerMonthlyReturnsChart symbol={sym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} />
+            <TickerMonthlyReturnsChart symbol={sym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} suppressChartDateFilter />
           </TickerChartResizeScope>
-          <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY_ADV} defaultHeight={300}>
+          {/* <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY_ADV} defaultHeight={300}>
             <TickerMonthlyReturnsWaterfallDonut
               key={sym}
               symbol={sym}
               monthlyReturns={monthlyReturnsRaw}
               asOfDate={asOfDate}
             />
-          </TickerChartResizeScope>
+          </TickerChartResizeScope> */}
+          
           <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>
             <h3 className="ticker-subh ticker-subh--flex">Relative Strength selector</h3>
             <DataInfoTip align="start">
@@ -2229,8 +2088,12 @@ export default function TickerPage() {
               ))}
             </div>
             <div className="ticker-signal-foot">
-              <IconTrendUp className="ticker-signal-foot__ico" />
-              <IconTrendDown className="ticker-signal-foot__ico" />
+              <Link to="/odin-signals" className="ticker-signal-foot__link">
+                Learn more about Odin Signals
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <path d="M14 5h5v5M10 14l9-9M19 14v5H5V5h5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </Link>
             </div>
           </section>
 

@@ -361,10 +361,7 @@ export function TickerQuarterlyReturnsChart({
       <div className="ticker-annual-figma__section">
         <div className="ticker-annual-figma__toolbar">
           <span className="ticker-annual-figma__badge">Quarterly returns</span>
-        </div>
-        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
-          <div className="ticker-annual-figma__left">{toolbarControls}</div>
-          <div className="ticker-annual-figma__right">
+          <div className="ticker-annual-figma__actions">
             <button
               type="button"
               className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
@@ -393,6 +390,9 @@ export function TickerQuarterlyReturnsChart({
               <IcoDownload /> Download CSV
             </button>
           </div>
+        </div>
+        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
+          <div className="ticker-annual-figma__left">{toolbarControls}</div>
         </div>
 
         {rows.length > 0 && !filteredRows.length ? (

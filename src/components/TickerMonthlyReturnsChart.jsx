@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
+import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { formatWeekAxisDate, isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
 
 const COL_BAR = '#2563eb';
+const COL_BAR_NEG = '#f59e0b';
 const COL_AVG = '#f97316';
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
 const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
@@ -15,6 +17,8 @@ const COL_AXIS = '#94a3b8';
 const COL_LABEL = '#e2e8f0';
 
 const DEFAULT_YEAR = 2025;
+/** Weekly statistic chart year picker lists every calendar year in this span (descending in UI). */
+const WEEKLY_YEAR_SELECT_MIN = 1980;
 
 function IcoTable() {
   return (
@@ -91,7 +95,7 @@ function yForValue(v, innerTop, innerH, yMin, yMax) {
 
 /**
  * Monthly returns for one calendar year (Figma-style), with year dropdown + info tip.
- * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean }} props
+ * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, useThemedYearDropdown?: boolean, hideChartDateApplyRow?: boolean }} props
  */
 export function TickerMonthlyReturnsChart({
   symbol,
@@ -100,11 +104,14 @@ export function TickerMonthlyReturnsChart({
   plotHeight,
   periodMode = 'monthly',
   suppressChartDateFilter = false,
-  showOpenPeriodPageButton = false
+  showOpenPeriodPageButton = false,
+  useThemedYearDropdown = false,
+  hideChartDateApplyRow = false
 }) {
   const navigate = useNavigate();
   const [showTable, setShowTable] = useState(false);
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
+  const showDateApplyRow = !suppressChartDateFilter && !hideChartDateApplyRow;
 
   const rows = useMemo(() => {
     if (!Array.isArray(monthlyReturns)) return [];
@@ -241,7 +248,7 @@ export function TickerMonthlyReturnsChart({
       const labY = v >= 0 ? top - 6 : top + h + 14;
       bars.push(
         <g key={m}>
-          <rect x={x} y={top} width={bw} height={Math.max(h, 1)} rx={2} fill={COL_BAR} />
+          <rect x={x} y={top} width={bw} height={Math.max(h, 1)} rx={2} fill={v < 0 ? COL_BAR_NEG : COL_BAR} />
           {periodMode === 'weekly' || periodMode === 'daily' ? null : (
             <text x={x + bw / 2} y={labY} textAnchor="middle" fill={COL_LABEL} fontSize="10" fontWeight="700">
               {v.toFixed(1)}%
@@ -311,7 +318,24 @@ export function TickerMonthlyReturnsChart({
   }, [avgReturn, monthValues, yMin, yMax, plotHeight, periodMode, weekAxisLabels]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
-  const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
+  const yearOptions = useMemo(() => {
+    if (hideChartDateApplyRow && periodMode === 'weekly') {
+      const hi = Math.max(2026, new Date().getFullYear());
+      const arr = [];
+      for (let y = hi; y >= WEEKLY_YEAR_SELECT_MIN; y -= 1) arr.push(y);
+      return arr;
+    }
+    return availableYears.length ? availableYears : [DEFAULT_YEAR];
+  }, [hideChartDateApplyRow, periodMode, availableYears]);
+  /** Always present newest-first (2026, 2025, …) in menus and native selects. */
+  const sortedYearOptionsDesc = useMemo(
+    () => [...yearOptions].sort((a, b) => b - a),
+    [yearOptions]
+  );
+  const yearDropdownOptions = useMemo(
+    () => sortedYearOptionsDesc.map((y) => ({ id: String(y), label: String(y) })),
+    [sortedYearOptionsDesc]
+  );
   const selectedYearRows = useMemo(
     () => filteredRows.filter((r) => r.year === selectedYear).sort((a, b) => a.month - b.month),
     [filteredRows, selectedYear]
@@ -367,6 +391,46 @@ export function TickerMonthlyReturnsChart({
     navigate(base + suffix);
   }, [navigate, periodMode, symbol]);
 
+  const yearToolbarDropdown =
+    !suppressChartDateFilter ? (
+      useThemedYearDropdown ? (
+        <div className="ticker-monthly__select-wrap ticker-monthly__select-wrap--toolbar">
+          <label className="ticker-monthly__select-label">Year</label>
+          <ThemedDropdown
+            size="sm"
+            value={String(selectedYear)}
+            options={yearDropdownOptions}
+            onChange={(v) => setSelectedYear(Number(v))}
+            title="Year"
+            ariaLabelPrefix="Year"
+            labelFallback={String(selectedYear)}
+            menuMaxHeight={
+              hideChartDateApplyRow && periodMode === 'weekly' ? 'min(260px, 45vh)' : undefined
+            }
+          />
+        </div>
+      ) : (
+        <div className="ticker-monthly__select-wrap ticker-monthly__select-wrap--toolbar">
+          <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-year">
+            Year
+          </label>
+          <select
+            id="ticker-monthly-year"
+            className="ticker-monthly__select"
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            aria-label="Select year for monthly returns"
+          >
+            {sortedYearOptionsDesc.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </div>
+      )
+    ) : null;
+
   if (!rows.length) {
     return (
       <div className="ticker-monthly">
@@ -389,15 +453,17 @@ export function TickerMonthlyReturnsChart({
                 <p className="ticker-data-tip__p">No monthly rows for {symU} yet.</p>
               </DataInfoTip>
             </div>
-            <select className="ticker-monthly__select" value={selectedYear} disabled aria-label="Year">
-              {yearOptions.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
+            {!suppressChartDateFilter ? (
+              <select className="ticker-monthly__select" value={selectedYear} disabled aria-label="Year">
+                {sortedYearOptionsDesc.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            ) : null}
           </div>
-          {!suppressChartDateFilter ? (
+          {showDateApplyRow ? (
             <ChartDateApplyRow
               idPrefix="monthly-returns-empty"
               maxDate={asOfDate}
@@ -448,35 +514,8 @@ export function TickerMonthlyReturnsChart({
               )}
             </DataInfoTip>
           </div>
-          <div className="ticker-monthly__select-wrap">
-            <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-year">
-              Year
-            </label>
-            <select
-              id="ticker-monthly-year"
-              className="ticker-monthly__select"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              aria-label="Select year for monthly returns"
-            >
-              {yearOptions.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        {!suppressChartDateFilter ? (
-          <ChartDateApplyRow
-            idPrefix="monthly-returns"
-            maxDate={asOfDate}
-            onApply={({ start, end }) => setRangeApplied({ start, end })}
-          />
-        ) : null}
-        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
-          <div className="ticker-annual-figma__left" />
-          <div className="ticker-annual-figma__right">
+          <div className="ticker-annual-figma__actions">
+            {hideChartDateApplyRow ? yearToolbarDropdown : null}
             <button
               type="button"
               className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
@@ -505,7 +544,49 @@ export function TickerMonthlyReturnsChart({
               <IcoDownload /> Download CSV
             </button>
           </div>
+          {!suppressChartDateFilter && !hideChartDateApplyRow ? (
+            useThemedYearDropdown ? (
+              <div className="ticker-monthly__select-wrap">
+                <label className="ticker-monthly__select-label">Year</label>
+                <ThemedDropdown
+                  size="sm"
+                  value={String(selectedYear)}
+                  options={yearDropdownOptions}
+                  onChange={(v) => setSelectedYear(Number(v))}
+                  title="Year"
+                  ariaLabelPrefix="Year"
+                  labelFallback={String(selectedYear)}
+                />
+              </div>
+            ) : (
+              <div className="ticker-monthly__select-wrap">
+                <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-year-trailing">
+                  Year
+                </label>
+                <select
+                  id="ticker-monthly-year-trailing"
+                  className="ticker-monthly__select"
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  aria-label="Select year for monthly returns"
+                >
+                  {sortedYearOptionsDesc.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )
+          ) : null}
         </div>
+        {showDateApplyRow ? (
+          <ChartDateApplyRow
+            idPrefix="monthly-returns"
+            maxDate={asOfDate}
+            onApply={({ start, end }) => setRangeApplied({ start, end })}
+          />
+        ) : null}
 
         <div className="ticker-annual-figma__chart-card">
           {rows.length > 0 && !filteredRows.length ? (

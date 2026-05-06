@@ -22,8 +22,8 @@ const RESIZE_KEY_M_WF = 'odin_ticker_monthly_resize_waterfall';
 const RETURNS_DEFAULT_START = '1980-01-01';
 const DEFAULT_MONTHLY_START_YEAR = 2021;
 const DEFAULT_MONTHLY_END_YEAR = 2026;
-const DEFAULT_WEEKLY_START_YEAR = 2024;
-const DEFAULT_WEEKLY_END_YEAR = 2026;
+const DEFAULT_WEEKLY_START_YEAR = 1980;
+const DEFAULT_WEEKLY_END_YEAR = Math.max(2026, new Date().getFullYear());
 const BENCHMARK = 'SPY';
 const PERF_COLS = [
   { label: '1M', period: 'Last Month' },
@@ -192,18 +192,16 @@ function qtdFromRows(sortedAsc) {
 }
 function IconTrendUp({ className }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="#00c805" strokeWidth="2" aria-hidden>
-      <path d="M4 14l6-6 4 4 6-8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 4h6v6" strokeLinecap="round" />
-    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">
+<path d="M18.3332 5.83301L11.776 12.3902C11.446 12.7202 11.281 12.8852 11.0907 12.947C10.9233 13.0014 10.743 13.0014 10.5757 12.947C10.3854 12.8852 10.2204 12.7202 9.89036 12.3902L7.60931 10.1091C7.2793 9.77914 7.11429 9.61413 6.92402 9.55231C6.75665 9.49792 6.57636 9.49792 6.40899 9.55231C6.21872 9.61413 6.05371 9.77914 5.72369 10.1092L1.6665 14.1663M18.3332 11.6663V5.83301H12.4998" stroke="#38C35B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
   );
 }
 function IconTrendDown({ className }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth="2" aria-hidden>
-      <path d="M4 10l6 6 4-4 6 6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 20h6v-6" strokeLinecap="round" />
-    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">
+<path d="M18.3332 14.1663L11.776 7.60915C11.446 7.27914 11.281 7.11413 11.0907 7.05231C10.9233 6.99792 10.743 6.99792 10.5757 7.05231C10.3854 7.11413 10.2204 7.27914 9.89036 7.60915L7.60931 9.8902C7.2793 10.2202 7.11429 10.3852 6.92402 10.447C6.75665 10.5014 6.57636 10.5014 6.40899 10.447C6.21872 10.3852 6.05371 10.2202 5.72369 9.8902L1.6665 5.83301M18.3332 8.33301V14.1663H12.4998" stroke="#FA4C60" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
   );
 }
 
@@ -553,15 +551,23 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
   }, [monthlyReturnsRaw]);
   const weekYearOptions = useMemo(() => {
     if (!isWeekly) return [];
-    const years = Array.from(
-      new Set(
-        (Array.isArray(monthlyReturnsRaw) ? monthlyReturnsRaw : [])
-          .map((r) => parseYear(r?.period))
-          .filter((y) => Number.isFinite(y))
-      )
-    ).sort((a, b) => a - b);
-    return years.length ? years : Array.from({ length: 2026 - 1980 + 1 }, (_, i) => 1980 + i);
+    const rows = Array.isArray(monthlyReturnsRaw) ? monthlyReturnsRaw : [];
+    const fromData = Array.from(
+      new Set(rows.map((r) => parseYear(r?.period)).filter((y) => Number.isFinite(y)))
+    );
+    const maxCal = Math.max(2026, new Date().getFullYear());
+    const hi = Math.max(maxCal, ...(fromData.length ? fromData : [maxCal]));
+    const lo = 1980;
+    return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
   }, [isWeekly, monthlyReturnsRaw]);
+
+  /** Avoid resetting user-defined weekly start/end when only raw rows refresh; reset when span or symbol changes. */
+  const weekYearSpanKey = useMemo(() => {
+    if (!isWeekly || !weekYearOptions.length) return '';
+    const lo = weekYearOptions[0];
+    const hi = weekYearOptions[weekYearOptions.length - 1];
+    return `${lo}:${hi}`;
+  }, [isWeekly, weekYearOptions]);
 
   useEffect(() => {
     if (isDaily || isWeekly || !monthYearOptions.length) return;
@@ -574,13 +580,11 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
   }, [isDaily, isWeekly, monthYearOptions]);
   useEffect(() => {
     if (!isWeekly || !weekYearOptions.length) return;
-    const hasDefaultStart = weekYearOptions.includes(DEFAULT_WEEKLY_START_YEAR);
-    const hasDefaultEnd = weekYearOptions.includes(DEFAULT_WEEKLY_END_YEAR);
-    const nextStart = hasDefaultStart ? DEFAULT_WEEKLY_START_YEAR : weekYearOptions[0];
-    const nextEnd = hasDefaultEnd ? DEFAULT_WEEKLY_END_YEAR : weekYearOptions[weekYearOptions.length - 1];
-    setWeeklyStartYear((prev) => (weekYearOptions.includes(Number(prev)) ? prev : String(nextStart)));
-    setWeeklyEndYear((prev) => (weekYearOptions.includes(Number(prev)) ? prev : String(nextEnd)));
-  }, [isWeekly, weekYearOptions]);
+    const lo = weekYearOptions[0];
+    const hi = weekYearOptions[weekYearOptions.length - 1];
+    setWeeklyStartYear(String(lo));
+    setWeeklyEndYear(String(hi));
+  }, [isWeekly, sym, weekYearSpanKey]);
 
   const monthlyChartRows = useMemo(() => {
     if (isDaily) return dailyReturnsForUi || [];
@@ -799,6 +803,8 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               asOfDate={asOfDate}
               periodMode={modeSlug}
               suppressChartDateFilter={isDaily}
+              hideChartDateApplyRow={isWeekly}
+              useThemedYearDropdown={isWeekly}
             />
           </TickerChartResizeScope>
           {!isWeekly && !isDaily ? (

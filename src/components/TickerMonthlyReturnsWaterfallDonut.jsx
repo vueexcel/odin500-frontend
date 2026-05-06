@@ -500,7 +500,7 @@ export function TickerMonthlyReturnsWaterfallDonut({
             ) : null}
             <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
               <div className="ticker-annual-figma__left" />
-              <div className="ticker-annual-figma__right">
+              {/* <div className="ticker-annual-figma__right">
                 <button
                   type="button"
                   className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
@@ -528,7 +528,7 @@ export function TickerMonthlyReturnsWaterfallDonut({
                 <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
                   <IcoDownload /> Download CSV
                 </button>
-              </div>
+              </div> */}
             </div>
             {monthlyFilteredEmpty ? (
               <div className="ticker-monthly-adv__empty">No {periodMode === 'weekly' ? 'weekly' : 'monthly'} rows overlap the selected date range.</div>

@@ -225,6 +225,28 @@ export default function NewsPage() {
           error={generalError}
           items={generalItems}
         />
+        <section className="news-page__card">
+          <div className="news-page__head">
+            <h2 className="news-page__title">Ticker-Specific News</h2>
+            <p className="news-page__subtitle">Type any symbol and load company-focused headlines.</p>
+          </div>
+          <div className="news-page__controls news-page__controls--ticker">
+            <label htmlFor="news-page-ticker">Ticker</label>
+            <TickerSymbolCombobox
+              symbol={ticker}
+              onSymbolChange={(next) => setTicker(sanitizeTickerPageInput(next) || DEFAULT_TICKER)}
+              inputId="news-page-ticker"
+              placeholder="Search ticker (e.g. AAPL)"
+            />
+          </div>
+          <NewsList
+            title=""
+            subtitle=""
+            busy={tickerBusy}
+            error={tickerError}
+            items={tickerItems}
+          />
+        </section>
 
         <section className="news-page__card">
           <div className="news-page__head">
@@ -252,28 +274,7 @@ export default function NewsPage() {
           />
         </section>
 
-        <section className="news-page__card">
-          <div className="news-page__head">
-            <h2 className="news-page__title">Ticker-Specific News</h2>
-            <p className="news-page__subtitle">Type any symbol and load company-focused headlines.</p>
-          </div>
-          <div className="news-page__controls news-page__controls--ticker">
-            <label htmlFor="news-page-ticker">Ticker</label>
-            <TickerSymbolCombobox
-              symbol={ticker}
-              onSymbolChange={(next) => setTicker(sanitizeTickerPageInput(next) || DEFAULT_TICKER)}
-              inputId="news-page-ticker"
-              placeholder="Search ticker (e.g. AAPL)"
-            />
-          </div>
-          <NewsList
-            title=""
-            subtitle=""
-            busy={tickerBusy}
-            error={tickerError}
-            items={tickerItems}
-          />
-        </section>
+        
       </div>
     </div>
   );

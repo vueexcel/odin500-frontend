@@ -14,6 +14,10 @@ const TABLE_RANGE_OPTIONS = [
   { value: '10', label: '10Y' },
   { value: 'max', label: 'Max' }
 ];
+const TABLE_RANGE_DROPDOWN_OPTIONS = TABLE_RANGE_OPTIONS.map((opt) => ({
+  id: opt.value,
+  label: opt.label
+}));
 const PREDEFINED_YEAR_BUCKETS = [5, 10, 15, 20, 25, 50];
 const TABLE_PAGE_SIZE = 30;
 const PAGER_SIBLING_COUNT = 1;
