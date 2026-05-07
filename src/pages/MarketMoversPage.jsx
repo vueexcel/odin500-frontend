@@ -4,7 +4,7 @@ import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
 import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
-import TradingChartLoader from '../components/TradingChartLoader.jsx';
+import { MarketMoversSplitBarsSkeleton } from '../components/ChartSkeletons.jsx';
 import { usePageSeo } from '../seo/usePageSeo.js';
 
 /** `apiIndex` matches POST /api/market/ticker-details `index` field (Supabase / BigQuery). */
@@ -1277,10 +1277,7 @@ export default function MarketMoversPage() {
 
         {loading ? (
           <div className="market-movers-page__viz-loading-wrap">
-            <TradingChartLoader
-              label="Loading market movers…"
-              sublabel={`${activeMoverInterval.label} · ${activeMenu.label}`}
-            />
+            <MarketMoversSplitBarsSkeleton />
           </div>
         ) : null}
         {error ? <div className="market-movers-page__error">{error}</div> : null}

@@ -8,6 +8,7 @@ import { formatWeekAxisDate, isoYearWeekFromIsoDate } from '../utils/isoWeek.js'
 import { periodModeNouns } from '../utils/periodModeNouns.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
+import { AnnualReturnsFigmaChartSkeleton, badgeLabelForPeriodMode } from './ChartSkeletons.jsx';
 
 /** Match `TickerLightweightChart` / dark ticker cards. */
 const COL_BAR = '#2563eb';
@@ -200,7 +201,7 @@ function csvEscape(s) {
 
 /**
  * Figma-style annual returns + stats (uses `performance.annualReturns` from ticker-returns API).
- * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, resizeStorageKey?: string, resizeDefaultHeight?: number, periodMode?: 'annual' | 'quarterly' | 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, toolbarControls?: import('react').ReactNode, hideStatsSection?: boolean, enableInlineYearDropdowns?: boolean }} props
+ * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, resizeStorageKey?: string, resizeDefaultHeight?: number, periodMode?: 'annual' | 'quarterly' | 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, toolbarControls?: import('react').ReactNode, hideStatsSection?: boolean, enableInlineYearDropdowns?: boolean, loading?: boolean }} props
  */
 export function TickerAnnualReturnsFigma({
   symbol,
@@ -214,7 +215,8 @@ export function TickerAnnualReturnsFigma({
   showOpenPeriodPageButton = false,
   toolbarControls = null,
   hideStatsSection = false,
-  enableInlineYearDropdowns = false
+  enableInlineYearDropdowns = false,
+  loading = false
 }) {
   const navigate = useNavigate();
   const resize = useTickerPlotResize(resizeStorageKey ?? null, resizeDefaultHeight);
@@ -842,26 +844,26 @@ export function TickerAnnualReturnsFigma({
   }, [stats, plotPx]);
 
   if (!rows.length) {
+    if (loading) {
+      return (
+        <AnnualReturnsFigmaChartSkeleton
+          periodMode={periodMode}
+          plotHeightPx={plotPx ?? resizeDefaultHeight}
+          toolbarControls={toolbarControls}
+          showOpenPeriodPageButton={showOpenPeriodPageButton}
+          enableInlineYearDropdowns={enableInlineYearDropdowns}
+        />
+      );
+    }
     return (
       <div className="ticker-annual-figma">
         <div className="ticker-annual-figma__section">
           <div className="ticker-annual-figma__toolbar">
-            <span className="ticker-annual-figma__badge">
-              {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'}
-            </span>
+            <span className="ticker-annual-figma__badge">{badgeLabelForPeriodMode(periodMode)}</span>
           </div>
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
-            <p className="ticker-annual-figma__empty">
-              No {periodMode === 'quarterly' ? 'quarterly' : periodMode === 'monthly' ? 'monthly' : periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'annual'} return series yet. Load completes after{' '}
-              <strong>ticker-returns</strong> returns{' '}
-              <code className="ticker-annual-figma__code">
-                performance.{periodMode === 'quarterly' ? 'quarterlyReturns' : periodMode === 'monthly' ? 'monthlyReturns' : periodMode === 'weekly' ? 'weeklyReturns' : periodMode === 'daily' ? 'dailyReturns' : 'annualReturns'}
-              </code>{' '}
-              for {String(symbol).toUpperCase()}.
-            </p>
-            {asOfDate ? (
-              <p className="ticker-annual-figma__empty-sub">As of {asOfDate} from returns payload.</p>
-            ) : null}
+            <p className="ticker-annual-figma__empty">No {badgeLabelForPeriodMode(periodMode).replace(' returns', '').toLowerCase()} return data for {String(symbol).toUpperCase()}.</p>
+            {asOfDate ? <p className="ticker-annual-figma__empty-sub">As of {asOfDate}.</p> : null}
           </div>
         </div>
       </div>

@@ -1853,6 +1853,7 @@ export default function IndexPage() {
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
             enableInlineYearDropdowns
+            loading={metaBusy}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
             <TickerAnnualReturnsPosNeg
@@ -1860,6 +1861,7 @@ export default function IndexPage() {
               annualReturns={annualReturnsFiltered}
               asOfDate={asOfDate}
               suppressChartDateFilter
+              loading={metaBusy}
             />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_QUARTERLY} defaultHeight={288}>
@@ -1868,11 +1870,18 @@ export default function IndexPage() {
               quarterlyReturns={quarterlyReturnsFiltered}
               quarterlyReturnsAll={quarterlyReturnsRaw}
               asOfDate={asOfDate}
+              loading={metaBusy}
               // toolbarControls={indexQuarterlyChartYearToolbar}
             />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
-            <TickerMonthlyReturnsChart symbol={displaySym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} suppressChartDateFilter />
+            <TickerMonthlyReturnsChart
+              symbol={displaySym}
+              monthlyReturns={monthlyReturnsRaw}
+              asOfDate={asOfDate}
+              suppressChartDateFilter
+              loading={metaBusy}
+            />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY_ADV} defaultHeight={300}>
             <TickerMonthlyReturnsWaterfallDonut
@@ -1881,6 +1890,7 @@ export default function IndexPage() {
               monthlyReturns={monthlyReturnsRaw}
               asOfDate={asOfDate}
               suppressChartDateFilter
+              loading={metaBusy}
             />
           </TickerChartResizeScope>
           <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>

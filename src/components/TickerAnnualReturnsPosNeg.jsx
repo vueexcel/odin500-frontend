@@ -5,6 +5,7 @@ import { periodModeNouns } from '../utils/periodModeNouns.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
+import { PosNegReturnsChartSkeleton } from './ChartSkeletons.jsx';
 
 const BUCKETS_DARK = [
   { key: 'b01', legend: '0-1%', color: '#38bdf8' },
@@ -199,7 +200,8 @@ export function TickerAnnualReturnsPosNeg({
   asOfDate,
   plotHeight,
   periodMode = 'annual',
-  suppressChartDateFilter = false
+  suppressChartDateFilter = false,
+  loading = false
 }) {
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const buckets = useMemo(() => bucketsForTheme(chartTheme), [chartTheme]);
@@ -264,6 +266,9 @@ export function TickerAnnualReturnsPosNeg({
   ) : null;
 
   if (!rows.length) {
+    if (loading) {
+      return <PosNegReturnsChartSkeleton periodMode={periodMode} />;
+    }
     return (
       <div className="ticker-annual-donut">
         <div className="ticker-annual-figma__section">
@@ -274,10 +279,7 @@ export function TickerAnnualReturnsPosNeg({
           </div>
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">
-              No {periodMode === 'quarterly' ? 'quarterly' : periodMode === 'monthly' ? 'monthly' : periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'annual'} return series for <strong>{symU}</strong>. Uses{' '}
-              <code className="ticker-annual-figma__code">
-                performance.{periodMode === 'quarterly' ? 'quarterlyReturns' : periodMode === 'monthly' ? 'monthlyReturns' : periodMode === 'weekly' ? 'weeklyReturns' : periodMode === 'daily' ? 'dailyReturns' : 'annualReturns'}
-              </code>.
+              No {periodMode === 'quarterly' ? 'quarterly' : periodMode === 'monthly' ? 'monthly' : periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'annual'} return data for <strong>{symU}</strong>.
             </p>
           </div>
         </div>

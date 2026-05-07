@@ -420,7 +420,6 @@ export function NormalizedPerformanceCard({
       </div>
 
       <div className="np-chart-wrap">
-        {loading ? <div className="np-card__status">Loading normalized performance…</div> : null}
         {error ? <div className="np-card__status np-card__status--error">{error}</div> : null}
         {loading ? (
           <div className="chart-viz-loading-wrap" style={{ minHeight: 390 }}>

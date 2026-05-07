@@ -862,6 +862,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
             periodMode={modeSlug}
             suppressChartDateFilter={isDaily}
             toolbarControls={isWeekly ? weeklyChartRangeControls : monthlyChartRangeControls}
+            loading={loading}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_M_POSNEG} defaultHeight={260}>
             <TickerAnnualReturnsPosNeg
@@ -870,6 +871,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               asOfDate={asOfDate}
               periodMode={modeSlug}
               suppressChartDateFilter={isDaily || isWeekly || monthlyChartRows}
+              loading={loading}
             />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_M_MAIN} defaultHeight={288}>
@@ -881,11 +883,18 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               suppressChartDateFilter={isDaily}
               hideChartDateApplyRow={isWeekly}
               useThemedYearDropdown={isWeekly}
+              loading={loading}
             />
           </TickerChartResizeScope>
           {!isWeekly && !isDaily ? (
             <TickerChartResizeScope storageKey={RESIZE_KEY_M_WF} defaultHeight={300}>
-              <TickerMonthlyReturnsWaterfallDonut symbol={symU} monthlyReturns={monthlyChartRows} asOfDate={asOfDate} periodMode={modeSlug} />
+              <TickerMonthlyReturnsWaterfallDonut
+                symbol={symU}
+                monthlyReturns={monthlyChartRows}
+                asOfDate={asOfDate}
+                periodMode={modeSlug}
+                loading={loading}
+              />
             </TickerChartResizeScope>
           ) : null}
           <div className="stats-cmp-charts">

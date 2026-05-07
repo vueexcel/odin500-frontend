@@ -7,6 +7,7 @@ import { formatWeekAxisDate, isoYearWeekFromIsoDate } from '../utils/isoWeek.js'
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
+import { MonthlyReturnsChartSkeleton } from './ChartSkeletons.jsx';
 
 const COL_BAR = '#2563eb';
 const COL_BAR_NEG = '#f59e0b';
@@ -95,7 +96,7 @@ function yForValue(v, innerTop, innerH, yMin, yMax) {
 
 /**
  * Monthly returns for one calendar year (Figma-style), with year dropdown + info tip.
- * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, useThemedYearDropdown?: boolean, hideChartDateApplyRow?: boolean }} props
+ * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, useThemedYearDropdown?: boolean, hideChartDateApplyRow?: boolean, loading?: boolean }} props
  */
 export function TickerMonthlyReturnsChart({
   symbol,
@@ -106,7 +107,8 @@ export function TickerMonthlyReturnsChart({
   suppressChartDateFilter = false,
   showOpenPeriodPageButton = false,
   useThemedYearDropdown: _useThemedYearDropdown = false,
-  hideChartDateApplyRow = false
+  hideChartDateApplyRow = false,
+  loading = false
 }) {
   const navigate = useNavigate();
   const isMonthlyMode = periodMode === 'monthly';
@@ -417,6 +419,9 @@ export function TickerMonthlyReturnsChart({
   const showYearInToolbar = isMonthlyMode || hideChartDateApplyRow;
 
   if (!rows.length) {
+    if (loading) {
+      return <MonthlyReturnsChartSkeleton periodMode={periodMode} />;
+    }
     return (
       <div className="ticker-monthly">
         
@@ -461,7 +466,7 @@ export function TickerMonthlyReturnsChart({
           ) : null}
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">
-              No <code className="ticker-annual-figma__code">{periodMode === 'weekly' ? 'weeklyReturns' : periodMode === 'daily' ? 'dailyReturns' : 'monthlyReturns'}</code> in the returns payload for {symU}.
+              No {periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'monthly'} return data for <strong>{symU}</strong>.
             </p>
           </div>
         </div>

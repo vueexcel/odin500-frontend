@@ -1,4 +1,5 @@
 import { ThemedDropdown } from './ThemedDropdown.jsx';
+import { StatsCmpChartSkeleton } from './ChartSkeletons.jsx';
 
 function fmtPct(v) {
   const n = Number(v);
@@ -59,7 +60,7 @@ export function PeriodicReturnBarChart({
         />
       </div>
       {loading ? (
-        <div className="stats-cmp-chart__state">Loading chart…</div>
+        <StatsCmpChartSkeleton variant="denseBars" />
       ) : !rows.length ? (
         <div className="stats-cmp-chart__state">No data available for selected range.</div>
       ) : (

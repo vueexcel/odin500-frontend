@@ -1978,6 +1978,7 @@ export default function TickerPage() {
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
             hideStatsSection
+            loading={metaBusy}
           />
           <TickerAnnualReturnsFigma
             symbol={sym}
@@ -1987,9 +1988,16 @@ export default function TickerPage() {
             resizeDefaultHeight={260}
             periodMode="quarterly"
             hideStatsSection
+            loading={metaBusy}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
-            <TickerMonthlyReturnsChart symbol={sym} monthlyReturns={monthlyReturnsRaw} asOfDate={asOfDate} suppressChartDateFilter />
+            <TickerMonthlyReturnsChart
+              symbol={sym}
+              monthlyReturns={monthlyReturnsRaw}
+              asOfDate={asOfDate}
+              suppressChartDateFilter
+              loading={metaBusy}
+            />
           </TickerChartResizeScope>
           {/* <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY_ADV} defaultHeight={300}>
             <TickerMonthlyReturnsWaterfallDonut

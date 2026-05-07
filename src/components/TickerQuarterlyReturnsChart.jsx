@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
+import { QuarterlyDualPanelChartSkeleton } from './ChartSkeletons.jsx';
 
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
 const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
@@ -76,7 +77,7 @@ function csvEscape(s) {
 
 /**
  * Two grouped quarterly bar charts (by year | by quarter), dark UI + per-panel info tips.
- * @param {{ symbol: string, quarterlyReturns?: unknown[], quarterlyReturnsAll?: unknown[], asOfDate?: string, plotHeight?: number, showOpenPeriodPageButton?: boolean, toolbarControls?: import('react').ReactNode }} props
+ * @param {{ symbol: string, quarterlyReturns?: unknown[], quarterlyReturnsAll?: unknown[], asOfDate?: string, plotHeight?: number, showOpenPeriodPageButton?: boolean, toolbarControls?: import('react').ReactNode, loading?: boolean }} props
  */
 export function TickerQuarterlyReturnsChart({
   symbol,
@@ -85,7 +86,8 @@ export function TickerQuarterlyReturnsChart({
   asOfDate,
   plotHeight,
   showOpenPeriodPageButton = false,
-  toolbarControls = null
+  toolbarControls = null,
+  loading = false
 }) {
   const navigate = useNavigate();
   const rowsAll = useMemo(() => buildRows(quarterlyReturnsAll ?? quarterlyReturns), [quarterlyReturnsAll, quarterlyReturns]);
@@ -340,6 +342,9 @@ export function TickerQuarterlyReturnsChart({
   }, [navigate, symbol]);
 
   if (!rowsAll.length) {
+    if (loading) {
+      return <QuarterlyDualPanelChartSkeleton toolbarControls={toolbarControls} />;
+    }
     return (
       <div className="ticker-quarterly">
         <div className="ticker-annual-figma__section">
@@ -348,7 +353,7 @@ export function TickerQuarterlyReturnsChart({
           </div>
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">
-              No <code className="ticker-annual-figma__code">quarterlyReturns</code> in the returns payload for {symU}.
+              No quarterly return data for <strong>{symU}</strong>.
             </p>
           </div>
         </div>

@@ -335,7 +335,8 @@ function ReturnTable({
   showRangeSelector = true,
   sectionKey = '',
   sectionRef = null,
-  highlighted = false
+  highlighted = false,
+  loading = false
 }) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
@@ -396,13 +397,13 @@ function ReturnTable({
               />
             </label>
           ) : null}
-          <button type="button" className="statistic-data__csv-btn" onClick={onDownloadCsv} disabled={!rows.length}>
+          <button type="button" className="statistic-data__csv-btn" onClick={onDownloadCsv} disabled={!rows.length || loading}>
             Download CSV
           </button>
         </div>
       </div>
-      <div className="statistic-data__table-wrap">
-        <table className="statistic-data__table">
+      <div className={'statistic-data__table-wrap' + (loading ? ' statistic-data__table-wrap--loading-skel' : '')}>
+        <table className="statistic-data__table" aria-busy={loading}>
           <thead>
             <tr>
               <th>Period</th>
@@ -412,7 +413,36 @@ function ReturnTable({
             </tr>
           </thead>
           <tbody>
-            {pageRows.length ? (
+            {loading ? (
+              Array.from({ length: TABLE_PAGE_SIZE }, (_, i) => (
+                <tr key={`${title}-skel-${i}`} className="statistic-data__tr--skeleton">
+                  <td>
+                    <span
+                      className="statistic-data__skel-cell"
+                      style={{ maxWidth: '88%', animationDelay: `${i * 0.04}s` }}
+                    />
+                  </td>
+                  <td>
+                    <span
+                      className="statistic-data__skel-cell"
+                      style={{ maxWidth: '56%', animationDelay: `${i * 0.04 + 0.02}s` }}
+                    />
+                  </td>
+                  <td>
+                    <span
+                      className="statistic-data__skel-cell"
+                      style={{ maxWidth: '72%', animationDelay: `${i * 0.04 + 0.04}s` }}
+                    />
+                  </td>
+                  <td>
+                    <span
+                      className="statistic-data__skel-cell"
+                      style={{ maxWidth: '80%', animationDelay: `${i * 0.04 + 0.06}s` }}
+                    />
+                  </td>
+                </tr>
+              ))
+            ) : pageRows.length ? (
               pageRows.map((row) => (
                 <tr key={`${title}-${row.period}`}>
                   <td>{row.period}</td>
@@ -438,10 +468,16 @@ function ReturnTable({
         </table>
       </div>
       <div className="statistic-data__pager">
-        <FigmaPagination page={pageSafe} totalPages={totalPages} onPageChange={setPage} />
-        <span className="statistic-data__pager-meta">
-          Page {pageSafe} of {totalPages} ({rows.length} rows)
-        </span>
+        {loading ? (
+          <span className="statistic-data__pager-meta statistic-data__pager-meta--stretch">Loading…</span>
+        ) : (
+          <>
+            <FigmaPagination page={pageSafe} totalPages={totalPages} onPageChange={setPage} />
+            <span className="statistic-data__pager-meta">
+              Page {pageSafe} of {totalPages} ({rows.length} rows)
+            </span>
+          </>
+        )}
       </div>
     </section>
   );
@@ -618,7 +654,6 @@ export default function StatisticDataPage() {
             placeholder="Search ticker (e.g. NVDA)"
           />
         </div>
-        {loading ? <span className="statistic-data__status">Loading tables…</span> : null}
         {error ? <span className="statistic-data__status statistic-data__status--err">{error}</span> : null}
         {dataCoverage.minDate ? (
           <span className="statistic-data__status">
@@ -635,6 +670,7 @@ export default function StatisticDataPage() {
           sectionKey="predefined"
           sectionRef={predefinedRef}
           highlighted={activeSection === 'predefined'}
+          loading={loading}
         />
         <ReturnTable
           title="Daily Returns"
@@ -644,6 +680,7 @@ export default function StatisticDataPage() {
           sectionKey="daily"
           sectionRef={dailyRef}
           highlighted={activeSection === 'daily'}
+          loading={loading}
         />
         <ReturnTable
           title="Weekly Returns"
@@ -653,6 +690,7 @@ export default function StatisticDataPage() {
           sectionKey="weekly"
           sectionRef={weeklyRef}
           highlighted={activeSection === 'weekly'}
+          loading={loading}
         />
         <ReturnTable
           title="Monthly Returns"
@@ -662,6 +700,7 @@ export default function StatisticDataPage() {
           sectionKey="monthly"
           sectionRef={monthlyRef}
           highlighted={activeSection === 'monthly'}
+          loading={loading}
         />
         <ReturnTable
           title="Quarterly Returns"
@@ -671,6 +710,7 @@ export default function StatisticDataPage() {
           sectionKey="quarterly"
           sectionRef={quarterlyRef}
           highlighted={activeSection === 'quarterly'}
+          loading={loading}
         />
         <ReturnTable
           title="Annual Returns"
@@ -680,6 +720,7 @@ export default function StatisticDataPage() {
           sectionKey="annual"
           sectionRef={annualRef}
           highlighted={activeSection === 'annual'}
+          loading={loading}
         />
       </div>
     </div>

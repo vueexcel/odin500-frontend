@@ -6,6 +6,7 @@ import { fetchWithAuth, getAuthToken } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 import { useTickerList } from '../hooks/useTickerList.js';
+import { LightweightChartAreaSkeleton } from '../components/ChartSkeletons.jsx';
 
 const INDEX_OPTIONS = ['SPY', 'QQQ', 'DIA', 'IWM'];
 const COLOR_BY_SERIES = {
@@ -399,9 +400,16 @@ export default function RelativeStrengthTickerPage() {
       </div>
 
       <div className="relative-strength-page__chart-card">
-        {loading ? <div className="relative-strength-page__state">Loading chart…</div> : null}
+        {loading ? (
+          <div className="relative-strength-page__chart-skel-overlay">
+            <LightweightChartAreaSkeleton minHeight={360} className="relative-strength-page__chart-skel-fill" />
+          </div>
+        ) : null}
         {!loading && error ? <div className="relative-strength-page__state relative-strength-page__state--error">{error}</div> : null}
-        <div className="relative-strength-page__chart-host" ref={chartHostRef} />
+        <div
+          className={'relative-strength-page__chart-host' + (loading ? ' relative-strength-page__chart-host--loading' : '')}
+          ref={chartHostRef}
+        />
         <div className="relative-strength-page__legend">
           {chartSeries.map((s) => (
             <span key={s.key} className="relative-strength-page__legend-item">

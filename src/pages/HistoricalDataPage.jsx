@@ -7,6 +7,7 @@ import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 
 const PAGE_SIZE = 50;
+const TABLE_SKELETON_ROWS = 24;
 const DEFAULT_TICKER = 'AAPL';
 
 /** @typedef {'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual'} OhlcFrequency */
@@ -468,12 +469,11 @@ export default function HistoricalDataPage() {
         </div>
       </section>
 
-      {busy ? <p className="historical-data__status">{loadingLabel}</p> : null}
       {error ? <p className="historical-data__status historical-data__status--err">{error}</p> : null}
 
       <section className="historical-data__table-card">
-        <div className="historical-data__table-wrap">
-          <table className="historical-data__table">
+        <div className={'historical-data__table-wrap' + (busy ? ' historical-data__table-wrap--loading' : '')}>
+          <table className="historical-data__table" aria-busy={busy} aria-label={busy ? loadingLabel : undefined}>
             <thead>
               <tr>
                 <th>{periodColumnLabel}</th>
@@ -485,7 +485,30 @@ export default function HistoricalDataPage() {
               </tr>
             </thead>
             <tbody>
-              {pageRows.length ? (
+              {busy ? (
+                Array.from({ length: TABLE_SKELETON_ROWS }, (_, i) => (
+                  <tr key={`hist-skel-${i}`} className="historical-data__tr--skeleton">
+                    <td>
+                      <span className="historical-data__skel-cell" style={{ maxWidth: '92%', animationDelay: `${i * 0.035}s` }} />
+                    </td>
+                    <td>
+                      <span className="historical-data__skel-cell" style={{ maxWidth: '64%', animationDelay: `${i * 0.035 + 0.02}s` }} />
+                    </td>
+                    <td>
+                      <span className="historical-data__skel-cell" style={{ maxWidth: '64%', animationDelay: `${i * 0.035 + 0.04}s` }} />
+                    </td>
+                    <td>
+                      <span className="historical-data__skel-cell" style={{ maxWidth: '64%', animationDelay: `${i * 0.035 + 0.06}s` }} />
+                    </td>
+                    <td>
+                      <span className="historical-data__skel-cell" style={{ maxWidth: '64%', animationDelay: `${i * 0.035 + 0.08}s` }} />
+                    </td>
+                    <td>
+                      <span className="historical-data__skel-cell" style={{ maxWidth: '52%', animationDelay: `${i * 0.035 + 0.1}s` }} />
+                    </td>
+                  </tr>
+                ))
+              ) : pageRows.length ? (
                 pageRows.map((r, idx) => (
                   <tr key={`${r.sortKey}-${idx}`}>
                     <td>{r.period || '—'}</td>
@@ -507,20 +530,26 @@ export default function HistoricalDataPage() {
           </table>
         </div>
         <div className="historical-data__pager">
-          <button type="button" className="historical-data__btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={pageSafe <= 1}>
-            Previous
-          </button>
-          <span>
-            Page {pageSafe} / {totalPages} ({rows.length} rows)
-          </span>
-          <button
-            type="button"
-            className="historical-data__btn"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={pageSafe >= totalPages}
-          >
-            Next
-          </button>
+          {busy ? (
+            <span className="historical-data__pager-loading">{loadingLabel}</span>
+          ) : (
+            <>
+              <button type="button" className="historical-data__btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={pageSafe <= 1}>
+                Previous
+              </button>
+              <span>
+                Page {pageSafe} / {totalPages} ({rows.length} rows)
+              </span>
+              <button
+                type="button"
+                className="historical-data__btn"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={pageSafe >= totalPages}
+              >
+                Next
+              </button>
+            </>
+          )}
         </div>
       </section>
     </div>

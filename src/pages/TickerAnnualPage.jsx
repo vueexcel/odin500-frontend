@@ -695,6 +695,7 @@ export default function TickerAnnualPage() {
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
             toolbarControls={annualChartRangeControls}
+            loading={loading}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
             <TickerAnnualReturnsPosNeg
@@ -702,6 +703,7 @@ export default function TickerAnnualPage() {
               annualReturns={annualReturnsFiltered}
               asOfDate={asOfDate}
               suppressChartDateFilter
+              loading={loading}
             />
           </TickerChartResizeScope>
           <div className="stats-cmp-charts">

@@ -7,6 +7,7 @@ import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
+import { WaterfallDonutChartSkeleton } from './ChartSkeletons.jsx';
 
 const DEFAULT_YEAR = 2025;
 const COL_INC = '#2563eb';
@@ -103,7 +104,8 @@ export function TickerMonthlyReturnsWaterfallDonut({
   plotHeight,
   periodMode = 'monthly',
   suppressChartDateFilter = false,
-  showOpenPeriodPageButton = false
+  showOpenPeriodPageButton = false,
+  loading = false
 }) {
   const navigate = useNavigate();
   const isMonthlyMode = periodMode === 'monthly';
@@ -362,8 +364,8 @@ export function TickerMonthlyReturnsWaterfallDonut({
       const ln = labelOnDonut((R0 + R1) / 2, midNeg);
       paths = (
         <>
-          <path d={pPos} fill={COL_DONUT_POS} stroke={ringStroke} strokeWidth="2.5" />
-          <path d={pNeg} fill={COL_DONUT_NEG} stroke={ringStroke} strokeWidth="2.5" />
+          <path d={pPos} fill={COL_DONUT_POS} stroke={ringStroke} strokeWidth="0" />
+          <path d={pNeg} fill={COL_DONUT_NEG} stroke={ringStroke} strokeWidth="0" />
         </>
       );
       labels = (
@@ -439,6 +441,9 @@ export function TickerMonthlyReturnsWaterfallDonut({
   const hasMonthlySource = monthRows.length > 0;
   const hasMonthly = displayMonthRows.length > 0;
   const monthlyFilteredEmpty = hasMonthlySource && !hasMonthly;
+  if (loading && !monthRows.length) {
+    return <WaterfallDonutChartSkeleton periodMode={periodMode} />;
+  }
   return (
     <div className="ticker-monthly-adv">
       

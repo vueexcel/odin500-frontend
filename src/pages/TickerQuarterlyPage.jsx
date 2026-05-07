@@ -634,6 +634,7 @@ export default function TickerQuarterlyPage() {
             resizeDefaultHeight={260}
             periodMode="quarterly"
             toolbarControls={chartRangeControls}
+            loading={loading}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_QTR_POSNEG} defaultHeight={260}>
             <TickerAnnualReturnsPosNeg
@@ -642,10 +643,16 @@ export default function TickerQuarterlyPage() {
               asOfDate={asOfDate}
               periodMode="quarterly"
               suppressChartDateFilter
+              loading={loading}
             />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_QTR_MAIN} defaultHeight={288}>
-            <TickerQuarterlyReturnsChart symbol={symU} quarterlyReturns={quarterlyChartRows} asOfDate={asOfDate} />
+            <TickerQuarterlyReturnsChart
+              symbol={symU}
+              quarterlyReturns={quarterlyChartRows}
+              asOfDate={asOfDate}
+              loading={loading}
+            />
           </TickerChartResizeScope>
           <div className="stats-cmp-charts">
             <AnnualReturnBarChart
