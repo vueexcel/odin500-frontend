@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { useNavigate } from 'react-router-dom';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
+import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
@@ -105,6 +106,7 @@ export function TickerMonthlyReturnsWaterfallDonut({
   showOpenPeriodPageButton = false
 }) {
   const navigate = useNavigate();
+  const isMonthlyMode = periodMode === 'monthly';
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const [showTable, setShowTable] = useState(false);
   const [monthRangeApplied, setMonthRangeApplied] = useState({ start: '', end: '' });
@@ -430,6 +432,10 @@ export function TickerMonthlyReturnsWaterfallDonut({
     navigate(base + suffix);
   }, [navigate, periodMode, symbol]);
   const yearOptions = availableYears.length ? availableYears : [DEFAULT_YEAR];
+  const yearDropdownOptions = useMemo(
+    () => yearOptions.map((y) => ({ id: String(y), label: String(y) })),
+    [yearOptions]
+  );
   const hasMonthlySource = monthRows.length > 0;
   const hasMonthly = displayMonthRows.length > 0;
   const monthlyFilteredEmpty = hasMonthlySource && !hasMonthly;
@@ -475,23 +481,21 @@ export function TickerMonthlyReturnsWaterfallDonut({
                 <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-adv-year">
                   Year
                 </label>
-                <select
-                  id="ticker-monthly-adv-year"
-                  className="ticker-monthly__select"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                <ThemedDropdown
+                  buttonId="ticker-monthly-adv-year"
+                  className="ticker-monthly__select-dd"
+                  size="sm"
+                  value={String(selectedYear)}
+                  options={yearDropdownOptions}
+                  onChange={(v) => setSelectedYear(Number(v))}
+                  title="Year for waterfall"
+                  ariaLabelPrefix="Year"
+                  labelFallback={String(selectedYear)}
                   disabled={!hasMonthlySource}
-                  aria-label="Year for waterfall"
-                >
-                  {yearOptions.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
-            {!suppressChartDateFilter ? (
+            {!isMonthlyMode && !suppressChartDateFilter ? (
               <ChartDateApplyRow
                 idPrefix="monthly-waterfall"
                 maxDate={asOfDate}

@@ -87,6 +87,7 @@ const RELATIVE_INDEX_OPTIONS = [
   { key: 'nasdaq-composite', label: 'Nasdaq Composite', apiIndex: 'nasdaq composite' },
   { key: 'nasdaq-100', label: 'Nasdaq 100', apiIndex: 'Nasdaq 100' }
 ];
+const RELATIVE_INDEX_DROPDOWN_OPTIONS = RELATIVE_INDEX_OPTIONS.map((o) => ({ id: o.key, label: o.label }));
 function yesterdayIsoForLongTable() {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -1245,6 +1246,10 @@ export default function TickerPage() {
     const base = [sym, BENCHMARK, ...(detailRows || []).map((r) => String(r.symbol || '').toUpperCase().trim())];
     return [...new Set(base.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
   }, [sym, detailRows]);
+  const tickerRsDropdownOptions = useMemo(
+    () => tickerSelectOptions.map((t) => ({ id: t, label: t })),
+    [tickerSelectOptions]
+  );
 
   const sortedChart = useMemo(() => sortRowsAsc(ohlcRows), [ohlcRows]);
 
@@ -1832,7 +1837,7 @@ export default function TickerPage() {
               </div>
               {chartHoverOhlc ? (
                   <span className="ticker-chart-legend__sigs">
-                    O:{chartHoverOhlc.open != null ? formatPx(chartHoverOhlc.open) : '—'} H:{chartHoverOhlc.high != null ? formatPx(chartHoverOhlc.high) : '—'} L:{chartHoverOhlc.low != null ? formatPx(chartHoverOhlc.low) : '—'} C:{chartHoverOhlc.close != null ? formatPx(chartHoverOhlc.close) : '—'}
+                    O:{chartHoverOhlc.open != null ? formatPx(chartHoverOhlc.open) : '—'}   H:{chartHoverOhlc.high != null ? formatPx(chartHoverOhlc.high) : '—'}   L:{chartHoverOhlc.low != null ? formatPx(chartHoverOhlc.low) : '—'}   C:{chartHoverOhlc.close != null ? formatPx(chartHoverOhlc.close) : '—'}
                   </span>
                 ) : null}
               </div>
@@ -2004,28 +2009,26 @@ export default function TickerPage() {
             </DataInfoTip>
           </div>
           <div className="ticker-rs-controls">
-            <select
-              className="ticker-page__date-inp ticker-rs-controls__select"
+            <ThemedDropdown
+              wideLabel
+              style={{ minWidth: 220, flex: '1 1 220px' }}
               value={relativeIndexKey}
-              onChange={(e) => setRelativeIndexKey(e.target.value)}
-            >
-              {RELATIVE_INDEX_OPTIONS.map((opt) => (
-                <option key={`rs-index-${opt.key}`} value={opt.key}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="ticker-page__date-inp ticker-rs-controls__select"
+              options={RELATIVE_INDEX_DROPDOWN_OPTIONS}
+              onChange={setRelativeIndexKey}
+              title="Benchmark index"
+              ariaLabelPrefix="Index"
+              labelFallback={RELATIVE_INDEX_OPTIONS.find((o) => o.key === relativeIndexKey)?.label ?? ''}
+            />
+            <ThemedDropdown
+              wideLabel
+              style={{ minWidth: 220, flex: '1 1 220px' }}
               value={relativeTickerSymbol}
-              onChange={(e) => setRelativeTickerSymbol(e.target.value)}
-            >
-              {tickerSelectOptions.map((opt) => (
-                <option key={`rs-ticker-${opt}`} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
+              options={tickerRsDropdownOptions}
+              onChange={setRelativeTickerSymbol}
+              title="Compare ticker"
+              ariaLabelPrefix="Ticker"
+              labelFallback={relativeTickerSymbol}
+            />
             {relativeCompareBusy ? <span className="ticker-page__loading-pill">Loading relative strength…</span> : null}
           </div>
           <TickerSection16Section17

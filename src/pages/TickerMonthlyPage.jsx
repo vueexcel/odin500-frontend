@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
@@ -7,6 +7,10 @@ import { TickerAnnualReturnsPosNeg } from '../components/TickerAnnualReturnsPosN
 import { TickerMonthlyReturnsChart } from '../components/TickerMonthlyReturnsChart.jsx';
 import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyReturnsWaterfallDonut.jsx';
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
+import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
+import { AnnualReturnBarChart } from '../components/AnnualReturnBarChart.jsx';
+import { ExcessReturnLineChart } from '../components/ExcessReturnLineChart.jsx';
+import { PeriodicReturnBarChart } from '../components/PeriodicReturnBarChart.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
@@ -14,6 +18,8 @@ import { pickRelatedByCategory, RELATED_INDEX_LINKS } from '../utils/relatedTick
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
+import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
+import { alignComparisonRows, filterRowsByDateRange, filterRowsBySingleYear, filterRowsByYearRange, normalizePeriodReturnsRows } from '../utils/statisticsComparisonSeries.js';
 
 const RESIZE_KEY_M_FIGMA = 'odin_ticker_monthly_resize_figma';
 const RESIZE_KEY_M_POSNEG = 'odin_ticker_monthly_resize_posneg';
@@ -25,6 +31,7 @@ const DEFAULT_MONTHLY_END_YEAR = 2026;
 const DEFAULT_WEEKLY_START_YEAR = 1980;
 const DEFAULT_WEEKLY_END_YEAR = Math.max(2026, new Date().getFullYear());
 const BENCHMARK = 'SPY';
+const BENCHMARK_OPTIONS = ['SPY', 'QQQ', 'DIA'].map((v) => ({ id: v, label: v }));
 const PERF_COLS = [
   { label: '1M', period: 'Last Month' },
   { label: '3M', period: 'Last 3 months' },
@@ -55,6 +62,7 @@ const TABLE_RANGE_OPTIONS = [
   { value: '10', label: '10Y' },
   { value: 'max', label: 'Max' }
 ];
+const TABLE_RANGE_DROPDOWN_OPTIONS = TABLE_RANGE_OPTIONS.map((opt) => ({ id: opt.value, label: opt.label }));
 
 function minMaxDailyPeriod(rows) {
   let min = '';
@@ -307,8 +315,10 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
   const [sym, setSym] = useState(() => sanitizeTickerPageInput(symbolParam) || 'AAPL');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [benchmarkIndex, setBenchmarkIndex] = useState(BENCHMARK);
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [monthlyReturnsRaw, setMonthlyReturnsRaw] = useState([]);
+  const [benchmarkReturnsRaw, setBenchmarkReturnsRaw] = useState([]);
   const [dynamicSym, setDynamicSym] = useState([]);
   const [dynamicSpy, setDynamicSpy] = useState([]);
   const [statsRows, setStatsRows] = useState([]);
@@ -325,6 +335,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
   const [dailyFetchRange, setDailyFetchRange] = useState(() =>
     defaultDailyFetchRange(new Date().toISOString().slice(0, 10))
   );
+  const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
 
   useEffect(() => {
     const next = sanitizeTickerPageInput(symbolParam) || 'AAPL';
@@ -377,12 +388,32 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               ttlMs: 5 * 60 * 1000
             })
           : fetchJsonCached({ path: '/api/market/ticker-monthly-returns', method: 'POST', body, ttlMs: 5 * 60 * 1000 });
-        const [mRes, coreSymRes, coreSpyRes, ohlcSymRes, ohlcSpyRes, detailsRes] = await Promise.all([
+        const benchmarkReq = isWeekly
+          ? fetchJsonCached({
+            path: '/api/market/weekly-ohlc',
+            method: 'POST',
+            body: { ticker: benchmarkIndex, start_date: RETURNS_DEFAULT_START, end_date: end },
+            ttlMs: 5 * 60 * 1000
+          })
+          : isDaily
+            ? fetchJsonCached({
+              path: `/api/market/ohlc?symbol=${encodeURIComponent(benchmarkIndex)}&start_date=${encodeURIComponent(dailyStart)}&end_date=${encodeURIComponent(dailyEnd)}&limit=400`,
+              method: 'GET',
+              ttlMs: 5 * 60 * 1000
+            })
+            : fetchJsonCached({
+              path: '/api/market/ticker-monthly-returns',
+              method: 'POST',
+              body: { ...body, ticker: benchmarkIndex },
+              ttlMs: 5 * 60 * 1000
+            });
+        const [mRes, mBenchRes, coreSymRes, coreSpyRes, ohlcSymRes, ohlcSpyRes, detailsRes] = await Promise.all([
           primaryReq,
+          benchmarkReq,
           fetchJsonCached({ path: '/api/market/ticker-core-returns', method: 'POST', body, ttlMs: 5 * 60 * 1000 }),
-          fetchJsonCached({ path: '/api/market/ticker-core-returns', method: 'POST', body: { ...body, ticker: BENCHMARK }, ttlMs: 5 * 60 * 1000 }),
+          fetchJsonCached({ path: '/api/market/ticker-core-returns', method: 'POST', body: { ...body, ticker: benchmarkIndex }, ttlMs: 5 * 60 * 1000 }),
           fetchJsonCached({ path: `/api/market/ohlc?symbol=${encodeURIComponent(tickerU)}&start_date=${encodeURIComponent(oneYearStartIso)}&end_date=${encodeURIComponent(end)}&limit=400`, method: 'GET', ttlMs: 10 * 60 * 1000 }),
-          fetchJsonCached({ path: `/api/market/ohlc?symbol=${encodeURIComponent(BENCHMARK)}&start_date=${encodeURIComponent(oneYearStartIso)}&end_date=${encodeURIComponent(end)}&limit=400`, method: 'GET', ttlMs: 10 * 60 * 1000 }),
+          fetchJsonCached({ path: `/api/market/ohlc?symbol=${encodeURIComponent(benchmarkIndex)}&start_date=${encodeURIComponent(oneYearStartIso)}&end_date=${encodeURIComponent(end)}&limit=400`, method: 'GET', ttlMs: 10 * 60 * 1000 }),
           fetchJsonCached({ path: '/api/market/ticker-details', method: 'POST', body: { index: 'sp500', period: 'last-1-year' }, ttlMs: 30 * 60 * 1000 })
         ]);
         if (cancelled) return;
@@ -390,8 +421,9 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
         const coreSymPerf = coreSymRes?.data?.performance || {};
         const coreSpyPerf = coreSpyRes?.data?.performance || {};
         if (isWeekly) {
-          const weekly = Array.isArray(mRes?.data?.weeklyOHLC) ? mRes.data.weeklyOHLC : [];
-          const mapped = weekly
+          const mapWeeklyPayload = (payload) => {
+            const weekly = Array.isArray(payload?.data?.weeklyOHLC) ? payload.data.weeklyOHLC : [];
+            return weekly
             .map((r) => {
               const open = Number(r?.Open ?? r?.open);
               const close = Number(r?.Close ?? r?.close);
@@ -431,8 +463,30 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               };
             })
             .filter(Boolean);
-          setMonthlyReturnsRaw(mapped);
+          };
+          setMonthlyReturnsRaw(mapWeeklyPayload(mRes));
+          setBenchmarkReturnsRaw(mapWeeklyPayload(mBenchRes));
         } else if (isDaily) {
+          const mapDailyPayload = (payload) => {
+            const rawRows = Array.isArray(payload?.data?.data) ? payload.data.data : Array.isArray(payload?.data) ? payload.data : [];
+            const sorted = sortRowsAsc(rawRows);
+            const mapped = [];
+            for (let i = 1; i < sorted.length; i += 1) {
+              const prev = pickNum(sorted[i - 1], ['Close', 'close']);
+              const next = pickNum(sorted[i], ['Close', 'close']);
+              const iso = rowDateToTimeKey(sorted[i]);
+              if (!iso || prev == null || next == null || prev === 0) continue;
+              mapped.push({
+                period: iso,
+                startDate: rowDateToTimeKey(sorted[i - 1]) || '',
+                endDate: iso,
+                startPrice: prev,
+                endPrice: next,
+                totalReturn: ((next - prev) / prev) * 100
+              });
+            }
+            return mapped;
+          };
           const rawRows = Array.isArray(mRes?.data?.data) ? mRes.data.data : Array.isArray(mRes?.data) ? mRes.data : [];
           console.info('[DailyReturns] API response rows', {
             symbol: tickerU,
@@ -440,29 +494,17 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
             endDate: dailyEnd,
             rawRows: rawRows.length
           });
-          const sorted = sortRowsAsc(rawRows);
-          const mapped = [];
-          for (let i = 1; i < sorted.length; i += 1) {
-            const prev = pickNum(sorted[i - 1], ['Close', 'close']);
-            const next = pickNum(sorted[i], ['Close', 'close']);
-            const iso = rowDateToTimeKey(sorted[i]);
-            if (!iso || prev == null || next == null || prev === 0) continue;
-            mapped.push({
-              period: iso,
-              startDate: rowDateToTimeKey(sorted[i - 1]) || '',
-              endDate: iso,
-              startPrice: prev,
-              endPrice: next,
-              totalReturn: ((next - prev) / prev) * 100
-            });
-          }
+          const mapped = mapDailyPayload(mRes);
           console.info('[DailyReturns] Mapped return rows', {
             symbol: tickerU,
             mappedRows: mapped.length
           });
           setMonthlyReturnsRaw(mapped);
+          setBenchmarkReturnsRaw(mapDailyPayload(mBenchRes));
         } else {
           setMonthlyReturnsRaw(Array.isArray(perf.monthlyReturns) ? perf.monthlyReturns : []);
+          const perfBench = mBenchRes?.data?.performance || {};
+          setBenchmarkReturnsRaw(Array.isArray(perfBench.monthlyReturns) ? perfBench.monthlyReturns : []);
         }
         setDynamicSym(Array.isArray(coreSymPerf.dynamicPeriods) ? coreSymPerf.dynamicPeriods : []);
         setDynamicSpy(Array.isArray(coreSpyPerf.dynamicPeriods) ? coreSpyPerf.dynamicPeriods : []);
@@ -476,6 +518,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
         if (!cancelled) {
           setError(e?.message || `Failed to load ${modeSlug} returns`);
           setMonthlyReturnsRaw([]);
+          setBenchmarkReturnsRaw([]);
           setDynamicSym([]);
           setDynamicSpy([]);
           setStatsRows([]);
@@ -487,7 +530,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [sym, isWeekly, isDaily, modeSlug, dailyFetchRange.start, dailyFetchRange.end]);
+  }, [sym, isWeekly, isDaily, modeSlug, dailyFetchRange.start, dailyFetchRange.end, benchmarkIndex]);
 
   const dailyReturnsForUi = useMemo(() => {
     if (!isDaily) return null;
@@ -620,61 +663,108 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
     weeklyEndYear,
     weeklyStartYear
   ]);
+  const benchmarkChartRows = useMemo(() => {
+    if (isDaily) return filterReturnsRows(benchmarkReturnsRaw, dailyFilter.start, dailyFilter.end);
+    if (isWeekly) {
+      const rows = Array.isArray(benchmarkReturnsRaw) ? benchmarkReturnsRaw : [];
+      return filterRowsByYearRange(
+        normalizePeriodReturnsRows(rows, 'weekly'),
+        weeklyStartYear,
+        weeklyEndYear
+      ).map((r) => ({ period: r.period, startDate: r.startDate, endDate: r.endDate, totalReturn: r.returnPct }));
+    }
+    const rows = Array.isArray(benchmarkReturnsRaw) ? benchmarkReturnsRaw : [];
+    return filterRowsByYearRange(
+      normalizePeriodReturnsRows(rows, 'monthly'),
+      chartStartYear,
+      chartEndYear
+    ).map((r) => ({ period: r.period, startDate: r.startDate, endDate: r.endDate, totalReturn: r.returnPct }));
+  }, [
+    benchmarkReturnsRaw,
+    chartEndYear,
+    chartStartYear,
+    dailyFilter.end,
+    dailyFilter.start,
+    isDaily,
+    isWeekly,
+    weeklyEndYear,
+    weeklyStartYear
+  ]);
+  const comparisonRows = useMemo(() => {
+    const modeForUtil = isDaily ? 'daily' : isWeekly ? 'weekly' : 'monthly';
+    const tRows = normalizePeriodReturnsRows(monthlyChartRows, modeForUtil);
+    const bRows = normalizePeriodReturnsRows(benchmarkChartRows, modeForUtil);
+    let out = alignComparisonRows(tRows, bRows);
+    if (isWeekly) out = filterRowsBySingleYear(out, weeklyEndYear);
+    if (isDaily) out = filterRowsByDateRange(out, dailyFilter.start, dailyFilter.end);
+    return out;
+  }, [benchmarkChartRows, dailyFilter.end, dailyFilter.start, isDaily, isWeekly, monthlyChartRows, weeklyEndYear]);
 
   const monthlyChartRangeControls = !isDaily && !isWeekly ? (
     <div className="ticker-page__custom-range" aria-label="Monthly chart year range">
       <span className="ticker-page__label ticker-page__label--inline">Start year</span>
-      <select
-        className="ticker-page__date-inp"
+      <ThemedDropdown
+        size="sm"
+        style={{ minWidth: 96 }}
         value={chartStartYear}
-        onChange={(e) => setChartStartYear(e.target.value)}
-      >
-        {monthYearOptions.map((y) => (
-          <option key={`monthly-chart-start-${y}`} value={String(y)}>
-            {y}
-          </option>
-        ))}
-      </select>
+        options={monthYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+        onChange={setChartStartYear}
+        title="Start year"
+        ariaLabelPrefix="Start year"
+        labelFallback={chartStartYear}
+      />
       <span className="ticker-page__label ticker-page__label--inline">End year</span>
-      <select
-        className="ticker-page__date-inp"
+      <ThemedDropdown
+        size="sm"
+        style={{ minWidth: 96 }}
         value={chartEndYear}
-        onChange={(e) => setChartEndYear(e.target.value)}
-      >
-        {monthYearOptions.map((y) => (
-          <option key={`monthly-chart-end-${y}`} value={String(y)}>
-            {y}
-          </option>
-        ))}
-      </select>
+        options={monthYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+        onChange={setChartEndYear}
+        title="End year"
+        ariaLabelPrefix="End year"
+        labelFallback={chartEndYear}
+      />
     </div>
   ) : null;
   const weeklyChartRangeControls = isWeekly ? (
     <div className="ticker-page__custom-range" aria-label="Weekly chart year range">
       <span className="ticker-page__label ticker-page__label--inline">Start date</span>
-      <select
-        className="ticker-page__date-inp"
+      <ThemedDropdown
+        size="sm"
+        style={{ minWidth: 96 }}
         value={weeklyStartYear}
-        onChange={(e) => setWeeklyStartYear(e.target.value)}
-      >
-        {weekYearOptions.map((y) => (
-          <option key={`weekly-chart-start-${y}`} value={String(y)}>
-            {y}
-          </option>
-        ))}
-      </select>
+        options={weekYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+        onChange={setWeeklyStartYear}
+        title="Weekly start year"
+        ariaLabelPrefix="Start year"
+        labelFallback={weeklyStartYear}
+      />
       <span className="ticker-page__label ticker-page__label--inline">End date</span>
-      <select
-        className="ticker-page__date-inp"
+      <ThemedDropdown
+        size="sm"
+        style={{ minWidth: 96 }}
         value={weeklyEndYear}
-        onChange={(e) => setWeeklyEndYear(e.target.value)}
-      >
-        {weekYearOptions.map((y) => (
-          <option key={`weekly-chart-end-${y}`} value={String(y)}>
-            {y}
-          </option>
-        ))}
-      </select>
+        options={weekYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+        onChange={setWeeklyEndYear}
+        title="Weekly end year"
+        ariaLabelPrefix="End year"
+        labelFallback={weeklyEndYear}
+      />
+    </div>
+  ) : null;
+  const weeklySingleYearControls = isWeekly ? (
+    <div className="ticker-page__custom-range" aria-label="Weekly chart year">
+      <span className="ticker-page__label ticker-page__label--inline">Select year</span>
+      <ThemedDropdown
+        size="sm"
+        style={{ minWidth: 96 }}
+        value={weeklyEndYear}
+        options={weekYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+        onChange={setWeeklyEndYear}
+        title="Select year"
+        ariaLabelPrefix="Year"
+        labelFallback={weeklyEndYear}
+      />
     </div>
   ) : null;
 
@@ -761,16 +851,16 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
 
   return (
     <div className="ticker-page">
-      <div className="ticker-page__search-row">
-        <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId={`ticker-${modeSlug}-symbol`} />
-        <span className="ticker-page__loading-pill">{loading ? `Loading ${modeSlug} data...` : `As of ${asOfDate}`}</span>
-      </div>
       {error ? <div className="ticker-page__error" role="alert">{error}</div> : null}
 
       <header className="ticker-page__header ticker-page__header--figma">
         <div className="ticker-page__header-top">
           <div className="ticker-page__header-identity">
             <h1 className="ticker-page__company ticker-page__company--hero">{symU} {modeLabel} Returns</h1>
+          </div>
+          <div className="ticker-page__header-controls">
+            <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId={`ticker-${modeSlug}-symbol`} />
+            {loading ? (<span className="ticker-page__loading-pill">Loading quarterly data…</span>) : null}
           </div>
         </div>
       </header>
@@ -793,7 +883,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               annualReturns={monthlyChartRows}
               asOfDate={asOfDate}
               periodMode={modeSlug}
-              suppressChartDateFilter={isDaily}
+              suppressChartDateFilter={isDaily || isWeekly || monthlyChartRows}
             />
           </TickerChartResizeScope>
           <TickerChartResizeScope storageKey={RESIZE_KEY_M_MAIN} defaultHeight={288}>
@@ -812,6 +902,56 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               <TickerMonthlyReturnsWaterfallDonut symbol={symU} monthlyReturns={monthlyChartRows} asOfDate={asOfDate} periodMode={modeSlug} />
             </TickerChartResizeScope>
           ) : null}
+          <div className="stats-cmp-charts">
+            <AnnualReturnBarChart
+              mode={modeSlug}
+              ticker={symU}
+              benchmarkIndex={benchmarkIndex}
+              startYear={Number(chartStartYear)}
+              endYear={Number(chartEndYear)}
+              selectedYear={Number(weeklyEndYear)}
+              startDate={dailyFilter.start}
+              endDate={dailyFilter.end}
+              theme={chartTheme}
+              rows={comparisonRows}
+              benchmarkOptions={BENCHMARK_OPTIONS}
+              onBenchmarkChange={setBenchmarkIndex}
+              controls={isDaily ? null : isWeekly ? weeklySingleYearControls : monthlyChartRangeControls}
+              loading={loading}
+            />
+            <ExcessReturnLineChart
+              mode={modeSlug}
+              ticker={symU}
+              benchmarkIndex={benchmarkIndex}
+              startYear={Number(chartStartYear)}
+              endYear={Number(chartEndYear)}
+              selectedYear={Number(weeklyEndYear)}
+              startDate={dailyFilter.start}
+              endDate={dailyFilter.end}
+              theme={chartTheme}
+              rows={comparisonRows}
+              benchmarkOptions={BENCHMARK_OPTIONS}
+              onBenchmarkChange={setBenchmarkIndex}
+              controls={isDaily ? null : isWeekly ? weeklySingleYearControls : monthlyChartRangeControls}
+              loading={loading}
+            />
+            <PeriodicReturnBarChart
+              mode={modeSlug}
+              ticker={symU}
+              benchmarkIndex={benchmarkIndex}
+              startYear={Number(chartStartYear)}
+              endYear={Number(chartEndYear)}
+              selectedYear={Number(weeklyEndYear)}
+              startDate={dailyFilter.start}
+              endDate={dailyFilter.end}
+              theme={chartTheme}
+              rows={comparisonRows}
+              benchmarkOptions={BENCHMARK_OPTIONS}
+              onBenchmarkChange={setBenchmarkIndex}
+              controls={isDaily ? null : isWeekly ? weeklySingleYearControls : monthlyChartRangeControls}
+              loading={loading}
+            />
+          </div>
 
           <section className="statistic-data__card">
             <div className="statistic-data__table-head">
@@ -877,31 +1017,44 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
                   <>
                     <label className="statistic-data__range">
                       <span>Start date</span>
-                      <select value={weeklyStartYear} onChange={(e) => setWeeklyStartYear(e.target.value)}>
-                        {weekYearOptions.map((y) => (
-                          <option key={`weekly-start-${y}`} value={String(y)}>
-                            {y}
-                          </option>
-                        ))}
-                      </select>
+                      <ThemedDropdown
+                        size="sm"
+                        style={{ minWidth: 86 }}
+                        value={weeklyStartYear}
+                        options={weekYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+                        onChange={setWeeklyStartYear}
+                        title="Table start year"
+                        ariaLabelPrefix="Start"
+                        labelFallback={weeklyStartYear}
+                      />
                     </label>
                     <label className="statistic-data__range">
                       <span>End date</span>
-                      <select value={weeklyEndYear} onChange={(e) => setWeeklyEndYear(e.target.value)}>
-                        {weekYearOptions.map((y) => (
-                          <option key={`weekly-end-${y}`} value={String(y)}>
-                            {y}
-                          </option>
-                        ))}
-                      </select>
+                      <ThemedDropdown
+                        size="sm"
+                        style={{ minWidth: 86 }}
+                        value={weeklyEndYear}
+                        options={weekYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+                        onChange={setWeeklyEndYear}
+                        title="Table end year"
+                        ariaLabelPrefix="End"
+                        labelFallback={weeklyEndYear}
+                      />
                     </label>
                   </>
                 ) : (
                   <label className="statistic-data__range">
                     <span>Range</span>
-                    <select value={tableRange} onChange={(e) => setTableRange(e.target.value)}>
-                      {TABLE_RANGE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-                    </select>
+                    <ThemedDropdown
+                      size="sm"
+                      style={{ minWidth: 86 }}
+                      value={tableRange}
+                      options={TABLE_RANGE_DROPDOWN_OPTIONS}
+                      onChange={setTableRange}
+                      title="Table range"
+                      ariaLabelPrefix="Range"
+                      labelFallback={TABLE_RANGE_OPTIONS.find((o) => o.value === tableRange)?.label ?? tableRange}
+                    />
                   </label>
                 )}
               </div>
@@ -983,9 +1136,9 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               </span>
             </p>
             
-            <div className="ticker-subh-with-tip"><h3 className="ticker-subh ticker-subh--flex">vs {BENCHMARK} (total return %, then difference)</h3></div>
+            <div className="ticker-subh-with-tip"><h3 className="ticker-subh ticker-subh--flex">vs {benchmarkIndex} (total return %, then difference)</h3></div>
             <div className="ticker-compare">
-              <div className="ticker-compare__head"><span /><span>{symU}</span><span>{BENCHMARK}</span><span>Diff</span></div>
+              <div className="ticker-compare__head"><span /><span>{symU}</span><span>{benchmarkIndex}</span><span>Diff</span></div>
               {COMPARE_ROWS.map((row) => {
                 const symPct = row.period ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period) : row.mtd ? selectedIndexSeries.mtd : row.qtd ? selectedIndexSeries.qtd : null;
                 const spyPct = row.period ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period) : row.mtd ? selectedTickerSeries.mtd : row.qtd ? selectedTickerSeries.qtd : null;

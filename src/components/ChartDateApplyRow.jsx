@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ThemedDropdown } from './ThemedDropdown.jsx';
 
 /**
  * Start / end date inputs + Submit (+ Clear) for client-side chart filtering.
@@ -31,8 +32,11 @@ export function ChartDateApplyRow({
   const normalizedMaxYear = Number.isFinite(Number(maxYear)) ? Math.floor(Number(maxYear)) : 2026;
   const yearLo = Math.min(normalizedMinYear, normalizedMaxYear);
   const yearHi = Math.max(normalizedMinYear, normalizedMaxYear);
-  const years = [];
-  for (let y = yearHi; y >= yearLo; y -= 1) years.push(String(y));
+  const yearDropdownOptions = useMemo(() => {
+    const ys = [];
+    for (let y = yearHi; y >= yearLo; y -= 1) ys.push(String(y));
+    return [{ id: '', label: 'All' }, ...ys.map((y) => ({ id: y, label: y }))];
+  }, [yearLo, yearHi]);
 
   const applyRange = useCallback(
     (startVal, endVal) => {
@@ -84,19 +88,18 @@ export function ChartDateApplyRow({
     <div className="chart-date-apply">
       <span className="ticker-page__label ticker-page__label--inline">{mode === 'year' ? 'Start year' : 'Start date'}</span>
       {mode === 'year' ? (
-        <select
-          id={idPrefix + '-start-year'}
-          className="ticker-page__date-inp"
+        <ThemedDropdown
+          buttonId={idPrefix + '-start-year'}
+          className="chart-date-apply__year-dd"
+          size="sm"
+          style={{ minWidth: 88 }}
           value={start}
-          onChange={(ev) => setStart(ev.target.value)}
-        >
-          <option value="">All</option>
-          {years.map((y) => (
-            <option key={idPrefix + '-start-opt-' + y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
+          options={yearDropdownOptions}
+          onChange={setStart}
+          title="Start year"
+          ariaLabelPrefix="Start year"
+          labelFallback={start ? start : 'All'}
+        />
       ) : (
         <input
           id={idPrefix + '-start'}
@@ -109,19 +112,18 @@ export function ChartDateApplyRow({
       )}
       <span className="ticker-page__label ticker-page__label--inline">{mode === 'year' ? 'End year' : 'End date'}</span>
       {mode === 'year' ? (
-        <select
-          id={idPrefix + '-end-year'}
-          className="ticker-page__date-inp"
+        <ThemedDropdown
+          buttonId={idPrefix + '-end-year'}
+          className="chart-date-apply__year-dd"
+          size="sm"
+          style={{ minWidth: 88 }}
           value={end}
-          onChange={(ev) => setEnd(ev.target.value)}
-        >
-          <option value="">All</option>
-          {years.map((y) => (
-            <option key={idPrefix + '-end-opt-' + y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
+          options={yearDropdownOptions}
+          onChange={setEnd}
+          title="End year"
+          ariaLabelPrefix="End year"
+          labelFallback={end ? end : 'All'}
+        />
       ) : (
         <input
           id={idPrefix + '-end'}

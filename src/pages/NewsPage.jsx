@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
@@ -12,6 +13,10 @@ const INDEX_SYMBOLS = [
   { key: 'dow', label: 'Dow Jones', symbol: 'DIA' },
   { key: 'nasdaq100', label: 'Nasdaq 100', symbol: 'QQQ' }
 ];
+const INDEX_NEWS_DROPDOWN_OPTIONS = INDEX_SYMBOLS.map((opt) => ({
+  id: opt.key,
+  label: `${opt.label} (${opt.symbol})`
+}));
 const DEFAULT_TICKER = 'AAPL';
 
 const FALLBACK_GENERAL = [
@@ -256,13 +261,21 @@ export default function NewsPage() {
           <div className="news-page__controls">
             <label>
               Index
-              <select className="news-page__select" value={indexKey} onChange={(e) => setIndexKey(e.target.value)}>
-                {INDEX_SYMBOLS.map((opt) => (
-                  <option key={opt.key} value={opt.key}>
-                    {opt.label} ({opt.symbol})
-                  </option>
-                ))}
-              </select>
+              <ThemedDropdown
+                wideLabel
+                className="news-page__index-dropdown"
+                size="sm"
+                style={{ minWidth: 200, maxWidth: '100%' }}
+                value={indexKey}
+                options={INDEX_NEWS_DROPDOWN_OPTIONS}
+                onChange={setIndexKey}
+                title="Index proxy"
+                ariaLabelPrefix="Index news"
+                labelFallback={(() => {
+                  const o = INDEX_SYMBOLS.find((x) => x.key === indexKey);
+                  return o ? `${o.label} (${o.symbol})` : '';
+                })()}
+              />
             </label>
           </div>
           <NewsList

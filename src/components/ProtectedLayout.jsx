@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { warmWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
@@ -6,7 +6,6 @@ import { warmWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
 import { AppMainTopBar } from './AppMainTopBar.jsx';
 import { AppSidebar } from './AppSidebar.jsx';
 import { AppRightRail } from './AppRightRail.jsx';
-import { SiteFooter } from './SiteFooter.jsx';
 import { useSitewideSeo } from '../seo/usePageSeo.js';
 
 export function ProtectedLayout() {
@@ -31,6 +30,7 @@ export function ProtectedLayout() {
     }
     return 'dark';
   });
+  const mainScrollRef = useRef(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -79,6 +79,12 @@ export function ProtectedLayout() {
     setMobileLeftOpen(false);
   }, [location.pathname, location.search, isMobile]);
 
+  useEffect(() => {
+    const scroller = mainScrollRef.current;
+    if (scroller) scroller.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    if (typeof window !== 'undefined') window.scrollTo(0, 0);
+  }, [location.pathname, location.search]);
+
   const toggleTheme = () => {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
   };
@@ -106,9 +112,8 @@ export function ProtectedLayout() {
         />
         <div className="app-main-column">
           <AppMainTopBar theme={theme} onToggleTheme={toggleTheme} />
-          <div className="app-main-scroll">
+          <div className="app-main-scroll" ref={mainScrollRef}>
             <Outlet />
-            <SiteFooter />
           </div>
         </div>
         <AppRightRail mobileOpen={isMobile && mobileRightOpen} onRequestClose={() => setMobileRightOpen(false)} />

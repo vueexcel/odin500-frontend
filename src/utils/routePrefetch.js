@@ -47,6 +47,9 @@ export function prefetchRouteChunks(to) {
     return markAndRun('odin-signals', () => import('../pages/OdinSignalsPage.jsx'));
   }
   if (p.startsWith('/statistic-data')) return markAndRun('statistic-data', () => import('../pages/StatisticDataPage.jsx'));
+  if (p.startsWith('/relative-strength/ticker')) {
+    return markAndRun('relative-strength-ticker', () => import('../pages/RelativeStrengthTickerPage.jsx'));
+  }
   if (p.startsWith('/historical-data')) return markAndRun('historical-data', () => import('../pages/HistoricalDataPage.jsx'));
   if (p.startsWith('/accounts')) return markAndRun('accounts', () => import('../pages/AccountsPage.jsx'));
   if (p.startsWith('/premium') || p.startsWith('/pricing')) return markAndRun('premium', () => import('../pages/Pricing.jsx'));

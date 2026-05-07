@@ -777,7 +777,7 @@ export default function OdinSignalsPage() {
 
               <footer className="heatmap-scale-bar odin-signals-heatmap__scale">
                 <div className="heatmap-scale-bar__swatches odin-signals-heatmap__figma-legend">
-                  {ODIN_FIGMA_LEGEND_ITEMS.map((item) => (
+                  {/* {ODIN_FIGMA_LEGEND_ITEMS.map((item) => (
                     <div key={item.code} className="heatmap-scale-bar__cell">
                       <span
                         className="heatmap-scale-bar__chip"
@@ -785,7 +785,7 @@ export default function OdinSignalsPage() {
                       />
                       <span className="heatmap-scale-bar__lbl">{item.label}</span>
                     </div>
-                  ))}
+                  ))} */}
                 </div>
                 <div className="heatmap-scale-bar__slider">
                   <label htmlFor="odin-signal-bin-span">Return range ±{odinSignalBinSpan}% → buckets S3…L3</label>

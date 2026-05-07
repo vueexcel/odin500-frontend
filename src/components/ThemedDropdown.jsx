@@ -19,7 +19,13 @@ function ChevronDownIcon({ className }) {
  *   ariaLabelPrefix?: string,
  *   labelFallback?: string,
  *   size?: 'md' | 'sm',
- *   menuMaxHeight?: string
+ *   menuMaxHeight?: string,
+ *   className?: string,
+ *   style?: import('react').CSSProperties,
+ *   buttonId?: string,
+ *   wideLabel?: boolean,
+ *   menuMatchTriggerWidth?: boolean,
+ *   disabled?: boolean
  * }} props
  */
 export function ThemedDropdown({
@@ -31,10 +37,20 @@ export function ThemedDropdown({
   ariaLabelPrefix = 'Selected',
   labelFallback = 'Select',
   size = 'md',
-  menuMaxHeight
+  menuMaxHeight,
+  className = '',
+  style,
+  buttonId,
+  wideLabel = false,
+  menuMatchTriggerWidth = true,
+  disabled = false
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   useEffect(() => {
     if (!open) return;
@@ -57,16 +73,25 @@ export function ThemedDropdown({
     [options, value, labelFallback]
   );
 
+  const rootClass =
+    'app-dropdown' +
+    (size === 'sm' ? ' app-dropdown--sm' : '') +
+    (wideLabel ? ' app-dropdown--wide-label' : '') +
+    (menuMatchTriggerWidth ? ' app-dropdown--menu-match' : '') +
+    (className ? ' ' + className.trim() : '');
+
   return (
-    <div className={'app-dropdown' + (size === 'sm' ? ' app-dropdown--sm' : '')} ref={wrapRef}>
+    <div className={rootClass} style={style} ref={wrapRef}>
       <button
         type="button"
+        id={buttonId}
         className="app-dropdown__btn"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`${ariaLabelPrefix}: ${currentLabel}`}
         title={title}
-        onClick={() => setOpen((prev) => !prev)}
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((prev) => !prev)}
       >
         {icon ? <span className="app-dropdown__icon">{icon}</span> : null}
         <span className="app-dropdown__label">{currentLabel}</span>

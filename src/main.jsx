@@ -27,6 +27,7 @@ const TickerQuarterlyPage = lazy(() => import('./pages/TickerQuarterlyPage.jsx')
 const TickerMonthlyPage = lazy(() => import('./pages/TickerMonthlyPage.jsx'));
 const TickerWeeklyPage = lazy(() => import('./pages/TickerWeeklyPage.jsx'));
 const TickerDailyPage = lazy(() => import('./pages/TickerDailyPage.jsx'));
+const RelativeStrengthTickerPage = lazy(() => import('./pages/RelativeStrengthTickerPage.jsx'));
 const HistoricalDataPage = lazy(() => import('./pages/HistoricalDataPage.jsx'));
 const NewsPage = lazy(() => import('./pages/NewsPage.jsx'));
 const Pricing = lazy(() => import('./pages/Pricing.jsx'));
@@ -125,6 +126,7 @@ function AppRoutes() {
           element={<Navigate to={`/statistic/ticker-daily/${DEFAULT_TICKER_ROUTE_SYMBOL}`} replace />}
         />
         <Route path="/statistic/ticker-daily/:symbol" element={<TickerDailyPage />} />
+        <Route path="/relative-strength/ticker" element={<RelativeStrengthTickerPage />} />
         <Route path="/historical-data" element={<HistoricalDataPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/premium" element={<Pricing />} />

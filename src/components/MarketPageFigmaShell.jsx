@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { fetchJsonCached, fetchWithAuth, getAuthToken } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
@@ -459,20 +460,38 @@ export function MarketPageFigmaShell() {
         <div className="mkt-options">
           <label className="mkt-options__item">
             <span>Refresh</span>
-            <select value={refreshMode} onChange={(e) => setRefreshMode(e.target.value)}>
-              <option value="manual">Manual</option>
-              <option value="15s">15s</option>
-              <option value="30s">30s</option>
-              <option value="60s">60s</option>
-            </select>
+            <ThemedDropdown
+              className="mkt-options__dd"
+              size="sm"
+              wideLabel
+              value={refreshMode}
+              options={[
+                { id: 'manual', label: 'Manual' },
+                { id: '15s', label: '15s' },
+                { id: '30s', label: '30s' },
+                { id: '60s', label: '60s' }
+              ]}
+              onChange={setRefreshMode}
+              title="Refresh interval"
+              ariaLabelPrefix="Refresh"
+            />
           </label>
           <label className="mkt-options__item">
             <span>Axis</span>
-            <select value={axisMode} onChange={(e) => setAxisMode(e.target.value)}>
-              <option value="auto">Auto</option>
-              <option value="fixed10">Fixed ±10%</option>
-              <option value="fixed20">Fixed ±20%</option>
-            </select>
+            <ThemedDropdown
+              className="mkt-options__dd"
+              size="sm"
+              wideLabel
+              value={axisMode}
+              options={[
+                { id: 'auto', label: 'Auto' },
+                { id: 'fixed10', label: 'Fixed ±10%' },
+                { id: 'fixed20', label: 'Fixed ±20%' }
+              ]}
+              onChange={setAxisMode}
+              title="Chart axis mode"
+              ariaLabelPrefix="Axis"
+            />
           </label>
         </div>
         <NormalizedPerformanceCard

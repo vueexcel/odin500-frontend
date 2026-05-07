@@ -76,6 +76,16 @@ function IconMoon() {
   );
 }
 
+function IconHelpCircle() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M9.8 9.2a2.3 2.3 0 1 1 4.2 1.35c-.45.64-1.02.95-1.5 1.35-.44.36-.76.8-.76 1.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="12" cy="17.35" r="1.1" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = null }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -325,6 +335,10 @@ export function AppHeader({ compact = false, theme = 'dark', onToggleTheme = nul
               <span className="header-theme-switch-track">
                 <span className="header-theme-switch-thumb">{theme === 'light' ? <IconSun /> : <IconMoon />}</span>
               </span>
+            </button>
+            <button type="button" className="header-help-center-btn" aria-label="Help Center" title="Help Center">
+              <IconHelpCircle />
+              <span>Help Center</span>
             </button>
           </div>
         </div>

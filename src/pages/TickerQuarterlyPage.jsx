@@ -1,16 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
+import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
 import { TickerAnnualReturnsPosNeg } from '../components/TickerAnnualReturnsPosNeg.jsx';
 import { TickerQuarterlyReturnsChart } from '../components/TickerQuarterlyReturnsChart.jsx';
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
+import { AnnualReturnBarChart } from '../components/AnnualReturnBarChart.jsx';
+import { ExcessReturnLineChart } from '../components/ExcessReturnLineChart.jsx';
+import { PeriodicReturnBarChart } from '../components/PeriodicReturnBarChart.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { pickRelatedByCategory, RELATED_INDEX_LINKS } from '../utils/relatedTickers.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
+import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
+import { alignComparisonRows, filterRowsByYearRange, normalizePeriodReturnsRows } from '../utils/statisticsComparisonSeries.js';
 
 const RESIZE_KEY_QTR_FIGMA = 'odin_ticker_quarterly_resize_figma';
 const RESIZE_KEY_QTR_POSNEG = 'odin_ticker_quarterly_resize_posneg';
@@ -19,6 +25,7 @@ const RETURNS_DEFAULT_START = '1980-01-01';
 const DEFAULT_START_YEAR = 2018;
 const DEFAULT_END_YEAR = 2026;
 const BENCHMARK = 'SPY';
+const BENCHMARK_OPTIONS = ['SPY', 'QQQ', 'DIA'].map((v) => ({ id: v, label: v }));
 const PERF_COLS = [
   { label: '1M', period: 'Last Month' },
   { label: '3M', period: 'Last 3 months' },
@@ -194,8 +201,10 @@ export default function TickerQuarterlyPage() {
   const [sym, setSym] = useState(() => sanitizeTickerPageInput(symbolParam) || 'AAPL');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [benchmarkIndex, setBenchmarkIndex] = useState(BENCHMARK);
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [quarterlyReturnsRaw, setQuarterlyReturnsRaw] = useState([]);
+  const [quarterlyReturnsBenchRaw, setQuarterlyReturnsBenchRaw] = useState([]);
   const [dynamicSym, setDynamicSym] = useState([]);
   const [dynamicSpy, setDynamicSpy] = useState([]);
   const [statsRows, setStatsRows] = useState([]);
@@ -206,6 +215,7 @@ export default function TickerQuarterlyPage() {
   const [tableStartYear, setTableStartYear] = useState(String(DEFAULT_START_YEAR));
   const [tableEndYear, setTableEndYear] = useState(String(DEFAULT_END_YEAR));
   const [tablePage, setTablePage] = useState(1);
+  const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
 
   useEffect(() => {
     const next = sanitizeTickerPageInput(symbolParam) || 'AAPL';
@@ -250,13 +260,14 @@ export default function TickerQuarterlyPage() {
         const oneYearStart = new Date(end + 'T12:00:00');
         oneYearStart.setFullYear(oneYearStart.getFullYear() - 1);
         const oneYearStartIso = oneYearStart.toISOString().slice(0, 10);
-        const [qRes, coreSymRes, coreSpyRes, ohlcSymRes, ohlcSpyRes, detailsRes] = await Promise.all([
+        const [qRes, qBenchRes, coreSymRes, coreSpyRes, ohlcSymRes, ohlcSpyRes, detailsRes] = await Promise.all([
           fetchJsonCached({ path: '/api/market/ticker-quarterly-returns', method: 'POST', body, ttlMs: 5 * 60 * 1000 }),
+          fetchJsonCached({ path: '/api/market/ticker-quarterly-returns', method: 'POST', body: { ...body, ticker: benchmarkIndex }, ttlMs: 5 * 60 * 1000 }),
           fetchJsonCached({ path: '/api/market/ticker-core-returns', method: 'POST', body, ttlMs: 5 * 60 * 1000 }),
           fetchJsonCached({
             path: '/api/market/ticker-core-returns',
             method: 'POST',
-            body: { ...body, ticker: BENCHMARK },
+            body: { ...body, ticker: benchmarkIndex },
             ttlMs: 5 * 60 * 1000
           }),
           fetchJsonCached({
@@ -265,7 +276,7 @@ export default function TickerQuarterlyPage() {
             ttlMs: 10 * 60 * 1000
           }),
           fetchJsonCached({
-            path: `/api/market/ohlc?symbol=${encodeURIComponent(BENCHMARK)}&start_date=${encodeURIComponent(oneYearStartIso)}&end_date=${encodeURIComponent(end)}&limit=400`,
+            path: `/api/market/ohlc?symbol=${encodeURIComponent(benchmarkIndex)}&start_date=${encodeURIComponent(oneYearStartIso)}&end_date=${encodeURIComponent(end)}&limit=400`,
             method: 'GET',
             ttlMs: 10 * 60 * 1000
           }),
@@ -278,9 +289,11 @@ export default function TickerQuarterlyPage() {
         ]);
         if (cancelled) return;
         const perf = qRes?.data?.performance || {};
+        const perfBench = qBenchRes?.data?.performance || {};
         const coreSymPerf = coreSymRes?.data?.performance || {};
         const coreSpyPerf = coreSpyRes?.data?.performance || {};
         setQuarterlyReturnsRaw(Array.isArray(perf.quarterlyReturns) ? perf.quarterlyReturns : []);
+        setQuarterlyReturnsBenchRaw(Array.isArray(perfBench.quarterlyReturns) ? perfBench.quarterlyReturns : []);
         setDynamicSym(Array.isArray(coreSymPerf.dynamicPeriods) ? coreSymPerf.dynamicPeriods : []);
         setDynamicSpy(Array.isArray(coreSpyPerf.dynamicPeriods) ? coreSpyPerf.dynamicPeriods : []);
         const symRows = Array.isArray(ohlcSymRes?.data?.data) ? ohlcSymRes.data.data : Array.isArray(ohlcSymRes?.data) ? ohlcSymRes.data : [];
@@ -293,6 +306,7 @@ export default function TickerQuarterlyPage() {
         if (!cancelled) {
           setError(e?.message || 'Failed to load quarterly returns');
           setQuarterlyReturnsRaw([]);
+          setQuarterlyReturnsBenchRaw([]);
           setDynamicSym([]);
           setDynamicSpy([]);
           setStatsRows([]);
@@ -306,7 +320,7 @@ export default function TickerQuarterlyPage() {
     return () => {
       cancelled = true;
     };
-  }, [sym]);
+  }, [sym, benchmarkIndex]);
 
   const quarterlyRowsNormalized = useMemo(
     () =>
@@ -369,6 +383,12 @@ export default function TickerQuarterlyPage() {
       .filter((x) => x.year >= lo && x.year <= hi)
       .map((x) => x.raw);
   }, [chartEndYear, chartStartYear, quarterlyRowsForChart]);
+  const quarterlyComparisonRows = useMemo(() => {
+    const tickerRows = normalizePeriodReturnsRows(quarterlyReturnsRaw, 'quarterly');
+    const benchRows = normalizePeriodReturnsRows(quarterlyReturnsBenchRaw, 'quarterly');
+    const aligned = alignComparisonRows(tickerRows, benchRows);
+    return filterRowsByYearRange(aligned, chartStartYear, chartEndYear);
+  }, [quarterlyReturnsRaw, quarterlyReturnsBenchRaw, chartStartYear, chartEndYear]);
 
   const tableRows = useMemo(() => {
     const startY = Number(tableStartYear);
@@ -414,32 +434,35 @@ export default function TickerQuarterlyPage() {
     );
   }, [quarterYearOptions]);
 
+  const quarterYearDropdownOptions = useMemo(
+    () => quarterYearOptions.map((y) => ({ id: String(y), label: String(y) })),
+    [quarterYearOptions]
+  );
+
   const chartRangeControls = (
     <div className="ticker-page__custom-range" aria-label="Quarterly chart year range">
       <span className="ticker-page__label ticker-page__label--inline">Start year</span>
-      <select
-        className="ticker-page__date-inp"
+      <ThemedDropdown
+        size="sm"
+        style={{ minWidth: 96 }}
         value={chartStartYear}
-        onChange={(e) => setChartStartYear(e.target.value)}
-      >
-        {quarterYearOptions.map((y) => (
-          <option key={`chart-start-${y}`} value={String(y)}>
-            {y}
-          </option>
-        ))}
-      </select>
+        options={quarterYearDropdownOptions}
+        onChange={setChartStartYear}
+        title="Start year"
+        ariaLabelPrefix="Start year"
+        labelFallback={chartStartYear}
+      />
       <span className="ticker-page__label ticker-page__label--inline">End year</span>
-      <select
-        className="ticker-page__date-inp"
+      <ThemedDropdown
+        size="sm"
+        style={{ minWidth: 96 }}
         value={chartEndYear}
-        onChange={(e) => setChartEndYear(e.target.value)}
-      >
-        {quarterYearOptions.map((y) => (
-          <option key={`chart-end-${y}`} value={String(y)}>
-            {y}
-          </option>
-        ))}
-      </select>
+        options={quarterYearDropdownOptions}
+        onChange={setChartEndYear}
+        title="End year"
+        ariaLabelPrefix="End year"
+        labelFallback={chartEndYear}
+      />
     </div>
   );
 
@@ -489,11 +512,6 @@ export default function TickerQuarterlyPage() {
 
   return (
     <div className="ticker-page">
-      <div className="ticker-page__search-row">
-        <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId="ticker-quarterly-symbol" />
-        <span className="ticker-page__loading-pill">{loading ? 'Loading quarterly data…' : `As of ${asOfDate}`}</span>
-      </div>
-
       {error ? (
         <div className="ticker-page__error" role="alert">
           {error}
@@ -504,6 +522,11 @@ export default function TickerQuarterlyPage() {
         <div className="ticker-page__header-top">
           <div className="ticker-page__header-identity">
             <h1 className="ticker-page__company ticker-page__company--hero">{symU} Quarterly Returns</h1>
+          </div>
+          <div className="ticker-page__header-controls">
+            <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId="ticker-quarterly-symbol" />
+            {loading ? (<span className="ticker-page__loading-pill">Loading quarterly data…</span>) : null}
+            
           </div>
         </div>
       </header>
@@ -531,6 +554,47 @@ export default function TickerQuarterlyPage() {
           <TickerChartResizeScope storageKey={RESIZE_KEY_QTR_MAIN} defaultHeight={288}>
             <TickerQuarterlyReturnsChart symbol={symU} quarterlyReturns={quarterlyChartRows} asOfDate={asOfDate} />
           </TickerChartResizeScope>
+          <div className="stats-cmp-charts">
+            <AnnualReturnBarChart
+              mode="quarterly"
+              ticker={symU}
+              benchmarkIndex={benchmarkIndex}
+              startYear={Number(chartStartYear)}
+              endYear={Number(chartEndYear)}
+              theme={chartTheme}
+              rows={quarterlyComparisonRows}
+              benchmarkOptions={BENCHMARK_OPTIONS}
+              onBenchmarkChange={setBenchmarkIndex}
+              controls={chartRangeControls}
+              loading={loading}
+            />
+            <ExcessReturnLineChart
+              mode="quarterly"
+              ticker={symU}
+              benchmarkIndex={benchmarkIndex}
+              startYear={Number(chartStartYear)}
+              endYear={Number(chartEndYear)}
+              theme={chartTheme}
+              rows={quarterlyComparisonRows}
+              benchmarkOptions={BENCHMARK_OPTIONS}
+              onBenchmarkChange={setBenchmarkIndex}
+              controls={chartRangeControls}
+              loading={loading}
+            />
+            <PeriodicReturnBarChart
+              mode="quarterly"
+              ticker={symU}
+              benchmarkIndex={benchmarkIndex}
+              startYear={Number(chartStartYear)}
+              endYear={Number(chartEndYear)}
+              theme={chartTheme}
+              rows={quarterlyComparisonRows}
+              benchmarkOptions={BENCHMARK_OPTIONS}
+              onBenchmarkChange={setBenchmarkIndex}
+              controls={chartRangeControls}
+              loading={loading}
+            />
+          </div>
 
           <section className="statistic-data__card">
             <div className="statistic-data__table-head">
@@ -538,29 +602,27 @@ export default function TickerQuarterlyPage() {
               <div className="statistic-data__head-actions">
                 <div className="ticker-page__custom-range" aria-label="Quarterly table year range">
                   <span className="ticker-page__label ticker-page__label--inline">Start year</span>
-                  <select
-                    className="ticker-page__date-inp"
+                  <ThemedDropdown
+                    size="sm"
+                    style={{ minWidth: 96 }}
                     value={tableStartYear}
-                    onChange={(e) => setTableStartYear(e.target.value)}
-                  >
-                    {quarterYearOptions.map((y) => (
-                      <option key={`table-start-${y}`} value={String(y)}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
+                    options={quarterYearDropdownOptions}
+                    onChange={setTableStartYear}
+                    title="Table start year"
+                    ariaLabelPrefix="Start year"
+                    labelFallback={tableStartYear}
+                  />
                   <span className="ticker-page__label ticker-page__label--inline">End year</span>
-                  <select
-                    className="ticker-page__date-inp"
+                  <ThemedDropdown
+                    size="sm"
+                    style={{ minWidth: 96 }}
                     value={tableEndYear}
-                    onChange={(e) => setTableEndYear(e.target.value)}
-                  >
-                    {quarterYearOptions.map((y) => (
-                      <option key={`table-end-${y}`} value={String(y)}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
+                    options={quarterYearDropdownOptions}
+                    onChange={setTableEndYear}
+                    title="Table end year"
+                    ariaLabelPrefix="End year"
+                    labelFallback={tableEndYear}
+                  />
                 </div>
               </div>
             </div>
@@ -660,9 +722,9 @@ export default function TickerQuarterlyPage() {
               </span>
             </p>
             
-            <div className="ticker-subh-with-tip"><h3 className="ticker-subh ticker-subh--flex">vs {BENCHMARK} (total return %, then difference)</h3></div>
+            <div className="ticker-subh-with-tip"><h3 className="ticker-subh ticker-subh--flex">vs {benchmarkIndex} (total return %, then difference)</h3></div>
             <div className="ticker-compare">
-              <div className="ticker-compare__head"><span /><span>{symU}</span><span>{BENCHMARK}</span><span>Diff</span></div>
+              <div className="ticker-compare__head"><span /><span>{symU}</span><span>{benchmarkIndex}</span><span>Diff</span></div>
               {COMPARE_ROWS.map((row) => {
                 const symPct = row.period ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period) : row.mtd ? selectedIndexSeries.mtd : row.qtd ? selectedIndexSeries.qtd : null;
                 const spyPct = row.period ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period) : row.mtd ? selectedTickerSeries.mtd : row.qtd ? selectedTickerSeries.qtd : null;

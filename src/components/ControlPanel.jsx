@@ -1,5 +1,6 @@
 import { TickerSearch } from './TickerSearch.jsx';
 import { MultiSignalSelect } from './MultiSignalSelect.jsx';
+import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { computeDefaultApiOrigin } from '../utils/apiOrigin.js';
 
 export function ControlPanel({
@@ -61,17 +62,23 @@ export function ControlPanel({
         </div>
         <div className="field">
           <label htmlFor="executionModeSelect">Execution Mode</label>
-          <select
-            id="executionModeSelect"
+          <ThemedDropdown
+            buttonId="executionModeSelect"
+            className="control-panel__exec-dd"
+            style={{ width: '100%' }}
             value={executionMode}
-            onChange={(e) => {
-              onExecutionModeChange(e.target.value);
+            options={[
+              { id: 'T+1', label: 'T+1 (Next-Day Open)' },
+              { id: 'T', label: 'T (Signal-Day Close)' }
+            ]}
+            onChange={(v) => {
+              onExecutionModeChange(v);
               onInvalidateOdin();
             }}
-          >
-            <option value="T+1">T+1 (Next-Day Open)</option>
-            <option value="T">T (Signal-Day Close)</option>
-          </select>
+            title="Execution mode"
+            ariaLabelPrefix="Execution mode"
+            wideLabel
+          />
         </div>
         <div className="field">
           <label htmlFor="loadBtn">&nbsp;</label>

@@ -44,6 +44,7 @@ const INDEX_QUARTERLY_CHART_DEFAULT_END_YEAR = 2026;
 const MAX_NEWS_ITEMS = 120;
 const NEWS_PAGE_SIZE = 5;
 const INDEX_TICKERS_PAGE_SIZE = 50;
+const PAGER_SIBLING_COUNT = 1;
 
 const PERF_COLS = [
   { label: '1M', period: 'Last Month' },
@@ -74,6 +75,7 @@ export const INDEX_ROUTE_CHOICES = [
   { slug: 'dow-jones', apiIndex: 'Dow Jones', label: 'Dow Jones' },
   { slug: 'nasdaq-100', apiIndex: 'Nasdaq 100', label: 'Nasdaq 100' }
 ];
+const INDEX_ROUTE_DROPDOWN_OPTIONS = INDEX_ROUTE_CHOICES.map((opt) => ({ id: opt.slug, label: opt.label }));
 const RELATIVE_STRENGTH_OPTIONS = [
   
   ...INDEX_ROUTE_CHOICES.map((opt) => ({
@@ -83,6 +85,7 @@ const RELATIVE_STRENGTH_OPTIONS = [
     apiIndex: opt.apiIndex
   }))
 ];
+const RELATIVE_STRENGTH_DROPDOWN_OPTIONS = RELATIVE_STRENGTH_OPTIONS.map((opt) => ({ id: opt.key, label: opt.label }));
 
 function sanitizeIndexSlug(raw) {
   let s = String(raw || '')
@@ -436,6 +439,125 @@ function IconChevronDown({ className }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <path d="M6 9l6 6 6-6" strokeLinecap="round" />
     </svg>
+  );
+}
+
+function IconPagerChevronLeft({ double = false }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      {double ? (
+        <>
+          <path d="M8.8 3.2L5 7l3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5.8 3.2L2 7l3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      ) : (
+        <path d="M8.7 3.2L4.9 7l3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+    </svg>
+  );
+}
+
+function IconPagerChevronRight({ double = false }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      {double ? (
+        <>
+          <path d="M5.2 3.2L9 7l-3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M8.2 3.2L12 7l-3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      ) : (
+        <path d="M5.3 3.2L9.1 7l-3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+    </svg>
+  );
+}
+
+function buildPaginationItems(totalPages, currentPage, siblingCount = PAGER_SIBLING_COUNT) {
+  if (totalPages <= 1) return [1];
+  const totalNumbers = siblingCount * 2 + 5;
+  if (totalPages <= totalNumbers) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+  const leftSibling = Math.max(currentPage - siblingCount, 1);
+  const rightSibling = Math.min(currentPage + siblingCount, totalPages);
+  const showLeftDots = leftSibling > 2;
+  const showRightDots = rightSibling < totalPages - 1;
+
+  if (!showLeftDots && showRightDots) {
+    const leftRange = Array.from({ length: 3 + siblingCount * 2 }, (_, i) => i + 1);
+    return [...leftRange, 'dots-right', totalPages];
+  }
+  if (showLeftDots && !showRightDots) {
+    const rightRangeStart = totalPages - (2 + siblingCount * 2);
+    const rightRange = Array.from({ length: 3 + siblingCount * 2 }, (_, i) => rightRangeStart + i);
+    return [1, 'dots-left', ...rightRange];
+  }
+  const middle = [];
+  for (let p = leftSibling; p <= rightSibling; p += 1) middle.push(p);
+  return [1, 'dots-left', ...middle, 'dots-right', totalPages];
+}
+
+function FigmaPagination({ page, totalPages, onPageChange }) {
+  const items = useMemo(() => buildPaginationItems(totalPages, page), [totalPages, page]);
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+  return (
+    <div className="statistic-data__pager-figma" role="navigation" aria-label="Table pagination">
+      <button
+        type="button"
+        className="statistic-data__pg-btn statistic-data__pg-btn--icon"
+        aria-label="First page"
+        onClick={() => onPageChange(1)}
+        disabled={!canPrev}
+      >
+        <IconPagerChevronLeft double />
+      </button>
+      <button
+        type="button"
+        className="statistic-data__pg-btn statistic-data__pg-btn--icon"
+        aria-label="Previous page"
+        onClick={() => onPageChange(page - 1)}
+        disabled={!canPrev}
+      >
+        <IconPagerChevronLeft />
+      </button>
+      {items.map((it, idx) =>
+        typeof it === 'number' ? (
+          <button
+            key={`p-${it}`}
+            type="button"
+            className={'statistic-data__pg-btn' + (it === page ? ' statistic-data__pg-btn--active' : '')}
+            aria-label={`Page ${it}`}
+            aria-current={it === page ? 'page' : undefined}
+            onClick={() => onPageChange(it)}
+          >
+            {it}
+          </button>
+        ) : (
+          <span key={`${it}-${idx}`} className="statistic-data__pg-dots" aria-hidden>
+            ...
+          </span>
+        )
+      )}
+      <button
+        type="button"
+        className="statistic-data__pg-btn statistic-data__pg-btn--icon"
+        aria-label="Next page"
+        onClick={() => onPageChange(page + 1)}
+        disabled={!canNext}
+      >
+        <IconPagerChevronRight />
+      </button>
+      <button
+        type="button"
+        className="statistic-data__pg-btn statistic-data__pg-btn--icon"
+        aria-label="Last page"
+        onClick={() => onPageChange(totalPages)}
+        disabled={!canNext}
+      >
+        <IconPagerChevronRight double />
+      </button>
+    </div>
   );
 }
 
@@ -1316,14 +1438,6 @@ export default function IndexPage() {
     const start = (indexTickersPageSafe - 1) * INDEX_TICKERS_PAGE_SIZE;
     return indexTickersRows.slice(start, start + INDEX_TICKERS_PAGE_SIZE);
   }, [indexTickersRows, indexTickersPageSafe]);
-  const indexTickersPageButtons = useMemo(() => {
-    if (indexTickersTotalPages <= 1) return [1];
-    if (indexTickersTotalPages <= 4) return Array.from({ length: indexTickersTotalPages }, (_, i) => i + 1);
-    let start = Math.max(1, indexTickersPageSafe - 1);
-    if (start + 3 > indexTickersTotalPages) start = indexTickersTotalPages - 3;
-    return [start, start + 1, start + 2, start + 3];
-  }, [indexTickersPageSafe, indexTickersTotalPages]);
-
   const section16Rows = useMemo(() => {
     const compact = COMPARE_ROWS.filter((r) => ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD'].includes(r.key));
     return compact.map((row) => {
@@ -1391,34 +1505,17 @@ export default function IndexPage() {
         <label className="ticker-page__label" htmlFor="index-dash-select" style={{ marginRight: 8 }}>
           Index
         </label>
-        <select
-          id="index-dash-select"
-          className="ticker-page__date-inp"
+        <ThemedDropdown
+          buttonId="index-dash-select"
+          wideLabel
           style={{ minWidth: 220, maxWidth: '100%' }}
           value={slug}
-          onChange={(e) => onIndexSlugChange(e.target.value)}
-        >
-          {INDEX_ROUTE_CHOICES.map((opt) => (
-            <option key={opt.slug} value={opt.slug}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        
-        <DataInfoTip align="start">
-          <p className="ticker-data-tip__p">
-            <strong>Index dashboard</strong> loads returns and the main chart from{' '}
-            <code className="ticker-data-tip__code">POST /api/market/index-returns</code> with body{' '}
-            <code className="ticker-data-tip__code">index</code> set to this route’s universe (e.g.{' '}
-            <code className="ticker-data-tip__code">sp500</code>, <code className="ticker-data-tip__code">Dow Jones</code>
-            ).
-          </p>
-          <p className="ticker-data-tip__p">
-            Official benchmarks use table tickers like <strong>SPX</strong>, <strong>DJI</strong>, <strong>IXIC</strong> when the API reports{' '}
-            <code className="ticker-data-tip__code">seriesMode: official-index-ticker</code>. Synthetic universes use the weighted constituent
-            path.
-          </p>
-        </DataInfoTip>
+          options={INDEX_ROUTE_DROPDOWN_OPTIONS}
+          onChange={onIndexSlugChange}
+          title="Index universe"
+          ariaLabelPrefix="Index"
+          labelFallback={activeMeta.label}
+        />
         {metaBusy ? <span className="ticker-page__loading-pill">Loading…</span> : null}
       </div>
 
@@ -1537,9 +1634,6 @@ export default function IndexPage() {
                     </svg>
                   </button>
                 </div>
-                <DataInfoTip align="end">
-                  <p className="ticker-data-tip__p">Timeframe pills map to calendar ranges ending on index-returns as-of date.</p>
-                </DataInfoTip>
               </div>
               {isCustomRangePopupOpen ? (
                 <div className="wl-manage-overlay ticker-custom-range-popup__overlay" onClick={() => setIsCustomRangePopupOpen(false)}>
@@ -1796,30 +1890,26 @@ export default function IndexPage() {
             </DataInfoTip>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-            <select
-              className="ticker-page__date-inp"
+            <ThemedDropdown
+              wideLabel
+              style={{ minWidth: 220, maxWidth: '100%' }}
               value={relativeLeftKey}
-              onChange={(e) => setRelativeLeftKey(e.target.value)}
-              style={{ minWidth: 220 }}
-            >
-              {RELATIVE_STRENGTH_OPTIONS.map((opt) => (
-                <option key={`left-${opt.key}`} value={opt.key}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="ticker-page__date-inp"
+              options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
+              onChange={setRelativeLeftKey}
+              title="Relative strength left"
+              ariaLabelPrefix="Left index"
+              labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeLeftKey)?.label ?? ''}
+            />
+            <ThemedDropdown
+              wideLabel
+              style={{ minWidth: 220, maxWidth: '100%' }}
               value={relativeRightKey}
-              onChange={(e) => setRelativeRightKey(e.target.value)}
-              style={{ minWidth: 220 }}
-            >
-              {RELATIVE_STRENGTH_OPTIONS.map((opt) => (
-                <option key={`right-${opt.key}`} value={opt.key}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+              options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
+              onChange={setRelativeRightKey}
+              title="Relative strength right"
+              ariaLabelPrefix="Right index"
+              labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeRightKey)?.label ?? ''}
+            />
             {relativeBusy ? <span className="ticker-page__loading-pill">Loading relative strength…</span> : null}
           </div>
           <TickerSection16Section17
@@ -2031,40 +2121,7 @@ export default function IndexPage() {
                 </table>
                 {indexTickersBusy ? <p className="ticker-page__news-sample-note">Loading constituents…</p> : null}
               </div>
-              <div className="index-constituents-pagination" aria-label="Constituents pagination">
-                <button
-                  type="button"
-                  className="index-constituents-page-btn index-constituents-page-btn--nav"
-                  disabled={indexTickersPageSafe <= 1}
-                  onClick={() => setIndexTickersPage((p) => Math.max(1, p - 1))}
-                  aria-label="Previous page"
-                >
-                  ‹
-                </button>
-                {indexTickersPageButtons.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={
-                      'index-constituents-page-btn' +
-                      (p === indexTickersPageSafe ? ' index-constituents-page-btn--active' : '')
-                    }
-                    onClick={() => setIndexTickersPage(p)}
-                    aria-current={p === indexTickersPageSafe ? 'page' : undefined}
-                  >
-                    {p}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="index-constituents-page-btn index-constituents-page-btn--nav"
-                  disabled={indexTickersPageSafe >= indexTickersTotalPages}
-                  onClick={() => setIndexTickersPage((p) => Math.min(indexTickersTotalPages, p + 1))}
-                  aria-label="Next page"
-                >
-                  ›
-                </button>
-              </div>
+              <FigmaPagination page={indexTickersPageSafe} totalPages={indexTickersTotalPages} onPageChange={setIndexTickersPage} />
             </div>
           </section>
         </aside>

@@ -14,6 +14,13 @@ function dbg(...args) {
   if (import.meta.env.DEV) console.log(LOG_PREFIX, ...args);
 }
 
+function activeTokenFromQuery(rawQuery) {
+  const raw = String(rawQuery || '');
+  const parts = raw.split(',');
+  const lastPart = parts.length ? parts[parts.length - 1] : raw;
+  return sanitizeTickerSearchInput(lastPart);
+}
+
 /**
  * @typedef {{ id: string, symbol: string, company_name?: string | null }} WatchlistTickerPick
  */
@@ -58,7 +65,9 @@ export function WatchlistTickerMultiselect({
 
   const selectedById = useMemo(() => new Map(selected.map((t) => [String(t.id), t])), [selected]);
 
-  const qNorm = useMemo(() => sanitizeTickerSearchInput(query), [query]);
+  // Search is driven by the token after the last comma:
+  // "A,msft" -> query API with "msft", "A,msft,nvda" -> "nvda".
+  const qNorm = useMemo(() => activeTokenFromQuery(query), [query]);
 
   useLayoutEffect(() => {
     if (!open) {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
@@ -383,13 +384,16 @@ function ReturnTable({
           {showRangeSelector ? (
             <label className="statistic-data__range">
               <span>Range</span>
-              <select value={rangeValue} onChange={(e) => onRangeChange?.(e.target.value)}>
-                {TABLE_RANGE_OPTIONS.map((opt) => (
-                  <option class="options" key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <ThemedDropdown
+                size="sm"
+                style={{ minWidth: 86 }}
+                value={rangeValue}
+                options={TABLE_RANGE_DROPDOWN_OPTIONS}
+                onChange={(v) => onRangeChange?.(v)}
+                title="Table range"
+                ariaLabelPrefix="Range"
+                labelFallback={TABLE_RANGE_OPTIONS.find((o) => o.value === rangeValue)?.label ?? rangeValue}
+              />
             </label>
           ) : null}
           <button type="button" className="statistic-data__csv-btn" onClick={onDownloadCsv} disabled={!rows.length}>

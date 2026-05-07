@@ -29,6 +29,16 @@ function IconMoon() {
   );
 }
 
+function IconHelpCircle() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M9.8 9.2a2.3 2.3 0 1 1 4.2 1.35c-.45.64-1.02.95-1.5 1.35-.44.36-.76.8-.76 1.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="12" cy="17.35" r="1.1" fill="currentColor" />
+    </svg>
+  );
+}
+
 /**
  * Top strip inside the main column (between left sidebar and right rail): ticker search + theme toggle.
  */
@@ -46,6 +56,7 @@ export function AppMainTopBar({ theme = 'dark', onToggleTheme }) {
           inputId="app-main-topbar-ticker-search"
         />
       </div>
+      <div className="app-main-topbar__search_right">
       <button
         type="button"
         className="app-main-topbar__theme"
@@ -57,6 +68,11 @@ export function AppMainTopBar({ theme = 'dark', onToggleTheme }) {
           <span className="app-main-topbar__theme-knob">{isLight ? <IconSun /> : <IconMoon />}</span>
         </span>
       </button>
+      <button type="button" className="app-main-topbar__help" aria-label="Help Center" title="Help Center">
+        <IconHelpCircle />
+        <span>Help Center</span>
+      </button>
+      </div>
     </header>
   );
 }

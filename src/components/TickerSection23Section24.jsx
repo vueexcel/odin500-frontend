@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import TradingChartLoader from './TradingChartLoader.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
@@ -267,28 +268,33 @@ export function TickerSection23Section24({
           <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
         </div>
         <div className="ticker-s23s24__controls">
-          <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="ticker-s23s24__select">
-            {GROUPS.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.label}
-              </option>
-            ))}
-          </select>
-          <select
+          <ThemedDropdown
+            className="ticker-s23s24__select-dd"
+            style={{ width: '100%' }}
+            size="sm"
+            wideLabel
+            value={groupId}
+            options={GROUPS.map((g) => ({ id: g.id, label: g.label }))}
+            onChange={setGroupId}
+            title="Index group"
+            ariaLabelPrefix="Group"
+          />
+          <ThemedDropdown
+            className="ticker-s23s24__select-dd"
+            style={{ width: '100%' }}
+            size="sm"
+            wideLabel
             value={ticker}
-            onChange={(e) => setTicker(e.target.value)}
-            className="ticker-s23s24__select"
-            disabled={!groupRows.length}
-          >
-            {groupRows.map((r) => {
+            options={groupRows.map((r) => {
               const s = String(r.symbol || '').toUpperCase();
-              return (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              );
+              return { id: s, label: s };
             })}
-          </select>
+            onChange={setTicker}
+            title="Ticker"
+            ariaLabelPrefix="Ticker"
+            disabled={!groupRows.length}
+            labelFallback="—"
+          />
         </div>
         <table className="ticker-s23__table">
           <thead>

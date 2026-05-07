@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
@@ -420,18 +421,17 @@ export default function HistoricalDataPage() {
         </div>
         <div className="historical-data__frequency">
           <label htmlFor="historical-data-frequency">Frequency</label>
-          <select
-            id="historical-data-frequency"
-            className="historical-data__select"
+          <ThemedDropdown
+            buttonId="historical-data-frequency"
+            className="historical-data__select-dd"
+            style={{ width: '100%' }}
             value={frequency}
-            onChange={(e) => setFrequency(/** @type {OhlcFrequency} */ (e.target.value))}
-          >
-            {FREQUENCY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            options={FREQUENCY_OPTIONS.map((opt) => ({ id: opt.value, label: opt.label }))}
+            onChange={(v) => setFrequency(/** @type {OhlcFrequency} */ (v))}
+            title="OHLC frequency"
+            ariaLabelPrefix="Frequency"
+            wideLabel
+          />
         </div>
         <div className="historical-data__dates">
           <label htmlFor="historical-data-start">Start date</label>

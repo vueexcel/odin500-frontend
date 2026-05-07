@@ -451,7 +451,7 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
                   <NavRow to={dailyTo} icon={IconBarChart} label="Daily" active={dailyPageActive || statSection === 'daily'} onClick={(e) => handleNavClick(e, dailyTo)} />
                 </div>
               ) : null}
-              <NavRow icon={IconLineChart} label="Relative strength" onClick={() => {}} />
+              <NavRow to="/relative-strength/ticker" icon={IconLineChart} label="Relative strength" onClick={(e) => handleNavClick(e, '/relative-strength/ticker')} />
               <NavRow icon={IconFocus} label="Odin Index Signals" onClick={() => {}} />
               <NavRow to="/odin-signals" icon={IconFocus} label="Odin Signals" onClick={(e) => handleNavClick(e, '/odin-signals')} />
               <NavRow icon={IconWallet} label="Sample Odin Portfolios" onClick={() => {}} />

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Filter, Hexagon, Settings, Upload, Users } from 'lucide-react';
+import { Filter, Hexagon, Settings, Upload, Users } from 'lucide-react';
+import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
 import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
@@ -15,6 +16,7 @@ const INDEX_MENU = [
 
 /** Leaderboard tables show only this many rows (best gainers / worst losers by 1D %). Full index still loads for the scatter. */
 const LEADERBOARD_TOP_N = 20;
+const TOP_MOVERS_BAR_COUNT = 10;
 
 /** Return windows — `apiPeriod` is sent to POST /api/market/index-market-movers as `period`. */
 const MARKET_MOVERS_INTERVALS = [
@@ -161,6 +163,119 @@ function formatSignedPctCell(v) {
 function numOrNull(v) {
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function formatBarPctLabel(v) {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return `${v.toFixed(1)}%`;
+}
+
+function MarketMoversSplitBars({ points, axisReturnTitle }) {
+  const chartData = useMemo(() => {
+    const gainers = [];
+    const losers = [];
+    for (const p of points) {
+      const pct = parsePct(p.dayReturnPct);
+      if (pct == null || !Number.isFinite(pct)) continue;
+      if (pct > 0) gainers.push({ symbol: p.symbol, pct });
+      else if (pct < 0) losers.push({ symbol: p.symbol, pct });
+    }
+    gainers.sort((a, b) => b.pct - a.pct);
+    losers.sort((a, b) => a.pct - b.pct);
+    const topGainers = gainers.slice(0, TOP_MOVERS_BAR_COUNT).map((row) => ({ ...row, side: 'gain' }));
+    const topLosers = losers.slice(0, TOP_MOVERS_BAR_COUNT).map((row) => ({ ...row, side: 'loss' }));
+    const gainCap = Math.ceil(Math.max(1, ...topGainers.map((b) => Math.abs(b.pct))) * 1.15);
+    const lossCap = Math.ceil(Math.max(1, ...topLosers.map((b) => Math.abs(b.pct))) * 1.15);
+    return { topGainers, topLosers, gainCap, lossCap };
+  }, [points]);
+
+  const W = 560;
+  const H = 360;
+  const PAD2 = { top: 26, right: 24, bottom: 72, left: 54 };
+  const plotW = W - PAD2.left - PAD2.right;
+  const plotH = H - PAD2.top - PAD2.bottom;
+
+  const renderPanel = (bars, yCap, side, title) => {
+    const yScale = (value) => {
+      if (side === 'gain') return PAD2.top + ((yCap - value) / (yCap || 1)) * plotH;
+      return PAD2.top + ((0 - value) / (yCap || 1)) * plotH;
+    };
+    const slotW = bars.length ? plotW / bars.length : plotW;
+    const barW = Math.max(10, Math.min(34, slotW * 0.64));
+    const yTicks = side === 'gain' ? [0, yCap * 0.33, yCap * 0.66, yCap] : [0, -yCap * 0.33, -yCap * 0.66, -yCap];
+
+    return (
+      <div className="market-movers-page__bar-frame">
+        <div className="market-movers-page__bar-panel-title">{title}</div>
+        <svg className="market-movers-page__bar-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title} by ${axisReturnTitle}`}>
+          <rect x={PAD2.left} y={PAD2.top} width={plotW} height={plotH} className="market-movers-page__bar-bg" />
+          {yTicks.map((tick) => {
+            const y = yScale(tick);
+            const isZero = Math.abs(tick) < 1e-9;
+            return (
+              <g key={`${side}-yt-${tick}`}>
+                <line
+                  x1={PAD2.left}
+                  y1={y}
+                  x2={PAD2.left + plotW}
+                  y2={y}
+                  className={isZero ? 'market-movers-page__bar-grid-zero' : 'market-movers-page__bar-grid'}
+                />
+                <text x={PAD2.left - 8} y={y + 4} textAnchor="end" className="market-movers-page__bar-tick">
+                  {tick === 0 ? '0' : (tick / 100).toFixed(2)}
+                </text>
+              </g>
+            );
+          })}
+          {bars.map((bar, idx) => {
+            const cx = PAD2.left + slotW * (idx + 0.5);
+            const y0 = yScale(0);
+            const yv = yScale(bar.pct);
+            const h = Math.max(2, Math.abs(yv - y0));
+            const x = cx - barW / 2;
+            const y = bar.pct >= 0 ? yv : y0;
+            const labelY = bar.pct >= 0 ? y - 8 : y + h + 14;
+            return (
+              <g key={`${side}-${bar.symbol}-${idx}`}>
+                <rect
+                  x={x}
+                  y={y}
+                  width={barW}
+                  height={h}
+                  rx="3"
+                  className={
+                    'market-movers-page__bar-col ' +
+                    (bar.pct >= 0 ? 'market-movers-page__bar-col--gain' : 'market-movers-page__bar-col--loss')
+                  }
+                />
+                <text x={cx} y={labelY} textAnchor="middle" className="market-movers-page__bar-value">
+                  {formatBarPctLabel(bar.pct)}
+                </text>
+                <text
+                  x={cx}
+                  y={PAD2.top + plotH + 16}
+                  textAnchor="end"
+                  className="market-movers-page__bar-x"
+                  transform={`rotate(-35 ${cx} ${PAD2.top + plotH + 16})`}
+                >
+                  {bar.symbol}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    );
+  };
+
+  return (
+    <div className="market-movers-page__chart-wrap">
+      <div className="market-movers-page__bars-grid">
+        {renderPanel(chartData.topGainers, chartData.gainCap, 'gain', `Top ${chartData.topGainers.length} Gainers`)}
+        {renderPanel(chartData.topLosers, chartData.lossCap, 'loss', `Top ${chartData.topLosers.length} Losers`)}
+      </div>
+    </div>
+  );
 }
 
 function MarketMoversLeaderTables({ points }) {
@@ -967,7 +1082,6 @@ export default function MarketMoversPage() {
   });
   const [indexMenuId, setIndexMenuId] = useState('sp500');
   const [sectorFilter, setSectorFilter] = useState('__all__');
-  const [sessionTab, setSessionTab] = useState('market');
   const [moverIntervalId, setMoverIntervalId] = useState('1d');
   const [points, setPoints] = useState([]);
   const [meta, setMeta] = useState({ asOfDate: '', volumeNote: '', sessionNote: '', period: '' });
@@ -1086,19 +1200,15 @@ export default function MarketMoversPage() {
           <label className="market-movers-page__sector-filter">
             <Filter size={16} strokeWidth={2} className="market-movers-page__filter-ico" aria-hidden />
             <span className="market-movers-page__sector-label">Sector Filter</span>
-            <select
-              className="market-movers-page__select market-movers-page__select--sector"
+            <ThemedDropdown
+              className="market-movers-page__mm-dd market-movers-page__mm-dd--sector"
               value={sectorFilter}
-              onChange={(e) => setSectorFilter(e.target.value)}
-              aria-label="Sector filter"
-            >
-              <option value="__all__">All sectors</option>
-              {sectors.map((sec) => (
-                <option key={sec} value={sec}>
-                  {sec}
-                </option>
-              ))}
-            </select>
+              options={[{ id: '__all__', label: 'All sectors' }, ...sectors.map((sec) => ({ id: sec, label: sec }))]}
+              onChange={setSectorFilter}
+              title="Sector filter"
+              ariaLabelPrefix="Sector filter"
+              wideLabel
+            />
           </label>
         </div>
       </header>
@@ -1107,49 +1217,24 @@ export default function MarketMoversPage() {
         <div className="market-movers-page__card-toolbar">
           <div className="market-movers-page__index-dd">
             <Users size={18} strokeWidth={2} className="market-movers-page__users-ico" aria-hidden />
-            <div className="market-movers-page__select-shell">
-              <select
-                className="market-movers-page__select market-movers-page__select--index"
-                value={indexMenuId}
-                onChange={(e) => setIndexMenuId(e.target.value)}
-                aria-label="Index"
-              >
-                {INDEX_MENU.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={18} strokeWidth={2} className="market-movers-page__chev" aria-hidden />
-            </div>
+            <ThemedDropdown
+              className="market-movers-page__mm-dd market-movers-page__mm-dd--index"
+              value={indexMenuId}
+              options={INDEX_MENU.map((m) => ({ id: m.id, label: m.label }))}
+              onChange={setIndexMenuId}
+              title="Index"
+              ariaLabelPrefix="Index"
+              wideLabel
+            />
           </div>
 
-          <div className="market-movers-page__sessions" role="tablist" aria-label="Trading session">
-            {[
-              { id: 'pre', label: 'Pre Market' },
-              { id: 'market', label: 'Market' },
-              { id: 'post', label: 'Post Market' }
-            ].map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={sessionTab === t.id}
-                className={
-                  'market-movers-page__session-btn' +
-                  (sessionTab === t.id ? ' market-movers-page__session-btn--active' : '')
-                }
-                onClick={() => setSessionTab(t.id)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="market-movers-page__card-head">
           <div className="market-movers-page__card-title-row">
-            <h2 className="market-movers-page__card-title">{activeMoverInterval.chartHeadline}</h2>
+            <h2 className="market-movers-page__card-title">
+              {activeMoverInterval.label} Top Gainers vs Top Losers
+            </h2>
             <ChartInfoTip tip={CHART_INFO_TIPS.marketMoversScatter} align="start" />
           </div>
           <button type="button" className="market-movers-page__export" onClick={exportCsv}>
@@ -1178,13 +1263,6 @@ export default function MarketMoversPage() {
           </div>
         </div>
 
-        {sessionTab !== 'market' ? (
-          <p className="market-movers-page__session-hint">
-            Chart data uses <strong>end-of-day</strong> closes (same as &quot;Market&quot;). Extended-hours slices are not
-            wired yet.
-          </p>
-        ) : null}
-
         {meta.asOfDate ? (
           <p className="market-movers-page__meta">
             As of <strong>{meta.asOfDate}</strong>
@@ -1209,11 +1287,9 @@ export default function MarketMoversPage() {
 
         {!loading && !error && filteredPoints.length > 0 ? (
           <>
-            <MarketMoversScatter
+            <MarketMoversSplitBars
               points={filteredPoints}
-              volumeNote={meta.volumeNote}
               axisReturnTitle={activeMoverInterval.axisReturnTitle}
-              tooltipReturnLabel={activeMoverInterval.tooltipReturnLabel}
             />
             <MarketMoversLeaderTables points={filteredPoints} />
           </>

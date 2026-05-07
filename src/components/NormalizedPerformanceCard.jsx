@@ -14,6 +14,15 @@ function fmtPct(v) {
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
+function getNpChartBgColor(isLight) {
+  if (isLight) return '#ffffff';
+  if (typeof window === 'undefined') return 'rgba(255, 255, 255, 0.03)';
+  const cssVar = getComputedStyle(document.documentElement)
+    .getPropertyValue('--colors-opacity-bg-opacity-3')
+    .trim();
+  return cssVar || 'rgba(255, 255, 255, 0.03)';
+}
+
 /** Readable text on solid hex fill (axis badges). */
 function textColorOnHex(hex) {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ''));
@@ -216,11 +225,12 @@ export function NormalizedPerformanceCard({
     const el = chartHostRef.current;
     if (!el) return;
     const isLight = chartTheme === 'light';
+    const npChartBg = getNpChartBgColor(isLight);
     const chart = createChart(el, {
       width: el.clientWidth,
       height: el.clientHeight || 390,
       layout: {
-        background: { color: isLight ? '#ffffff' : '#0b1220' },
+        background: { color: npChartBg },
         textColor: isLight ? '#475569' : '#94a3b8',
         attributionLogo: false
       },

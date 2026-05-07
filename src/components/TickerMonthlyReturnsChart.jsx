@@ -105,13 +105,14 @@ export function TickerMonthlyReturnsChart({
   periodMode = 'monthly',
   suppressChartDateFilter = false,
   showOpenPeriodPageButton = false,
-  useThemedYearDropdown = false,
+  useThemedYearDropdown: _useThemedYearDropdown = false,
   hideChartDateApplyRow = false
 }) {
   const navigate = useNavigate();
+  const isMonthlyMode = periodMode === 'monthly';
   const [showTable, setShowTable] = useState(false);
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
-  const showDateApplyRow = !suppressChartDateFilter && !hideChartDateApplyRow;
+  const showDateApplyRow = !isMonthlyMode && !suppressChartDateFilter && !hideChartDateApplyRow;
 
   const rows = useMemo(() => {
     if (!Array.isArray(monthlyReturns)) return [];
@@ -393,43 +394,27 @@ export function TickerMonthlyReturnsChart({
 
   const yearToolbarDropdown =
     !suppressChartDateFilter ? (
-      useThemedYearDropdown ? (
-        <div className="ticker-monthly__select-wrap ticker-monthly__select-wrap--toolbar">
-          <label className="ticker-monthly__select-label">Year</label>
-          <ThemedDropdown
-            size="sm"
-            value={String(selectedYear)}
-            options={yearDropdownOptions}
-            onChange={(v) => setSelectedYear(Number(v))}
-            title="Year"
-            ariaLabelPrefix="Year"
-            labelFallback={String(selectedYear)}
-            menuMaxHeight={
-              hideChartDateApplyRow && periodMode === 'weekly' ? 'min(260px, 45vh)' : undefined
-            }
-          />
-        </div>
-      ) : (
-        <div className="ticker-monthly__select-wrap ticker-monthly__select-wrap--toolbar">
-          <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-year">
-            Year
-          </label>
-          <select
-            id="ticker-monthly-year"
-            className="ticker-monthly__select"
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            aria-label="Select year for monthly returns"
-          >
-            {sortedYearOptionsDesc.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </div>
-      )
+      <div className="ticker-monthly__select-wrap ticker-monthly__select-wrap--toolbar">
+        <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-year-toolbar">
+          Year
+        </label>
+        <ThemedDropdown
+          buttonId="ticker-monthly-year-toolbar"
+          className="ticker-monthly__select-dd"
+          size="sm"
+          value={String(selectedYear)}
+          options={yearDropdownOptions}
+          onChange={(v) => setSelectedYear(Number(v))}
+          title="Year"
+          ariaLabelPrefix="Year"
+          labelFallback={String(selectedYear)}
+          menuMaxHeight={
+            hideChartDateApplyRow && periodMode === 'weekly' ? 'min(260px, 45vh)' : undefined
+          }
+        />
+      </div>
     ) : null;
+  const showYearInToolbar = isMonthlyMode || hideChartDateApplyRow;
 
   if (!rows.length) {
     return (
@@ -454,13 +439,17 @@ export function TickerMonthlyReturnsChart({
               </DataInfoTip>
             </div>
             {!suppressChartDateFilter ? (
-              <select className="ticker-monthly__select" value={selectedYear} disabled aria-label="Year">
-                {sortedYearOptionsDesc.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
+              <ThemedDropdown
+                className="ticker-monthly__select-dd"
+                size="sm"
+                value={String(selectedYear)}
+                options={yearDropdownOptions}
+                onChange={() => {}}
+                title="Year"
+                ariaLabelPrefix="Year"
+                labelFallback={String(selectedYear)}
+                disabled
+              />
             ) : null}
           </div>
           {showDateApplyRow ? (
@@ -514,8 +503,9 @@ export function TickerMonthlyReturnsChart({
               )}
             </DataInfoTip>
           </div>
-          <div className="ticker-annual-figma__actions">
-            {hideChartDateApplyRow ? yearToolbarDropdown : null}
+          <div className="ticker-monthly__head-right">
+          <div className="ticker-annual-figma__actions ticker-monthly__actions-right">
+            {showYearInToolbar ? yearToolbarDropdown : null}
             <button
               type="button"
               className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
@@ -544,40 +534,24 @@ export function TickerMonthlyReturnsChart({
               <IcoDownload /> Download CSV
             </button>
           </div>
-          {!suppressChartDateFilter && !hideChartDateApplyRow ? (
-            useThemedYearDropdown ? (
-              <div className="ticker-monthly__select-wrap">
-                <label className="ticker-monthly__select-label">Year</label>
-                <ThemedDropdown
-                  size="sm"
-                  value={String(selectedYear)}
-                  options={yearDropdownOptions}
-                  onChange={(v) => setSelectedYear(Number(v))}
-                  title="Year"
-                  ariaLabelPrefix="Year"
-                  labelFallback={String(selectedYear)}
-                />
-              </div>
-            ) : (
-              <div className="ticker-monthly__select-wrap">
-                <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-year-trailing">
-                  Year
-                </label>
-                <select
-                  id="ticker-monthly-year-trailing"
-                  className="ticker-monthly__select"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(Number(e.target.value))}
-                  aria-label="Select year for monthly returns"
-                >
-                  {sortedYearOptionsDesc.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )
+          </div>
+          {!isMonthlyMode && !suppressChartDateFilter && !hideChartDateApplyRow ? (
+            <div className="ticker-monthly__select-wrap">
+              <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-year-trailing">
+                Year
+              </label>
+              <ThemedDropdown
+                buttonId="ticker-monthly-year-trailing"
+                className="ticker-monthly__select-dd"
+                size="sm"
+                value={String(selectedYear)}
+                options={yearDropdownOptions}
+                onChange={(v) => setSelectedYear(Number(v))}
+                title="Year"
+                ariaLabelPrefix="Year"
+                labelFallback={String(selectedYear)}
+              />
+            </div>
           ) : null}
         </div>
         {showDateApplyRow ? (
