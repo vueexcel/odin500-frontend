@@ -22,7 +22,7 @@ const RESIZE_KEY_QTR_FIGMA = 'odin_ticker_quarterly_resize_figma';
 const RESIZE_KEY_QTR_POSNEG = 'odin_ticker_quarterly_resize_posneg';
 const RESIZE_KEY_QTR_MAIN = 'odin_ticker_quarterly_resize_main';
 const RETURNS_DEFAULT_START = '1980-01-01';
-const DEFAULT_START_YEAR = 2018;
+const DEFAULT_START_YEAR = 2021;
 const DEFAULT_END_YEAR = 2026;
 const BENCHMARK = 'SPY';
 const BENCHMARK_OPTIONS = ['SPY', 'QQQ', 'DIA'].map((v) => ({ id: v, label: v }));
@@ -48,6 +48,7 @@ const COMPARE_ROWS = [
   { key: '20Y', period: 'Last 20 years' }
 ];
 const TABLE_PAGE_SIZE = 30;
+const PAGER_SIBLING_COUNT = 1;
 
 function fmtPct(v) {
   if (v == null || !Number.isFinite(Number(v))) return '—';
@@ -192,6 +193,98 @@ function IconTrendDown({ className }) {
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">
 <path d="M18.3332 14.1663L11.776 7.60915C11.446 7.27914 11.281 7.11413 11.0907 7.05231C10.9233 6.99792 10.743 6.99792 10.5757 7.05231C10.3854 7.11413 10.2204 7.27914 9.89036 7.60915L7.60931 9.8902C7.2793 10.2202 7.11429 10.3852 6.92402 10.447C6.75665 10.5014 6.57636 10.5014 6.40899 10.447C6.21872 10.3852 6.05371 10.2202 5.72369 9.8902L1.6665 5.83301M18.3332 8.33301V14.1663H12.4998" stroke="#FA4C60" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
+  );
+}
+
+function buildPaginationItems(totalPages, currentPage, siblingCount = PAGER_SIBLING_COUNT) {
+  if (totalPages <= 1) return [1];
+  const totalNumbers = siblingCount * 2 + 5;
+  if (totalPages <= totalNumbers) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  const leftSibling = Math.max(currentPage - siblingCount, 1);
+  const rightSibling = Math.min(currentPage + siblingCount, totalPages);
+  const showLeftDots = leftSibling > 2;
+  const showRightDots = rightSibling < totalPages - 1;
+  if (!showLeftDots && showRightDots) {
+    const leftRange = Array.from({ length: 3 + siblingCount * 2 }, (_, i) => i + 1);
+    return [...leftRange, 'dots-right', totalPages];
+  }
+  if (showLeftDots && !showRightDots) {
+    const rightRangeStart = totalPages - (2 + siblingCount * 2);
+    const rightRange = Array.from({ length: 3 + siblingCount * 2 }, (_, i) => rightRangeStart + i);
+    return [1, 'dots-left', ...rightRange];
+  }
+  const middle = [];
+  for (let p = leftSibling; p <= rightSibling; p += 1) middle.push(p);
+  return [1, 'dots-left', ...middle, 'dots-right', totalPages];
+}
+
+function IconChevronLeft({ double = false }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      {double ? (
+        <>
+          <path d="M8.8 3.2L5 7l3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5.8 3.2L2 7l3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      ) : (
+        <path d="M8.7 3.2L4.9 7l3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+    </svg>
+  );
+}
+
+function IconChevronRight({ double = false }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      {double ? (
+        <>
+          <path d="M5.2 3.2L9 7l-3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M8.2 3.2L12 7l-3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      ) : (
+        <path d="M5.3 3.2L9.1 7l-3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+    </svg>
+  );
+}
+
+function FigmaPagination({ page, totalPages, onPageChange }) {
+  const items = useMemo(() => buildPaginationItems(totalPages, page), [totalPages, page]);
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+  return (
+    <div className="statistic-data__pager-figma" role="navigation" aria-label="Table pagination">
+      <button type="button" className="statistic-data__pg-btn statistic-data__pg-btn--icon" aria-label="First page" onClick={() => onPageChange(1)} disabled={!canPrev}>
+        <IconChevronLeft double />
+      </button>
+      <button type="button" className="statistic-data__pg-btn statistic-data__pg-btn--icon" aria-label="Previous page" onClick={() => onPageChange(page - 1)} disabled={!canPrev}>
+        <IconChevronLeft />
+      </button>
+      {items.map((it, idx) =>
+        typeof it === 'number' ? (
+          <button
+            key={`p-${it}`}
+            type="button"
+            className={'statistic-data__pg-btn' + (it === page ? ' statistic-data__pg-btn--active' : '')}
+            aria-label={`Page ${it}`}
+            aria-current={it === page ? 'page' : undefined}
+            onClick={() => onPageChange(it)}
+          >
+            {it}
+          </button>
+        ) : (
+          <span key={`${it}-${idx}`} className="statistic-data__pg-dots" aria-hidden>
+            ...
+          </span>
+        )
+      )}
+      <button type="button" className="statistic-data__pg-btn statistic-data__pg-btn--icon" aria-label="Next page" onClick={() => onPageChange(page + 1)} disabled={!canNext}>
+        <IconChevronRight />
+      </button>
+      <button type="button" className="statistic-data__pg-btn statistic-data__pg-btn--icon" aria-label="Last page" onClick={() => onPageChange(totalPages)} disabled={!canNext}>
+        <IconChevronRight double />
+      </button>
+    </div>
   );
 }
 
@@ -661,6 +754,7 @@ export default function TickerQuarterlyPage() {
               </table>
             </div>
             <div className="statistic-data__pager">
+              <FigmaPagination page={tablePageSafe} totalPages={tableTotalPages} onPageChange={setTablePage} />
               <span className="statistic-data__pager-meta">
                 Page {tablePageSafe} of {tableTotalPages} ({tableRows.length} rows)
               </span>

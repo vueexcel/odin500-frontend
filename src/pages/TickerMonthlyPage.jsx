@@ -19,7 +19,7 @@ import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
-import { alignComparisonRows, filterRowsByDateRange, filterRowsBySingleYear, filterRowsByYearRange, normalizePeriodReturnsRows } from '../utils/statisticsComparisonSeries.js';
+import { alignComparisonRows, filterRowsByDateRange, filterRowsByYearRange, normalizePeriodReturnsRows } from '../utils/statisticsComparisonSeries.js';
 
 const RESIZE_KEY_M_FIGMA = 'odin_ticker_monthly_resize_figma';
 const RESIZE_KEY_M_POSNEG = 'odin_ticker_monthly_resize_posneg';
@@ -28,7 +28,7 @@ const RESIZE_KEY_M_WF = 'odin_ticker_monthly_resize_waterfall';
 const RETURNS_DEFAULT_START = '1980-01-01';
 const DEFAULT_MONTHLY_START_YEAR = 2021;
 const DEFAULT_MONTHLY_END_YEAR = 2026;
-const DEFAULT_WEEKLY_START_YEAR = 1980;
+const DEFAULT_WEEKLY_START_YEAR = Math.max(1980, new Date().getFullYear() - 1);
 const DEFAULT_WEEKLY_END_YEAR = Math.max(2026, new Date().getFullYear());
 const BENCHMARK = 'SPY';
 const BENCHMARK_OPTIONS = ['SPY', 'QQQ', 'DIA'].map((v) => ({ id: v, label: v }));
@@ -623,10 +623,12 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
   }, [isDaily, isWeekly, monthYearOptions]);
   useEffect(() => {
     if (!isWeekly || !weekYearOptions.length) return;
-    const lo = weekYearOptions[0];
     const hi = weekYearOptions[weekYearOptions.length - 1];
-    setWeeklyStartYear(String(lo));
-    setWeeklyEndYear(String(hi));
+    const lo = Math.max(weekYearOptions[0], hi - 1);
+    const nextStart = weekYearOptions.includes(lo) ? lo : weekYearOptions[0];
+    const nextEnd = weekYearOptions.includes(hi) ? hi : weekYearOptions[weekYearOptions.length - 1];
+    setWeeklyStartYear(String(nextStart));
+    setWeeklyEndYear(String(nextEnd));
   }, [isWeekly, sym, weekYearSpanKey]);
 
   const monthlyChartRows = useMemo(() => {
@@ -695,10 +697,10 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
     const tRows = normalizePeriodReturnsRows(monthlyChartRows, modeForUtil);
     const bRows = normalizePeriodReturnsRows(benchmarkChartRows, modeForUtil);
     let out = alignComparisonRows(tRows, bRows);
-    if (isWeekly) out = filterRowsBySingleYear(out, weeklyEndYear);
+    if (isWeekly) out = filterRowsByYearRange(out, weeklyStartYear, weeklyEndYear);
     if (isDaily) out = filterRowsByDateRange(out, dailyFilter.start, dailyFilter.end);
     return out;
-  }, [benchmarkChartRows, dailyFilter.end, dailyFilter.start, isDaily, isWeekly, monthlyChartRows, weeklyEndYear]);
+  }, [benchmarkChartRows, dailyFilter.end, dailyFilter.start, isDaily, isWeekly, monthlyChartRows, weeklyEndYear, weeklyStartYear]);
 
   const monthlyChartRangeControls = !isDaily && !isWeekly ? (
     <div className="ticker-page__custom-range" aria-label="Monthly chart year range">
@@ -752,22 +754,6 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
       />
     </div>
   ) : null;
-  const weeklySingleYearControls = isWeekly ? (
-    <div className="ticker-page__custom-range" aria-label="Weekly chart year">
-      <span className="ticker-page__label ticker-page__label--inline">Select year</span>
-      <ThemedDropdown
-        size="sm"
-        style={{ minWidth: 96 }}
-        value={weeklyEndYear}
-        options={weekYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
-        onChange={setWeeklyEndYear}
-        title="Select year"
-        ariaLabelPrefix="Year"
-        labelFallback={weeklyEndYear}
-      />
-    </div>
-  ) : null;
-
   const tableRows = useMemo(() => {
     const source = isDaily ? (dailyReturnsForUi || []) : monthlyReturnsRaw;
     const rows = (Array.isArray(source) ? source : []).map((r) => ({
@@ -916,7 +902,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               rows={comparisonRows}
               benchmarkOptions={BENCHMARK_OPTIONS}
               onBenchmarkChange={setBenchmarkIndex}
-              controls={isDaily ? null : isWeekly ? weeklySingleYearControls : monthlyChartRangeControls}
+              controls={isDaily ? null : isWeekly ? weeklyChartRangeControls : monthlyChartRangeControls}
               loading={loading}
             />
             <ExcessReturnLineChart
@@ -932,7 +918,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               rows={comparisonRows}
               benchmarkOptions={BENCHMARK_OPTIONS}
               onBenchmarkChange={setBenchmarkIndex}
-              controls={isDaily ? null : isWeekly ? weeklySingleYearControls : monthlyChartRangeControls}
+              controls={isDaily ? null : isWeekly ? weeklyChartRangeControls : monthlyChartRangeControls}
               loading={loading}
             />
             <PeriodicReturnBarChart
@@ -948,7 +934,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               rows={comparisonRows}
               benchmarkOptions={BENCHMARK_OPTIONS}
               onBenchmarkChange={setBenchmarkIndex}
-              controls={isDaily ? null : isWeekly ? weeklySingleYearControls : monthlyChartRangeControls}
+              controls={isDaily ? null : isWeekly ? weeklyChartRangeControls : monthlyChartRangeControls}
               loading={loading}
             />
           </div>
