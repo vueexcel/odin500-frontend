@@ -354,14 +354,14 @@ function ReturnTable({
 
   const onDownloadCsv = () => {
     if (!rows.length) return;
-    const header = ['Period', 'Return', 'Start Close', 'End Close'];
+    const header = ['Period', 'Start Close', 'End Close', 'Return'];
     const csvRows = rows.map((row) => [
       `"${String(row.period ?? '').replace(/"/g, '""')}"`,
-      row.returnPct != null && Number.isFinite(Number(row.returnPct)) ? Number(row.returnPct).toFixed(4) : '',
       row.startClose != null && Number.isFinite(Number(row.startClose)) ? Number(row.startClose).toFixed(4) : '',
       row.endClose != null && Number.isFinite(Number(row.endClose))
         ? Number(row.endClose).toFixed(4)
-        : `"${String(row.unavailableReason || '').replace(/"/g, '""')}"`
+        : `"${String(row.unavailableReason || '').replace(/"/g, '""')}"`,
+      row.returnPct != null && Number.isFinite(Number(row.returnPct)) ? Number(row.returnPct).toFixed(4) : ''
     ]);
     const csv = [header.join(','), ...csvRows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -407,9 +407,9 @@ function ReturnTable({
           <thead>
             <tr>
               <th>Period</th>
-              <th>Return</th>
               <th>Start Close</th>
               <th>End Close</th>
+              <th>Return</th>
             </tr>
           </thead>
           <tbody>
@@ -425,19 +425,19 @@ function ReturnTable({
                   <td>
                     <span
                       className="statistic-data__skel-cell"
-                      style={{ maxWidth: '56%', animationDelay: `${i * 0.04 + 0.02}s` }}
+                      style={{ maxWidth: '72%', animationDelay: `${i * 0.04 + 0.02}s` }}
                     />
                   </td>
                   <td>
                     <span
                       className="statistic-data__skel-cell"
-                      style={{ maxWidth: '72%', animationDelay: `${i * 0.04 + 0.04}s` }}
+                      style={{ maxWidth: '80%', animationDelay: `${i * 0.04 + 0.04}s` }}
                     />
                   </td>
                   <td>
                     <span
                       className="statistic-data__skel-cell"
-                      style={{ maxWidth: '80%', animationDelay: `${i * 0.04 + 0.06}s` }}
+                      style={{ maxWidth: '56%', animationDelay: `${i * 0.04 + 0.06}s` }}
                     />
                   </td>
                 </tr>
@@ -446,7 +446,6 @@ function ReturnTable({
               pageRows.map((row) => (
                 <tr key={`${title}-${row.period}`}>
                   <td>{row.period}</td>
-                  <td className={pctTone(row.returnPct)}>{fmtPct(row.returnPct)}</td>
                   <td>{Number.isFinite(row.startClose) ? row.startClose.toFixed(2) : '—'}</td>
                   <td>
                     {Number.isFinite(row.endClose)
@@ -455,6 +454,7 @@ function ReturnTable({
                         ? row.unavailableReason
                         : '—'}
                   </td>
+                  <td className={pctTone(row.returnPct)}>{fmtPct(row.returnPct)}</td>
                 </tr>
               ))
             ) : (
