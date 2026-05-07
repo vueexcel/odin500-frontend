@@ -2,6 +2,7 @@
  * Shared chart loading placeholders — layout mimics real chart cards (shimmer / pulse).
  */
 
+import { useId } from 'react';
 import { periodModeNouns } from '../utils/periodModeNouns.js';
 
 export function badgeLabelForPeriodMode(periodMode) {
@@ -339,6 +340,9 @@ export function WaterfallDonutChartSkeleton({ periodMode = 'monthly' }) {
 
 /** Line chart area for lightweight-charts hosts (relative strength, etc.). */
 export function LightweightChartAreaSkeleton({ minHeight = 360, className = '' }) {
+  const uid = useId().replace(/:/g, '');
+  const gidA = `lw-skel-fill-a-${uid}`;
+  const gidB = `lw-skel-fill-b-${uid}`;
   const h = Math.max(200, Number(minHeight) || 360);
   return (
     <div
@@ -347,19 +351,71 @@ export function LightweightChartAreaSkeleton({ minHeight = 360, className = '' }
       aria-busy="true"
       aria-label="Loading chart"
     >
-      <div className="lw-chart-skel__grid" aria-hidden />
-      <div className="lw-chart-skel__zero" aria-hidden />
-      <svg className="lw-chart-skel__spark" viewBox="0 0 400 120" preserveAspectRatio="none" aria-hidden>
-        <path
-          className="lw-chart-skel__path"
-          d="M0,85 C40,70 60,95 100,55 S180,40 220,65 S320,25 400,45 L400,120 L0,120 Z"
-        />
-        <path
-          className="lw-chart-skel__stroke"
-          d="M0,85 C40,70 60,95 100,55 S180,40 220,65 S320,25 400,45"
-          fill="none"
-        />
-      </svg>
+      <div className="lw-chart-skel__inner">
+        <div className="lw-chart-skel__y-rail" aria-hidden>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <span
+              key={i}
+              className="lw-chart-skel__y-tick"
+              style={{ animationDelay: `${i * 0.07}s` }}
+            />
+          ))}
+        </div>
+        <div className="lw-chart-skel__plot">
+          <div className="lw-chart-skel__grid lw-chart-skel__grid--horz" aria-hidden />
+          <div className="lw-chart-skel__grid lw-chart-skel__grid--vert" aria-hidden />
+          <div className="lw-chart-skel__zero" aria-hidden />
+          <div className="lw-chart-skel__glow" aria-hidden />
+          <svg
+            className="lw-chart-skel__svg"
+            viewBox="0 0 400 200"
+            preserveAspectRatio="none"
+            aria-hidden
+          >
+            <defs>
+              <linearGradient id={gidA} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" className="lw-chart-skel__grad-stop lw-chart-skel__grad-stop--a-top" />
+                <stop offset="55%" className="lw-chart-skel__grad-stop lw-chart-skel__grad-stop--a-mid" />
+                <stop offset="100%" className="lw-chart-skel__grad-stop lw-chart-skel__grad-stop--a-bot" />
+              </linearGradient>
+              <linearGradient id={gidB} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" className="lw-chart-skel__grad-stop lw-chart-skel__grad-stop--b-top" />
+                <stop offset="100%" className="lw-chart-skel__grad-stop lw-chart-skel__grad-stop--b-bot" />
+              </linearGradient>
+            </defs>
+            <path
+              className="lw-chart-skel__area lw-chart-skel__area--b"
+              fill={`url(#${gidB})`}
+              d="M0,118 C48,132 92,96 140,108 S236,72 288,88 S352,62 400,78 L400,200 L0,200 Z"
+            />
+            <path
+              className="lw-chart-skel__area lw-chart-skel__area--a"
+              fill={`url(#${gidA})`}
+              d="M0,108 C52,78 96,124 148,92 S244,56 304,74 S360,48 400,62 L400,200 L0,200 Z"
+            />
+            <path
+              className="lw-chart-skel__line lw-chart-skel__line--b"
+              d="M0,118 C48,132 92,96 140,108 S236,72 288,88 S352,62 400,78"
+              fill="none"
+            />
+            <path
+              className="lw-chart-skel__line lw-chart-skel__line--a"
+              d="M0,108 C52,78 96,124 148,92 S244,56 304,74 S360,48 400,62"
+              fill="none"
+            />
+          </svg>
+          <div className="lw-chart-skel__sweep" aria-hidden />
+        </div>
+      </div>
+      <div className="lw-chart-skel__x-rail" aria-hidden>
+        {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+          <span
+            key={i}
+            className="lw-chart-skel__x-tick"
+            style={{ animationDelay: `${i * 0.06}s` }}
+          />
+        ))}
+      </div>
     </div>
   );
 }

@@ -400,11 +400,7 @@ export default function RelativeStrengthTickerPage() {
       </div>
 
       <div className="relative-strength-page__chart-card">
-        {loading ? (
-          <div className="relative-strength-page__chart-skel-overlay">
-            <LightweightChartAreaSkeleton minHeight={360} className="relative-strength-page__chart-skel-fill" />
-          </div>
-        ) : null}
+        
         {!loading && error ? <div className="relative-strength-page__state relative-strength-page__state--error">{error}</div> : null}
         <div
           className={'relative-strength-page__chart-host' + (loading ? ' relative-strength-page__chart-host--loading' : '')}
@@ -420,7 +416,7 @@ export default function RelativeStrengthTickerPage() {
         </div>
       </div>
 
-      <div className="relative-strength-page__table-card">
+      {/* <div className="relative-strength-page__table-card">
         <div className="relative-strength-page__table-head">
           <h2>Comparison table</h2>
           <ThemedDropdown
@@ -469,7 +465,7 @@ export default function RelativeStrengthTickerPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </div> */}
     </section>
   );
 }
