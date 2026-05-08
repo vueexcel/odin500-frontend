@@ -7,6 +7,7 @@ import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyR
 import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
 import { TickerSection23Section24 } from '../components/TickerSection23Section24.jsx';
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
+import { WatchlistRailFlyout } from '../components/WatchlistRailFlyout.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
@@ -564,17 +565,66 @@ function useMediaChartHeight() {
 }
 
 export default function TickerPage() {
+  const WATCHLIST_ANIM_MS = 260;
   const location = useLocation();
   const { symbol: symbolParam } = useParams();
   const navigate = useNavigate();
   const [activeSymbol, setActiveSymbol] = useState(() => sanitizeTickerPageInput(symbolParam) || 'AAPL');
   const sym = activeSymbol;
   const canonicalSym = String(sym || 'AAPL').toLowerCase();
+  const [watchlistDocked, setWatchlistDocked] = useState(false);
+  const [watchlistMounted, setWatchlistMounted] = useState(false);
+
+  const openDockedWatchlist = useCallback(() => {
+    setWatchlistMounted(true);
+    setWatchlistDocked(true);
+  }, []);
 
   useEffect(() => {
     const next = sanitizeTickerPageInput(symbolParam) || 'AAPL';
     setActiveSymbol((prev) => (prev === next ? prev : next));
   }, [symbolParam]);
+
+  useEffect(() => {
+    let shouldOpen = Boolean(location.state && location.state.openWatchlist);
+    if (!shouldOpen) {
+      try {
+        shouldOpen = sessionStorage.getItem('ticker_open_watchlist') === '1';
+      } catch {
+        shouldOpen = false;
+      }
+    }
+    if (shouldOpen) {
+      openDockedWatchlist();
+      try {
+        sessionStorage.removeItem('ticker_open_watchlist');
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [location.state, openDockedWatchlist]);
+
+  useEffect(() => {
+    if (watchlistDocked) {
+      setWatchlistMounted(true);
+      return;
+    }
+    const t = window.setTimeout(() => setWatchlistMounted(false), WATCHLIST_ANIM_MS);
+    return () => window.clearTimeout(t);
+  }, [watchlistDocked]);
+
+  useEffect(() => {
+    const onOpen = () => {
+      openDockedWatchlist();
+      try {
+        sessionStorage.removeItem('ticker_open_watchlist');
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('ticker:open-watchlist', onOpen);
+    return () => window.removeEventListener('ticker:open-watchlist', onOpen);
+  }, [openDockedWatchlist]);
 
   usePageSeo({
     title: `${String(sym).toUpperCase()} Odin500 Signal, Returns & Market Statistics`,
@@ -1179,6 +1229,14 @@ export default function TickerPage() {
     const start = (newsPageSafe - 1) * NEWS_PAGE_SIZE;
     return liveNews.slice(start, start + NEWS_PAGE_SIZE);
   }, [liveNews, newsPageSafe]);
+  const closeDockedWatchlist = useCallback(() => {
+    setWatchlistDocked(false);
+    try {
+      sessionStorage.removeItem('ticker_open_watchlist');
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const myDetail = useMemo(() => {
     const u = sym.toUpperCase();
@@ -1613,7 +1671,7 @@ export default function TickerPage() {
     : `Using pill timeframe “${timeframe}”, anchored to as-of ${asOfDate}.`;
 
   return (
-    <div className="ticker-page">
+    <div className={'ticker-page' + (watchlistMounted ? ' ticker-page--watchlist-open' : '') + (watchlistDocked ? ' ticker-page--watchlist-visible' : '')}>
 
 
       {error ? (
@@ -1696,7 +1754,7 @@ export default function TickerPage() {
         </div>
       </header>
 
-      <div className="ticker-page__grid">
+      <div className={'ticker-page__grid' + (watchlistMounted ? ' ticker-page__grid--watchlist-open' : '')}>
         <div className="ticker-page__main">
           <section className="ticker-card ticker-card--main-chart" aria-labelledby="snapshot-chart-title">
             {/* <div className="ticker-chart-toolbar">
@@ -2069,6 +2127,7 @@ export default function TickerPage() {
           />
         </div>
 
+        {!watchlistMounted ? (
         <aside className="ticker-page__aside">
           <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h">
             <div className="ticker-signal-head">
@@ -2278,6 +2337,12 @@ export default function TickerPage() {
             </div>
           </section>
         </aside>
+        ) : null}
+        {watchlistMounted ? (
+          <aside className={'ticker-page__watchlist-dock' + (watchlistDocked ? ' is-open' : '')} aria-label="Watchlist sidebar">
+            <WatchlistRailFlyout open onClose={closeDockedWatchlist} docked />
+          </aside>
+        ) : null}
       </div>
     </div>
   );

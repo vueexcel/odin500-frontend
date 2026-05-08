@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { fetchJsonCached, fetchWithAuth, peekJsonCached } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { WatchlistTickerMultiselect } from './WatchlistTickerMultiselect.jsx';
@@ -197,9 +198,9 @@ function pctTone(fraction) {
 }
 
 /**
- * @param {{ open: boolean, onClose: () => void }} props
+ * @param {{ open: boolean, onClose: () => void, docked?: boolean }} props
  */
-export function WatchlistRailFlyout({ open, onClose }) {
+export function WatchlistRailFlyout({ open, onClose, docked = false }) {
   /** True only when we have no rows to show yet (first paint / cold cache). */
   const [loading, setLoading] = useState(false);
   /** True while a network refresh is in flight (may already be showing cached/partial rows). */
@@ -566,13 +567,11 @@ export function WatchlistRailFlyout({ open, onClose }) {
 
   if (!open) return null;
 
-  return (
-    <>
-      <div className="wl-flyout__backdrop" aria-hidden onClick={onClose} />
+  const panel = (
       <div
-        className="wl-flyout"
-        role="dialog"
-        aria-modal="true"
+        className={'wl-flyout' + (docked ? ' wl-flyout--docked' : '')}
+        role={docked ? 'complementary' : 'dialog'}
+        aria-modal={docked ? undefined : 'true'}
         aria-labelledby="wl-flyout-title"
       >
         <div className="wl-flyout__head">
@@ -763,8 +762,14 @@ export function WatchlistRailFlyout({ open, onClose }) {
           </table>
         </div>
       </div>
+  );
 
-      {managePanel === 'create' ? (
+  return (
+    <>
+      {docked ? null : <div className="wl-flyout__backdrop" aria-hidden onClick={onClose} />}
+      {panel}
+      {managePanel === 'create'
+        ? createPortal(
         <div
           className="wl-manage-overlay"
           role="presentation"
@@ -815,9 +820,11 @@ export function WatchlistRailFlyout({ open, onClose }) {
             </div>
           </div>
         </div>
-      ) : null}
+        , document.body)
+        : null}
 
-      {managePanel === 'delete' ? (
+      {managePanel === 'delete'
+        ? createPortal(
         <div
           className="wl-manage-overlay"
           role="presentation"
@@ -866,9 +873,11 @@ export function WatchlistRailFlyout({ open, onClose }) {
             </div>
           </div>
         </div>
-      ) : null}
+        , document.body)
+        : null}
 
-      {managePanel === 'update-pick' ? (
+      {managePanel === 'update-pick'
+        ? createPortal(
         <div
           className="wl-manage-overlay"
           role="presentation"
@@ -906,9 +915,11 @@ export function WatchlistRailFlyout({ open, onClose }) {
             </div>
           </div>
         </div>
-      ) : null}
+        , document.body)
+        : null}
 
-      {managePanel === 'update-edit' ? (
+      {managePanel === 'update-edit'
+        ? createPortal(
         <div
           className="wl-manage-overlay"
           role="presentation"
@@ -958,7 +969,8 @@ export function WatchlistRailFlyout({ open, onClose }) {
             </div>
           </div>
         </div>
-      ) : null}
+        , document.body)
+        : null}
     </>
   );
 }

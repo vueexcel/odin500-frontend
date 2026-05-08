@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { NewsRailFlyout } from './NewsRailFlyout.jsx';
 import { WatchlistRailFlyout } from './WatchlistRailFlyout.jsx';
 import { clearApiCache, clearAuthToken, fetchWithAuth } from '../store/apiStore.js';
@@ -110,6 +110,7 @@ function IcoOdinSignals() {
 
 export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [newsOpen, setNewsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -180,13 +181,17 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
   };
 
   const toggleWatchlist = () => {
-    if (mobileOpen) {
-      closeAll();
+    closeAll();
+    try {
+      sessionStorage.setItem('ticker_open_watchlist', '1');
+    } catch {
+      /* ignore */
+    }
+    if (String(location.pathname || '').startsWith('/ticker')) {
+      window.dispatchEvent(new CustomEvent('ticker:open-watchlist'));
       return;
     }
-    setNewsOpen(false);
-    setProfileOpen(false);
-    setWatchlistOpen((o) => !o);
+    navigate('/ticker', { state: { openWatchlist: true } });
   };
 
   const toggleNews = () => {
