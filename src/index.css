@@ -406,6 +406,8 @@ a.app-right-rail__btn {
   border-right: 0;
   border-bottom: 0;
   border-radius: 0;
+  background: var(--colors-opacity-bg-opacity-3, #FFFFFF08);
+
 }
 
 .wl-flyout__head {
@@ -510,7 +512,7 @@ a.app-right-rail__btn {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  background: #12151a;
+  background: var(--colors-opacity-bg-opacity-3, #FFFFFF08);
   color: #f1f5f9;
   font-size: 0.82rem;
   font-weight: 600;
@@ -743,7 +745,8 @@ a.app-right-rail__btn {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #1a1d23;
+  background: var(--colors-opacity-bg-opacity-3, #FFFFFF08);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -7358,7 +7361,7 @@ button:disabled {
   position: fixed;
   right: 68px;
   top: 64px;
-  width: 380px;
+  width: 396px;
   align-self: start;
   overflow: hidden;
   z-index: 60;
