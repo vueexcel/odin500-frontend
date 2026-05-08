@@ -1073,10 +1073,12 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
                 </tbody>
               </table>
             </div>
-            <div className="statistic-data__pager">
-              <FigmaPagination page={tablePageSafe} totalPages={tableTotalPages} onPageChange={setTablePage} />
-              <span className="statistic-data__pager-meta">Page {tablePageSafe} of {tableTotalPages} ({tableRows.length} rows)</span>
-            </div>
+            {tableTotalPages > 1 ? (
+              <div className="statistic-data__pager">
+                <FigmaPagination page={tablePageSafe} totalPages={tableTotalPages} onPageChange={setTablePage} />
+                <span className="statistic-data__pager-meta">Page {tablePageSafe} of {tableTotalPages} ({tableRows.length} rows)</span>
+              </div>
+            ) : null}
           </section>
         </div>
 

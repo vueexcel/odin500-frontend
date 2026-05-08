@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
+import { FigmaDataTable } from '../components/FigmaDataTable.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
@@ -54,6 +55,12 @@ const TABLE_RANGE_OPTIONS = [
 const TABLE_RANGE_DROPDOWN_OPTIONS = TABLE_RANGE_OPTIONS.map((opt) => ({ id: opt.value, label: opt.label }));
 const TABLE_PAGE_SIZE = 30;
 const PAGER_SIBLING_COUNT = 1;
+const ANNUAL_TABLE_HEADERS = [
+  { key: 'period', label: 'Period' },
+  { key: 'startClose', label: 'Start Close' },
+  { key: 'endClose', label: 'End Close' },
+  { key: 'returnPct', label: 'Return' }
+];
 
 function fmtPct(v) {
   if (v == null || !Number.isFinite(Number(v))) return '—';
@@ -767,42 +774,28 @@ export default function TickerAnnualPage() {
                 </label>
               </div>
             </div>
-            <div className="statistic-data__table-wrap">
-              <table className="statistic-data__table">
-                <thead>
-                  <tr>
-                    <th>Period</th>
-                    <th>Return</th>
-                    <th>Start Close</th>
-                    <th>End Close</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {annualTablePageRows.length ? (
-                    annualTablePageRows.map((row) => (
-                      <tr key={`annual-table-${row.period}`}>
-                        <td>{row.period}</td>
-                        <td className={pctTone(row.returnPct)}>{fmtPct(row.returnPct)}</td>
-                        <td>{Number.isFinite(Number(row.startClose)) ? Number(row.startClose).toFixed(2) : '—'}</td>
-                        <td>{Number.isFinite(Number(row.endClose)) ? Number(row.endClose).toFixed(2) : '—'}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="statistic-data__empty">
-                        No annual rows yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="statistic-data__pager">
-              <FigmaPagination page={annualTablePageSafe} totalPages={annualTableTotalPages} onPageChange={setAnnualTablePage} />
-              <span className="statistic-data__pager-meta">
-                Page {annualTablePageSafe} of {annualTableTotalPages} ({annualTableRows.length} rows)
-              </span>
-            </div>
+            <FigmaDataTable
+              headers={ANNUAL_TABLE_HEADERS}
+              rows={annualTablePageRows}
+              getRowKey={(row) => `annual-table-${row.period}`}
+              emptyText="No annual rows yet."
+              emptyColSpan={4}
+              renderCell={({ header, row }) => {
+                if (header.key === 'returnPct') return fmtPct(row.returnPct);
+                if (header.key === 'startClose') return Number.isFinite(Number(row.startClose)) ? Number(row.startClose).toFixed(2) : '—';
+                if (header.key === 'endClose') return Number.isFinite(Number(row.endClose)) ? Number(row.endClose).toFixed(2) : '—';
+                return row[header.key];
+              }}
+              cellClassName={({ header, row }) => (header.key === 'returnPct' ? pctTone(row.returnPct) : '')}
+            />
+            {annualTableTotalPages > 1 ? (
+              <div className="statistic-data__pager">
+                <FigmaPagination page={annualTablePageSafe} totalPages={annualTableTotalPages} onPageChange={setAnnualTablePage} />
+                <span className="statistic-data__pager-meta">
+                  Page {annualTablePageSafe} of {annualTableTotalPages} ({annualTableRows.length} rows)
+                </span>
+              </div>
+            ) : null}
           </section>
         </div>
         <aside className="ticker-page__aside">
@@ -887,7 +880,7 @@ export default function TickerAnnualPage() {
               </dl>
             </div>
             <p className="ticker-page__label ticker-kd-comp-label">
-              <span>RELATED INDICES</span>
+              <span>INDICES</span>
               <span className="ticker-kd-comp-label__links">
                 {RELATED_INDEX_LINKS.map((idx) => (
                   <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">

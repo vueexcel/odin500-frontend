@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FigmaDataTable } from '../components/FigmaDataTable.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
@@ -53,6 +54,11 @@ function computeReturnPct(openValue, closeValue) {
   if (!Number.isFinite(openValue) || !Number.isFinite(closeValue) || openValue === 0) return null;
   const pct = ((closeValue - openValue) / openValue) * 100;
   return Number.isFinite(pct) ? pct : null;
+}
+
+function signedToneClass(v) {
+  if (!Number.isFinite(Number(v))) return '';
+  return Number(v) > 0 ? 'app-num--up' : Number(v) < 0 ? 'app-num--down' : '';
 }
 
 function sortNormalizedDesc(rows) {
@@ -472,67 +478,53 @@ export default function HistoricalDataPage() {
       {error ? <p className="historical-data__status historical-data__status--err">{error}</p> : null}
 
       <section className="historical-data__table-card">
-        <div className={'historical-data__table-wrap' + (busy ? ' historical-data__table-wrap--loading' : '')}>
-          <table className="historical-data__table" aria-busy={busy} aria-label={busy ? loadingLabel : undefined}>
-            <thead>
-              <tr>
-                <th>{periodColumnLabel}</th>
-                <th>Open</th>
-                <th>High</th>
-                <th>Low</th>
-                <th>Close</th>
-                <th>Return %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {busy ? (
-                Array.from({ length: TABLE_SKELETON_ROWS }, (_, i) => (
-                  <tr key={`hist-skel-${i}`} className="historical-data__tr--skeleton">
-                    <td>
-                      <span className="historical-data__skel-cell" style={{ maxWidth: '92%', animationDelay: `${i * 0.035}s` }} />
-                    </td>
-                    <td>
-                      <span className="historical-data__skel-cell" style={{ maxWidth: '64%', animationDelay: `${i * 0.035 + 0.02}s` }} />
-                    </td>
-                    <td>
-                      <span className="historical-data__skel-cell" style={{ maxWidth: '64%', animationDelay: `${i * 0.035 + 0.04}s` }} />
-                    </td>
-                    <td>
-                      <span className="historical-data__skel-cell" style={{ maxWidth: '64%', animationDelay: `${i * 0.035 + 0.06}s` }} />
-                    </td>
-                    <td>
-                      <span className="historical-data__skel-cell" style={{ maxWidth: '64%', animationDelay: `${i * 0.035 + 0.08}s` }} />
-                    </td>
-                    <td>
-                      <span className="historical-data__skel-cell" style={{ maxWidth: '52%', animationDelay: `${i * 0.035 + 0.1}s` }} />
-                    </td>
-                  </tr>
-                ))
-              ) : pageRows.length ? (
-                pageRows.map((r, idx) => (
-                  <tr key={`${r.sortKey}-${idx}`}>
-                    <td>{r.period || '—'}</td>
-                    <td>{r.open != null ? r.open.toFixed(2) : '—'}</td>
-                    <td>{r.high != null ? r.high.toFixed(2) : '—'}</td>
-                    <td>{r.low != null ? r.low.toFixed(2) : '—'}</td>
-                    <td>{r.close != null ? r.close.toFixed(2) : '—'}</td>
-                    <td>{r.returnPct != null ? `${r.returnPct.toFixed(2)}%` : '—'}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="historical-data__empty">
-                    No rows yet. Select ticker, frequency, date range, and submit.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <FigmaDataTable
+          headers={[
+            { key: 'period', label: periodColumnLabel },
+            { key: 'open', label: 'Open' },
+            { key: 'high', label: 'High' },
+            { key: 'low', label: 'Low' },
+            { key: 'close', label: 'Close' },
+            { key: 'returnPct', label: 'Return %' }
+          ]}
+          rows={
+            busy
+              ? Array.from({ length: TABLE_SKELETON_ROWS }, (_, i) => ({ __skeleton: true, __index: i }))
+              : pageRows
+          }
+          getRowKey={(row, idx) => (row.__skeleton ? `hist-skel-${row.__index}` : `${row.sortKey}-${idx}`)}
+          getRowClassName={(row) => (row.__skeleton ? 'historical-data__tr--skeleton' : '')}
+          wrapClassName={'historical-data__table-wrap' + (busy ? ' historical-data__table-wrap--loading' : '')}
+          tableAriaBusy={busy}
+          tableAriaLabel={busy ? loadingLabel : undefined}
+          emptyText="No rows yet. Select ticker, frequency, date range, and submit."
+          emptyColSpan={6}
+          renderCell={({ header, row }) => {
+            if (row.__skeleton) {
+              const i = Number(row.__index) || 0;
+              if (header.key === 'period') {
+                return <span className="historical-data__skel-cell" style={{ maxWidth: '92%', animationDelay: `${i * 0.035}s` }} />;
+              }
+              if (header.key === 'returnPct') {
+                return <span className="historical-data__skel-cell" style={{ maxWidth: '52%', animationDelay: `${i * 0.035 + 0.1}s` }} />;
+              }
+              const offsets = { open: 0.02, high: 0.04, low: 0.06, close: 0.08 };
+              const off = offsets[header.key] ?? 0.02;
+              return <span className="historical-data__skel-cell" style={{ maxWidth: '64%', animationDelay: `${i * 0.035 + off}s` }} />;
+            }
+            if (header.key === 'period') return row.period || '—';
+            if (header.key === 'open') return row.open != null ? row.open.toFixed(2) : '—';
+            if (header.key === 'high') return row.high != null ? row.high.toFixed(2) : '—';
+            if (header.key === 'low') return row.low != null ? row.low.toFixed(2) : '—';
+            if (header.key === 'close') return row.close != null ? row.close.toFixed(2) : '—';
+            return row.returnPct != null ? `${row.returnPct >= 0 ? '+' : ''}${row.returnPct.toFixed(2)}%` : '—';
+          }}
+          cellClassName={({ header, row }) => (row.__skeleton ? '' : header.key === 'returnPct' ? signedToneClass(row.returnPct) : '')}
+        />
         <div className="historical-data__pager">
           {busy ? (
             <span className="historical-data__pager-loading">{loadingLabel}</span>
-          ) : (
+          ) : totalPages > 1 ? (
             <>
               <button type="button" className="historical-data__btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={pageSafe <= 1}>
                 Previous
@@ -549,7 +541,8 @@ export default function HistoricalDataPage() {
                 Next
               </button>
             </>
-          )}
+          ) : null
+          }
         </div>
       </section>
     </div>

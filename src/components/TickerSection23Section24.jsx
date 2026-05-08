@@ -47,7 +47,12 @@ function pickDynamic(dynamicPeriods, periodName) {
 function fmtPct(v) {
   if (v == null || !Number.isFinite(v)) return '—';
   const n = Number(v);
-  return (n >= 0 ? '' : '-') + Math.abs(n).toFixed(2) + '%';
+  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+}
+
+function signedToneClass(v) {
+  if (!Number.isFinite(Number(v))) return '';
+  return Number(v) > 0 ? 'app-num--up' : Number(v) < 0 ? 'app-num--down' : '';
 }
 
 function pickTickerReturnsFromPayload(payload, tickerSym) {
@@ -309,9 +314,9 @@ export function TickerSection23Section24({
             {rows.map((r) => (
               <tr key={r.tf}>
                 <th scope="row">{r.tf}</th>
-                <td>{fmtPct(r.bench)}</td>
-                <td>{fmtPct(r.tick)}</td>
-                <td>{fmtPct(r.diff)}</td>
+                <td className={signedToneClass(r.bench)}>{fmtPct(r.bench)}</td>
+                <td className={signedToneClass(r.tick)}>{fmtPct(r.tick)}</td>
+                <td className={signedToneClass(r.diff)}>{fmtPct(r.diff)}</td>
               </tr>
             ))}
           </tbody>

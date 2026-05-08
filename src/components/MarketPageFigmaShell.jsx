@@ -7,7 +7,6 @@ import { apiUrl } from '../utils/apiOrigin.js';
 import { NormalizedPerformanceCard } from './NormalizedPerformanceCard.jsx';
 import { SectorTreemap } from './SectorTreemap.jsx';
 import TradingChartLoader from './TradingChartLoader.jsx';
-import { useWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
 import { DEFAULT_SELECTED_KEYS, META_BY_KEY, MARKET_SERIES } from './marketSeriesRegistry.js';
 import { returnToSummaryTableHeatColor, summaryTableTextOnFill } from '../utils/heatmapColors.js';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
@@ -83,7 +82,10 @@ function LeftSnapshotStack({
           <header className="mkt-mini-card__head">
             <span>
               {g.title}
-              <span className="mkt-mini-card__tf" title="Same date range as the performance chart">
+              <span
+                className={'mkt-mini-card__tf' + (String(timeframe).toUpperCase() === '10Y' ? ' mkt-mini-card__tf--10y' : '')}
+                title="Same date range as the performance chart"
+              >
                 {timeframe}
               </span>
             </span>
@@ -220,7 +222,7 @@ function SummaryReturnsCard({ refreshMs = 0, loadOhlcRows = null }) {
   return (
     <section className="mkt-summary-card mkt-summary-card--figma">
       <header className="mkt-summary-card__head mkt-summary-card__head--figma">
-        Index returns <ChartInfoTip tip={CHART_INFO_TIPS.marketIndexReturns} align="start" />
+        <span className="align-center">Index returns</span> <ChartInfoTip tip={CHART_INFO_TIPS.marketIndexReturns} align="start" />
       </header>
       <div className="mkt-summary-card__table-wrap">
       <table className="mkt-summary-card__table mkt-summary-card__table--figma">
@@ -312,11 +314,14 @@ function MarketHeatmapThumbnail({ refreshMs = 0 }) {
   return (
     <section className="mkt-heat-thumb-card mkt-heat-thumb-card--figma">
       <header className="mkt-heat-thumb-card__head mkt-heat-thumb-card__head--figma mkt-heat-thumb-card__head--row">
-        <span className="mkt-heat-thumb-card__title">{HEATMAP_THUMB_INDEX} heatmap</span>
-        <ChartInfoTip tip={CHART_INFO_TIPS.marketHeatmapThumb} align="start" />
-        <Link to="/heatmap" className="mkt-heat-thumb-card__link">
-          Full heatmap →
+      <div className="flex align-center gap-2">
+        <span className="mkt-heat-thumb-card__title align-center">Stock Market Heatmap</span>
+        <ChartInfoTip tip={CHART_INFO_TIPS.marketHeatmapThumb} align="end" />
+        </div>
+        <Link to="/heatmap" className="mkt-heat-thumb-card__link mkt-heat-thumb-card__link--icon" aria-label="Open full heatmap">
+        ↗
         </Link>
+        
       </header>
       <div className="mkt-treemap-thumb-host mkt-treemap-thumb-host--figma" aria-busy={loading}>
         <Link
@@ -341,27 +346,107 @@ function MarketHeatmapThumbnail({ refreshMs = 0 }) {
   );
 }
 
+const WATCHLIST_INDEX_OPTIONS = [
+  { id: 'dow-jones', label: 'Dow Jones', apiIndex: 'Dow Jones' },
+  { id: 'sp500', label: 'S&P 500', apiIndex: 'sp500' },
+  { id: 'nasdaq-100', label: 'Nasdaq 100', apiIndex: 'Nasdaq 100' }
+];
+
 function RightWatchlistCard({ refreshMs = 0 }) {
-  const { items } = useWatchlistDefaults(2 * 60 * 1000, refreshMs);
-  const rows = items;
+  const [selectedIndexId, setSelectedIndexId] = useState('dow-jones');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const selectedIndex = useMemo(
+    () => WATCHLIST_INDEX_OPTIONS.find((opt) => opt.id === selectedIndexId) || WATCHLIST_INDEX_OPTIONS[0],
+    [selectedIndexId]
+  );
+
+  useEffect(() => {
+    let cancel = false;
+    async function load() {
+      if (!getAuthToken()) {
+        setRows([]);
+        setError('Sign in to load tickers.');
+        return;
+      }
+      setLoading(true);
+      setError('');
+      try {
+        const { data: payload } = await fetchJsonCached({
+          path: '/api/market/ticker-details',
+          method: 'POST',
+          body: { index: selectedIndex.apiIndex, period: 'last-date' },
+          auth: true,
+          ttlMs: 2 * 60 * 1000
+        });
+        if (cancel) return;
+        const list = Array.isArray(payload?.data) ? payload.data : [];
+        setRows(list);
+        if (!list.length) setError('No rows for selected index.');
+      } catch (e) {
+        if (!cancel) {
+          setRows([]);
+          setError(e.message || 'Failed loading tickers');
+        }
+      } finally {
+        if (!cancel) setLoading(false);
+      }
+    }
+    load();
+    let timer = null;
+    if (refreshMs > 0) timer = window.setInterval(load, refreshMs);
+    return () => {
+      cancel = true;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [refreshMs, selectedIndex.apiIndex]);
 
   return (
     <aside className="mkt-right">
       <section className="mkt-watch-card">
-        <header className="mkt-watch-card__head">Tickers List</header>
+        <header className="mkt-watch-card__head">
+          <span className="mkt-watch-card__title">Tickers List</span>
+          <div className="mkt-watch-card__controls">
+            <ThemedDropdown
+              className="mkt-watch-card__dd"
+              size="sm"
+              wideLabel
+              value={selectedIndexId}
+              options={WATCHLIST_INDEX_OPTIONS.map((opt) => ({ id: opt.id, label: opt.label }))}
+              onChange={setSelectedIndexId}
+              title="Index selection"
+              ariaLabelPrefix="Index"
+            />
+          </div>
+        </header>
         <div className="mkt-watch-card__table">
           <div className="mkt-watch-card__row mkt-watch-card__row--head">
             <span>Security</span>
             <span>Last</span>
             <span>1D%</span>
           </div>
-          {rows.map((r) => {
-            const pct = Number(r.change_pct);
+          {loading && !rows.length ? (
+            <div className="mkt-panel-status">Loading…</div>
+          ) : null}
+          {!loading && error ? (
+            <div className="mkt-panel-status mkt-panel-status--err">{error}</div>
+          ) : null}
+          {!loading && !error && !rows.length ? (
+            <div className="mkt-panel-status">No data</div>
+          ) : null}
+          {!error && rows.map((r, idx) => {
+            const symbol = String(r.symbol || r.ticker || '').toUpperCase().trim();
+            const last = Number(r.price ?? r.close);
+            const rawPct = Number(r.totalReturnPercentage);
+            const fallbackPct = Number(r.change_pct);
+            const pct = Number.isFinite(rawPct) ? rawPct : Number.isFinite(fallbackPct) ? fallbackPct * 100 : NaN;
             return (
-              <Link to={'/ticker/' + encodeURIComponent(String(r.symbol || ''))} className="mkt-watch-card__row" key={String(r.symbol || '')}>
-                <span>{String(r.symbol || '')}</span>
-                <span>{Number(r.close || 0).toFixed(2)}</span>
-                <span className={pct > 0 ? 'is-up' : pct < 0 ? 'is-down' : ''}>{Number.isFinite(pct) ? (pct * 100).toFixed(1) + '%' : '—'}</span>
+              <Link to={'/ticker/' + encodeURIComponent(symbol)} className="mkt-watch-card__row" key={symbol || `idx-${idx}`}>
+                <span>{symbol || '—'}</span>
+                <span>{Number.isFinite(last) ? last.toFixed(2) : '—'}</span>
+                <span className={pct > 0 ? 'app-num--up' : pct < 0 ? 'app-num--down' : ''}>{Number.isFinite(pct) ? pct.toFixed(1) + '%' : '—'}</span>
               </Link>
             );
           })}

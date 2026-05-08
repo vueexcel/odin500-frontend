@@ -2,12 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
-import { TickerAnnualReturnsPosNeg } from '../components/TickerAnnualReturnsPosNeg.jsx';
 import { TickerMonthlyReturnsChart } from '../components/TickerMonthlyReturnsChart.jsx';
-import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyReturnsWaterfallDonut.jsx';
-import { TickerQuarterlyReturnsChart } from '../components/TickerQuarterlyReturnsChart.jsx';
 import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
-import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import {
@@ -30,16 +26,7 @@ const CHART_H_MIN = 200;
 const CHART_H_MAX = 1400;
 
 const RESIZE_KEY_ANNUAL_FIGMA = 'odin_index_resize_annual_figma';
-const RESIZE_KEY_ANNUAL_POSNEG = 'odin_index_resize_annual_posneg';
-const RESIZE_KEY_QUARTERLY = 'odin_index_resize_quarterly';
-const RESIZE_KEY_MONTHLY = 'odin_index_resize_monthly';
-const RESIZE_KEY_MONTHLY_ADV = 'odin_index_resize_monthly_waterfall';
-
-/** Default chart year windows (index returns sections). */
-const INDEX_ANNUAL_CHART_DEFAULT_START_YEAR = 2018;
-const INDEX_ANNUAL_CHART_DEFAULT_END_YEAR = 2026;
-const INDEX_QUARTERLY_CHART_DEFAULT_START_YEAR = 2022;
-const INDEX_QUARTERLY_CHART_DEFAULT_END_YEAR = 2026;
+const RESIZE_KEY_QUARTERLY_FIGMA = 'odin_index_resize_quarterly_figma';
 
 const MAX_NEWS_ITEMS = 120;
 const NEWS_PAGE_SIZE = 5;
@@ -103,16 +90,6 @@ function sanitizeIndexSlug(raw) {
   };
   if (aliases[s]) return aliases[s];
   return s;
-}
-
-function parseYearFromAnnualPeriod(period) {
-  const m = String(period || '').match(/(\d{4})/);
-  return m ? Number(m[1]) : NaN;
-}
-
-function parseYearFromQuarterlyPeriod(period) {
-  const m = String(period || '').match(/^(\d{4})-Q/i);
-  return m ? Number(m[1]) : NaN;
 }
 
 function pickNum(row, keys) {
@@ -681,14 +658,6 @@ export default function IndexPage() {
   const [isCustomRangePopupOpen, setIsCustomRangePopupOpen] = useState(false);
   const [mainChartType, setMainChartType] = useState('line');
 
-  const [indexAnnualChartStartYear, setIndexAnnualChartStartYear] = useState(INDEX_ANNUAL_CHART_DEFAULT_START_YEAR);
-  const [indexAnnualChartEndYear, setIndexAnnualChartEndYear] = useState(INDEX_ANNUAL_CHART_DEFAULT_END_YEAR);
-  const [indexQuarterlyChartStartYear, setIndexQuarterlyChartStartYear] = useState(
-    INDEX_QUARTERLY_CHART_DEFAULT_START_YEAR
-  );
-  const [indexQuarterlyChartEndYear, setIndexQuarterlyChartEndYear] = useState(
-    INDEX_QUARTERLY_CHART_DEFAULT_END_YEAR
-  );
 
   const chartBodyRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const chartPlotHostRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -1003,10 +972,6 @@ export default function IndexPage() {
     setRelativeLeftKey(`IDX:${slug}`);
     setRelativeRightKey('SPX');
     setIndexTickersPage(1);
-    setIndexAnnualChartStartYear(INDEX_ANNUAL_CHART_DEFAULT_START_YEAR);
-    setIndexAnnualChartEndYear(INDEX_ANNUAL_CHART_DEFAULT_END_YEAR);
-    setIndexQuarterlyChartStartYear(INDEX_QUARTERLY_CHART_DEFAULT_START_YEAR);
-    setIndexQuarterlyChartEndYear(INDEX_QUARTERLY_CHART_DEFAULT_END_YEAR);
   }, [slug]);
 
   const dynamicSym = returnsSym?.performance?.dynamicPeriods || [];
@@ -1014,107 +979,14 @@ export default function IndexPage() {
   const annualReturnsRaw = returnsSym?.performance?.annualReturns;
   const quarterlyReturnsRaw = returnsSym?.performance?.quarterlyReturns;
   const monthlyReturnsRaw = returnsSym?.performance?.monthlyReturns;
-
-  const indexAnnualYearOptions = useMemo(() => {
-    const raw = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
-    let minY = 9999;
-    let maxY = 0;
-    for (const r of raw) {
-      const y = parseYearFromAnnualPeriod(r?.period);
-      if (Number.isFinite(y)) {
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
-      }
-    }
-    if (minY > maxY) {
-      const out = [];
-      for (let y = INDEX_ANNUAL_CHART_DEFAULT_START_YEAR; y <= INDEX_ANNUAL_CHART_DEFAULT_END_YEAR; y++) out.push(y);
-      return out;
-    }
-    const out = [];
-    for (let y = minY; y <= maxY; y++) out.push(y);
-    return out;
-  }, [annualReturnsRaw]);
-
-  const indexQuarterlyYearOptions = useMemo(() => {
-    const raw = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
-    let minY = 9999;
-    let maxY = 0;
-    for (const r of raw) {
-      const y = parseYearFromQuarterlyPeriod(r?.period);
-      if (Number.isFinite(y)) {
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
-      }
-    }
-    if (minY > maxY) {
-      const out = [];
-      for (let y = INDEX_QUARTERLY_CHART_DEFAULT_START_YEAR; y <= INDEX_QUARTERLY_CHART_DEFAULT_END_YEAR; y++) out.push(y);
-      return out;
-    }
-    const out = [];
-    for (let y = minY; y <= maxY; y++) out.push(y);
-    return out;
+  const annualReturnsFiltered = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
+  const quarterlyReturnsCurrentRange = useMemo(() => {
+    const rows = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
+    return rows.filter((r) => {
+      const y = Number(String(r?.period || '').slice(0, 4));
+      return Number.isFinite(y) && y >= 2025 && y <= 2025;
+    });
   }, [quarterlyReturnsRaw]);
-
-  useEffect(() => {
-    if (!indexAnnualYearOptions.length) return;
-    const lo = indexAnnualYearOptions[0];
-    const hi = indexAnnualYearOptions[indexAnnualYearOptions.length - 1];
-    setIndexAnnualChartStartYear((s) => Math.min(Math.max(s, lo), hi));
-    setIndexAnnualChartEndYear((e) => Math.min(Math.max(e, lo), hi));
-  }, [indexAnnualYearOptions]);
-
-  useEffect(() => {
-    if (!indexQuarterlyYearOptions.length) return;
-    const lo = indexQuarterlyYearOptions[0];
-    const hi = indexQuarterlyYearOptions[indexQuarterlyYearOptions.length - 1];
-    setIndexQuarterlyChartStartYear((s) => Math.min(Math.max(s, lo), hi));
-    setIndexQuarterlyChartEndYear((e) => Math.min(Math.max(e, lo), hi));
-  }, [indexQuarterlyYearOptions]);
-
-  const annualReturnsFiltered = useMemo(() => {
-    const raw = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
-    const lo = Math.min(indexAnnualChartStartYear, indexAnnualChartEndYear);
-    const hi = Math.max(indexAnnualChartStartYear, indexAnnualChartEndYear);
-    return raw.filter((r) => {
-      const y = parseYearFromAnnualPeriod(r?.period);
-      return Number.isFinite(y) && y >= lo && y <= hi;
-    });
-  }, [annualReturnsRaw, indexAnnualChartStartYear, indexAnnualChartEndYear]);
-
-  const quarterlyReturnsFiltered = useMemo(() => {
-    const raw = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
-    const lo = Math.min(indexQuarterlyChartStartYear, indexQuarterlyChartEndYear);
-    const hi = Math.max(indexQuarterlyChartStartYear, indexQuarterlyChartEndYear);
-    return raw.filter((r) => {
-      const y = parseYearFromQuarterlyPeriod(r?.period);
-      return Number.isFinite(y) && y >= lo && y <= hi;
-    });
-  }, [quarterlyReturnsRaw, indexQuarterlyChartStartYear, indexQuarterlyChartEndYear]);
-
-  // const indexQuarterlyChartYearToolbar = (
-  //   <div className="ticker-annual-figma__range-controls" aria-label="Quarterly returns chart year range">
-  //     <span className="ticker-annual-figma__range-label">Start year</span>
-  //     <ThemedDropdown
-  //       size="sm"
-  //       value={String(indexQuarterlyChartStartYear)}
-  //       options={indexQuarterlyYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
-  //       onChange={(v) => setIndexQuarterlyChartStartYear(Number(v))}
-  //       title="Start year"
-  //       ariaLabelPrefix="Start year"
-  //     />
-  //     <span className="ticker-annual-figma__range-label">End year</span>
-  //     <ThemedDropdown
-  //       size="sm"
-  //       value={String(indexQuarterlyChartEndYear)}
-  //       options={indexQuarterlyYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
-  //       onChange={(v) => setIndexQuarterlyChartEndYear(Number(v))}
-  //       title="End year"
-  //       ariaLabelPrefix="End year"
-  //     />
-  //   </div>
-  // );
 
   const loadRelativeSeries = useCallback(
     async (option) => {
@@ -1854,46 +1726,38 @@ export default function IndexPage() {
             resizeDefaultHeight={260}
             enableInlineYearDropdowns
             loading={metaBusy}
+            hideStatsSection
           />
-          <TickerChartResizeScope storageKey={RESIZE_KEY_ANNUAL_POSNEG} defaultHeight={260}>
-            <TickerAnnualReturnsPosNeg
-              symbol={displaySym}
-              annualReturns={annualReturnsFiltered}
-              asOfDate={asOfDate}
-              suppressChartDateFilter
-              loading={metaBusy}
-            />
-          </TickerChartResizeScope>
-          <TickerChartResizeScope storageKey={RESIZE_KEY_QUARTERLY} defaultHeight={288}>
-            <TickerQuarterlyReturnsChart
-              symbol={displaySym}
-              quarterlyReturns={quarterlyReturnsFiltered}
-              quarterlyReturnsAll={quarterlyReturnsRaw}
-              asOfDate={asOfDate}
-              loading={metaBusy}
-              // toolbarControls={indexQuarterlyChartYearToolbar}
-            />
-          </TickerChartResizeScope>
-          <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
-            <TickerMonthlyReturnsChart
-              symbol={displaySym}
-              monthlyReturns={monthlyReturnsRaw}
-              asOfDate={asOfDate}
-              suppressChartDateFilter
-              loading={metaBusy}
-            />
-          </TickerChartResizeScope>
-          <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY_ADV} defaultHeight={300}>
-            <TickerMonthlyReturnsWaterfallDonut
-              key={slug}
-              symbol={displaySym}
-              monthlyReturns={monthlyReturnsRaw}
-              asOfDate={asOfDate}
-              suppressChartDateFilter
-              loading={metaBusy}
-            />
-          </TickerChartResizeScope>
+          <TickerAnnualReturnsFigma
+            symbol={displaySym}
+            annualReturns={quarterlyReturnsCurrentRange}
+            asOfDate={asOfDate}
+            resizeStorageKey={RESIZE_KEY_QUARTERLY_FIGMA}
+            resizeDefaultHeight={260}
+            periodMode="quarterly"
+            loading={metaBusy}
+            hideStatsSection
+          />
+          <TickerMonthlyReturnsChart
+            symbol={displaySym}
+            monthlyReturns={monthlyReturnsRaw}
+            asOfDate={asOfDate}
+            suppressChartDateFilter
+            loading={metaBusy}
+          />
           <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>
+          <div className="flex align-centers"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
+<g clip-path="url(#clip0_609_23954)">
+<path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<clipPath id="clip0_609_23954">
+<rect width="14" height="14" fill="white"/>
+</clipPath>
+</defs>
+</svg>
+</div>
             <h3 className="ticker-subh ticker-subh--flex">Relative Strength selector</h3>
             <DataInfoTip align="start">
               <p className="ticker-data-tip__p">Choose two indices; table and bars show return% difference (left minus right).</p>
@@ -1968,9 +1832,18 @@ export default function IndexPage() {
             <div className="ticker-signal-foot">
               <Link to="/odin-signals" className="ticker-signal-foot__link">
                 Learn more about Odin Signals
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                  <path d="M14 5h5v5M10 14l9-9M19 14v5H5V5h5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none">
+<g clip-path="url(#clip0_609_26680)">
+<path d="M4.71094 7.18266L11.2734 0.726562" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M11.2734 4.41609V0.726562H7.52344" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6.05859 3.07031H1.13672C1.02794 3.07031 0.923614 3.11353 0.846694 3.19044C0.769775 3.26736 0.726562 3.37169 0.726562 3.48047V10.8633C0.726563 10.9721 0.769775 11.0764 0.846694 11.1533C0.923614 11.2302 1.02794 11.2734 1.13672 11.2734H8.51953C8.62831 11.2734 8.73264 11.2302 8.80956 11.1533C8.88647 11.0764 8.92969 10.9721 8.92969 10.8633V5.94141" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<clipPath id="clip0_609_26680">
+<rect width="12" height="12" fill="white"/>
+</clipPath>
+</defs>
+</svg>
               </Link>
             </div>
           </section>
@@ -2131,7 +2004,9 @@ export default function IndexPage() {
                 </table>
                 {indexTickersBusy ? <p className="ticker-page__news-sample-note">Loading constituents…</p> : null}
               </div>
-              <FigmaPagination page={indexTickersPageSafe} totalPages={indexTickersTotalPages} onPageChange={setIndexTickersPage} />
+              {indexTickersTotalPages > 1 ? (
+                <FigmaPagination page={indexTickersPageSafe} totalPages={indexTickersTotalPages} onPageChange={setIndexTickersPage} />
+              ) : null}
             </div>
           </section>
         </aside>

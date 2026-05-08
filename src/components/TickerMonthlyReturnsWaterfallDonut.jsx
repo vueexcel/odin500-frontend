@@ -409,13 +409,16 @@ export function TickerMonthlyReturnsWaterfallDonut({
   }, [selectedYearRows, selectedYear, symU, periodMode]);
   const onViewMore = useCallback(() => {
     const section = periodMode === 'weekly' ? 'weekly' : 'monthly';
+    const params = new URLSearchParams({ section });
+    const sym = String(symbol || '').trim().toUpperCase();
+    if (sym) params.set('symbol', sym);
     console.info('[view-more] waterfall click', {
       periodMode,
       fromPath: window.location.pathname,
       fromSearch: window.location.search,
-      to: `/statistic-data?section=${section}`
+      to: `/statistic-data?${params.toString()}`
     });
-    navigate(`/statistic-data?section=${section}`);
+    navigate(`/statistic-data?${params.toString()}`);
     queueMicrotask(() => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
@@ -426,7 +429,7 @@ export function TickerMonthlyReturnsWaterfallDonut({
         currentSearch: window.location.search
       });
     }, 150);
-  }, [navigate, periodMode]);
+  }, [navigate, periodMode, symbol]);
   const onOpenPeriodPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
     const suffix = '/' + encodeURIComponent(symPart);
@@ -572,7 +575,7 @@ export function TickerMonthlyReturnsWaterfallDonut({
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedYearRows.map((r) => (
+                    {[...selectedYearRows].reverse().map((r) => (
                       <tr key={`mw-row-${r.period}`}>
                         <td>{r.period}</td>
                         <td>{r.startDate || '—'}</td>

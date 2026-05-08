@@ -5,6 +5,7 @@ import odinLogo from '../assets/odin500-logo.svg';
 import odinLogoLight from '../assets/odin500-logo-light.svg';
 import { fetchWithAuth } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
+import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 import { prefetchRouteChunks } from '../utils/routePrefetch.js';
 import {
   DEFAULT_INDEX_ROUTE_SLUG,
@@ -203,6 +204,7 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
   const navigate = useNavigate();
   const isExpandedView = expanded || mobileOpen;
   const location = useLocation();
+  const [theme, setTheme] = useState(() => getDocumentTheme());
   const [displayName, setDisplayName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const accountWrapRef = useRef(null);
@@ -264,6 +266,7 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
     }
   })();
   const profileName = (displayName || fallbackName || 'Account').trim();
+  const brandLogo = theme === 'light' ? odinLogoLight : odinLogo;
   const initials =
     profileName
       .split(/\s+/)
@@ -306,6 +309,13 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
     if (isStatsRoute) setStatsOpen(true);
   }, [isStatsRoute]);
 
+  useEffect(() => {
+    setTheme(getDocumentTheme());
+    return subscribeDocumentTheme(() => {
+      setTheme(getDocumentTheme());
+    });
+  }, []);
+
   return (
     <aside
       id="app-sidebar-main"
@@ -347,7 +357,7 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
         <>
           <div className="app-sidebar__topbar">
             <div className="app-sidebar__brand">
-              <img src={odinLogoLight} alt="Odin500" className="app-sidebar__logo" />
+              <img src={brandLogo} alt="Odin500" className="app-sidebar__logo" />
             </div>
             <button
               type="button"

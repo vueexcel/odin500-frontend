@@ -319,12 +319,15 @@ export function TickerQuarterlyReturnsChart({
   }, [filteredRows, symU]);
 
   const onViewMore = useCallback(() => {
+    const params = new URLSearchParams({ section: 'quarterly' });
+    const sym = String(symbol || '').trim().toUpperCase();
+    if (sym) params.set('symbol', sym);
     console.info('[view-more] quarterly click', {
       fromPath: window.location.pathname,
       fromSearch: window.location.search,
-      to: '/statistic-data?section=quarterly'
+      to: `/statistic-data?${params.toString()}`
     });
-    navigate('/statistic-data?section=quarterly');
+    navigate(`/statistic-data?${params.toString()}`);
     queueMicrotask(() => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
@@ -334,7 +337,7 @@ export function TickerQuarterlyReturnsChart({
         currentSearch: window.location.search
       });
     }, 150);
-  }, [navigate]);
+  }, [navigate, symbol]);
 
   const onOpenQuarterlyPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
@@ -502,7 +505,7 @@ export function TickerQuarterlyReturnsChart({
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((r) => (
+                {[...filteredRows].reverse().map((r) => (
                   <tr key={`qr-row-${r.period}`}>
                     <td>{r.period}</td>
                     <td>{r.startDate || '—'}</td>

@@ -17,6 +17,12 @@ const INDEX_MENU = [
 /** Leaderboard tables show only this many rows (best gainers / worst losers by 1D %). Full index still loads for the scatter. */
 const LEADERBOARD_TOP_N = 20;
 const TOP_MOVERS_BAR_COUNT = 10;
+const TOP_MOVERS_SCROLL_THRESHOLD = 15;
+const TOP_MOVERS_INTERACTIVE_THRESHOLD = 25;
+const TOP_MOVERS_BAR_COUNT_OPTIONS = [5, 10, 15, 20, 25, 30, 40, 50].map((n) => ({
+  id: String(n),
+  label: `Top ${n}`
+}));
 
 /** Return windows — `apiPeriod` is sent to POST /api/market/index-market-movers as `period`. */
 const MARKET_MOVERS_INTERVALS = [
@@ -170,44 +176,103 @@ function formatBarPctLabel(v) {
   return `${v.toFixed(1)}%`;
 }
 
-function MarketMoversSplitBars({ points, axisReturnTitle }) {
-  const chartData = useMemo(() => {
-    const gainers = [];
-    const losers = [];
-    for (const p of points) {
-      const pct = parsePct(p.dayReturnPct);
-      if (pct == null || !Number.isFinite(pct)) continue;
-      if (pct > 0) gainers.push({ symbol: p.symbol, pct });
-      else if (pct < 0) losers.push({ symbol: p.symbol, pct });
-    }
-    gainers.sort((a, b) => b.pct - a.pct);
-    losers.sort((a, b) => a.pct - b.pct);
-    const topGainers = gainers.slice(0, TOP_MOVERS_BAR_COUNT).map((row) => ({ ...row, side: 'gain' }));
-    const topLosers = losers.slice(0, TOP_MOVERS_BAR_COUNT).map((row) => ({ ...row, side: 'loss' }));
-    const gainCap = Math.ceil(Math.max(1, ...topGainers.map((b) => Math.abs(b.pct))) * 1.15);
-    const lossCap = Math.ceil(Math.max(1, ...topLosers.map((b) => Math.abs(b.pct))) * 1.15);
-    return { topGainers, topLosers, gainCap, lossCap };
-  }, [points]);
-
+function MarketMoversBarPanel({ bars, yCap, side, title, axisReturnTitle }) {
   const W = 560;
   const H = 360;
   const PAD2 = { top: 26, right: 24, bottom: 72, left: 54 };
-  const plotW = W - PAD2.left - PAD2.right;
   const plotH = H - PAD2.top - PAD2.bottom;
+  const shouldScroll = bars.length > TOP_MOVERS_SCROLL_THRESHOLD;
+  const shouldInteractive = bars.length > TOP_MOVERS_INTERACTIVE_THRESHOLD;
+  const [zoom, setZoom] = useState(1);
+  const scrollRef = useRef(null);
+  const dragRef = useRef({ active: false, startX: 0, startLeft: 0 });
+  const zoomAnchorRatioRef = useRef(null);
 
-  const renderPanel = (bars, yCap, side, title) => {
-    const yScale = (value) => {
-      if (side === 'gain') return PAD2.top + ((yCap - value) / (yCap || 1)) * plotH;
-      return PAD2.top + ((0 - value) / (yCap || 1)) * plotH;
-    };
-    const slotW = bars.length ? plotW / bars.length : plotW;
-    const barW = Math.max(10, Math.min(34, slotW * 0.64));
-    const yTicks = side === 'gain' ? [0, yCap * 0.33, yCap * 0.66, yCap] : [0, -yCap * 0.33, -yCap * 0.66, -yCap];
+  useEffect(() => {
+    setZoom(1);
+    zoomAnchorRatioRef.current = null;
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+  }, [bars.length, shouldInteractive]);
 
-    return (
-      <div className="market-movers-page__bar-frame">
+  const basePanelWidth = shouldScroll ? Math.max(W, PAD2.left + PAD2.right + bars.length * 38) : W;
+  const panelWidth = Math.round(basePanelWidth * (shouldInteractive ? zoom : 1));
+  const plotW = panelWidth - PAD2.left - PAD2.right;
+  const yScale = (value) => {
+    if (side === 'gain') return PAD2.top + ((yCap - value) / (yCap || 1)) * plotH;
+    return PAD2.top + ((0 - value) / (yCap || 1)) * plotH;
+  };
+  const slotW = bars.length ? plotW / bars.length : plotW;
+  const barW = Math.max(10, Math.min(34, slotW * 0.64));
+  const yTicks = side === 'gain' ? [0, yCap * 0.33, yCap * 0.66, yCap] : [0, -yCap * 0.33, -yCap * 0.66, -yCap];
+
+  useEffect(() => {
+    const host = scrollRef.current;
+    if (!host) return;
+    if (zoomAnchorRatioRef.current == null) return;
+    const ratio = zoomAnchorRatioRef.current;
+    zoomAnchorRatioRef.current = null;
+    const maxLeft = Math.max(0, host.scrollWidth - host.clientWidth);
+    host.scrollLeft = clamp(ratio * maxLeft, 0, maxLeft);
+  }, [panelWidth]);
+
+  const onWheelZoom = (e) => {
+    if (!shouldInteractive || !scrollRef.current) return;
+    e.preventDefault();
+    const host = scrollRef.current;
+    const maxBefore = Math.max(1, host.scrollWidth - host.clientWidth);
+    zoomAnchorRatioRef.current = host.scrollLeft / maxBefore;
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    setZoom((z) => clamp(z * factor, 1, 2.8));
+  };
+  const onPointerDown = (e) => {
+    if (!shouldInteractive || !scrollRef.current) return;
+    dragRef.current = { active: true, startX: e.clientX, startLeft: scrollRef.current.scrollLeft };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
+  const onPointerMove = (e) => {
+    if (!shouldInteractive || !scrollRef.current || !dragRef.current.active) return;
+    const dx = e.clientX - dragRef.current.startX;
+    scrollRef.current.scrollLeft = dragRef.current.startLeft - dx;
+  };
+  const onPointerUp = (e) => {
+    if (!shouldInteractive) return;
+    dragRef.current = { active: false, startX: 0, startLeft: 0 };
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <div className="market-movers-page__bar-frame">
+      <div className="market-movers-page__bar-panel-head">
         <div className="market-movers-page__bar-panel-title">{title}</div>
-        <svg className="market-movers-page__bar-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title} by ${axisReturnTitle}`}>
+        {shouldInteractive ? <div className="market-movers-page__bar-interact-hint">Drag to pan · Wheel to zoom</div> : null}
+      </div>
+      <div
+        ref={scrollRef}
+        className={
+          'market-movers-page__bar-scroll' +
+          (shouldScroll ? ' market-movers-page__bar-scroll--active' : '') +
+          (shouldInteractive ? ' market-movers-page__bar-scroll--interactive' : '')
+        }
+        onWheel={onWheelZoom}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <svg
+          className="market-movers-page__bar-svg"
+          viewBox={`0 0 ${panelWidth} ${H}`}
+          role="img"
+          aria-label={`${title} by ${axisReturnTitle}`}
+        >
           <rect x={PAD2.left} y={PAD2.top} width={plotW} height={plotH} className="market-movers-page__bar-bg" />
           {yTicks.map((tick) => {
             const y = yScale(tick);
@@ -265,14 +330,48 @@ function MarketMoversSplitBars({ points, axisReturnTitle }) {
           })}
         </svg>
       </div>
-    );
-  };
+    </div>
+  );
+}
+
+function MarketMoversSplitBars({ points, axisReturnTitle, barCount = TOP_MOVERS_BAR_COUNT }) {
+  const sharedBarCount = Number(barCount) || TOP_MOVERS_BAR_COUNT;
+
+  const chartData = useMemo(() => {
+    const gainers = [];
+    const losers = [];
+    for (const p of points) {
+      const pct = parsePct(p.dayReturnPct);
+      if (pct == null || !Number.isFinite(pct)) continue;
+      if (pct > 0) gainers.push({ symbol: p.symbol, pct });
+      else if (pct < 0) losers.push({ symbol: p.symbol, pct });
+    }
+    gainers.sort((a, b) => b.pct - a.pct);
+    losers.sort((a, b) => a.pct - b.pct);
+    const topGainers = gainers.slice(0, sharedBarCount).map((row) => ({ ...row, side: 'gain' }));
+    const topLosers = losers.slice(0, sharedBarCount).map((row) => ({ ...row, side: 'loss' }));
+    const gainCap = Math.ceil(Math.max(1, ...topGainers.map((b) => Math.abs(b.pct))) * 1.15);
+    const lossCap = Math.ceil(Math.max(1, ...topLosers.map((b) => Math.abs(b.pct))) * 1.15);
+    return { topGainers, topLosers, gainCap, lossCap };
+  }, [points, sharedBarCount]);
 
   return (
     <div className="market-movers-page__chart-wrap">
       <div className="market-movers-page__bars-grid">
-        {renderPanel(chartData.topGainers, chartData.gainCap, 'gain', `Top ${chartData.topGainers.length} Gainers`)}
-        {renderPanel(chartData.topLosers, chartData.lossCap, 'loss', `Top ${chartData.topLosers.length} Losers`)}
+        <MarketMoversBarPanel
+          bars={chartData.topGainers}
+          yCap={chartData.gainCap}
+          side="gain"
+          title={`Top ${chartData.topGainers.length} Gainers`}
+          axisReturnTitle={axisReturnTitle}
+        />
+        <MarketMoversBarPanel
+          bars={chartData.topLosers}
+          yCap={chartData.lossCap}
+          side="loss"
+          title={`Top ${chartData.topLosers.length} Losers`}
+          axisReturnTitle={axisReturnTitle}
+        />
       </div>
     </div>
   );
@@ -1083,6 +1182,7 @@ export default function MarketMoversPage() {
   const [indexMenuId, setIndexMenuId] = useState('sp500');
   const [sectorFilter, setSectorFilter] = useState('__all__');
   const [moverIntervalId, setMoverIntervalId] = useState('1d');
+  const [topMoversCountId, setTopMoversCountId] = useState(String(TOP_MOVERS_BAR_COUNT));
   const [points, setPoints] = useState([]);
   const [meta, setMeta] = useState({ asOfDate: '', volumeNote: '', sessionNote: '', period: '' });
   const [loading, setLoading] = useState(false);
@@ -1261,6 +1361,18 @@ export default function MarketMoversPage() {
               </button>
             ))}
           </div>
+          <div className="market-movers-page__interval-side-control">
+            <ThemedDropdown
+              className="market-movers-page__mm-dd market-movers-page__mm-dd--bar-count"
+              value={topMoversCountId}
+              options={TOP_MOVERS_BAR_COUNT_OPTIONS}
+              onChange={setTopMoversCountId}
+              title="Rows for gainers and losers charts"
+              ariaLabelPrefix="Rows"
+              size="sm"
+              wideLabel
+            />
+          </div>
         </div>
 
         {meta.asOfDate ? (
@@ -1287,6 +1399,7 @@ export default function MarketMoversPage() {
             <MarketMoversSplitBars
               points={filteredPoints}
               axisReturnTitle={activeMoverInterval.axisReturnTitle}
+              barCount={Number(topMoversCountId) || TOP_MOVERS_BAR_COUNT}
             />
             <MarketMoversLeaderTables points={filteredPoints} />
           </>

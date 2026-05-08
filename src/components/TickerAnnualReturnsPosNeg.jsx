@@ -468,7 +468,7 @@ export function TickerAnnualReturnsPosNeg({
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((r) => (
+                {[...filteredRows].reverse().map((r) => (
                   <tr key={`apn-row-${r.period}`}>
                     <td>{r.period}</td>
                     <td>{r.startDate || '—'}</td>

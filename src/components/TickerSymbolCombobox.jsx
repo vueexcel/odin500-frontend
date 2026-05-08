@@ -12,6 +12,14 @@ function IconSearchLeading() {
   );
 }
 
+function IconClear() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** Normalize input for API query (symbol-only vs name/symbol search). */
 function queryForSearch(variant, input) {
   if (variant === 'header') return sanitizeTickerSearchInput(input).trim();
@@ -158,6 +166,13 @@ export function TickerSymbolCombobox({
     setOpen(true);
   };
 
+  const clearInput = () => {
+    setInput('');
+    setItems([]);
+    setOpen(false);
+    setHighlight(-1);
+  };
+
   return (
     <div
       className={'ticker-symbol-search' + (isHeader ? ' ticker-symbol-search--header' : '')}
@@ -184,24 +199,50 @@ export function TickerSymbolCombobox({
             onKeyDown={onKeyDown}
             placeholder={placeholder}
           />
+          {input ? (
+            <button
+              type="button"
+              className="ticker-symbol-search__clear"
+              aria-label="Clear ticker search"
+              title="Clear"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={clearInput}
+            >
+              <IconClear />
+            </button>
+          ) : null}
         </div>
       ) : (
-        <input
-          id={inputId}
-          className={inputClass}
-          type="text"
-          autoComplete="off"
-          spellCheck={false}
-          aria-label={inputAria}
-          aria-autocomplete="list"
-          aria-expanded={open}
-          aria-controls={open ? listId : undefined}
-          value={input}
-          onChange={onInputChange}
-          onFocus={() => setOpen(true)}
-          onKeyDown={onKeyDown}
-          placeholder={placeholder}
-        />
+        <div className="ticker-symbol-search__field-wrap">
+          <input
+            id={inputId}
+            className={inputClass}
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            aria-label={inputAria}
+            aria-autocomplete="list"
+            aria-expanded={open}
+            aria-controls={open ? listId : undefined}
+            value={input}
+            onChange={onInputChange}
+            onFocus={() => setOpen(true)}
+            onKeyDown={onKeyDown}
+            placeholder={placeholder}
+          />
+          {input ? (
+            <button
+              type="button"
+              className="ticker-symbol-search__clear ticker-symbol-search__clear--default"
+              aria-label="Clear ticker search"
+              title="Clear"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={clearInput}
+            >
+              <IconClear />
+            </button>
+          ) : null}
+        </div>
       )}
       {open && qActive ? (
         <div

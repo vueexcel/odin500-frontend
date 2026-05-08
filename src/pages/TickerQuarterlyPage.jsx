@@ -760,12 +760,14 @@ export default function TickerQuarterlyPage() {
                 </tbody>
               </table>
             </div>
-            <div className="statistic-data__pager">
-              <FigmaPagination page={tablePageSafe} totalPages={tableTotalPages} onPageChange={setTablePage} />
-              <span className="statistic-data__pager-meta">
-                Page {tablePageSafe} of {tableTotalPages} ({tableRows.length} rows)
-              </span>
-            </div>
+            {tableTotalPages > 1 ? (
+              <div className="statistic-data__pager">
+                <FigmaPagination page={tablePageSafe} totalPages={tableTotalPages} onPageChange={setTablePage} />
+                <span className="statistic-data__pager-meta">
+                  Page {tablePageSafe} of {tableTotalPages} ({tableRows.length} rows)
+                </span>
+              </div>
+            ) : null}
           </section>
         </div>
         <aside className="ticker-page__aside">
@@ -807,7 +809,7 @@ export default function TickerQuarterlyPage() {
               </dl>
             </div>
             <p className="ticker-page__label ticker-kd-comp-label">
-              <span>RELATED INDICES</span>
+              <span>INDICES</span>
               <span className="ticker-kd-comp-label__links">
                 {RELATED_INDEX_LINKS.map((idx) => (
                   <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">

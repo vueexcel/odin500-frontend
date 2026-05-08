@@ -1,35 +1,33 @@
-/** Top line: arrow + bar; mirrors when collapsed to suggest “expand”. */
+/** Figma-matched panel toggle glyph. */
 export function SidebarToggleGlyph({ expanded }) {
   const stroke = 'currentColor';
-  const w = 1.75;
+  const w = 1.5;
   if (expanded) {
     return (
-      <svg width="22" height="18" viewBox="0 0 22 18" fill="none" aria-hidden>
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+        <rect x="2" y="2.25" width="14" height="13.5" rx="2.5" stroke={stroke} strokeWidth="1.35" />
+        <path d="M6.65 4.8 V13.2" stroke={stroke} strokeWidth="1.35" strokeLinecap="round" />
         <path
-          d="M7.5 3 L3.5 6 L7.5 9"
+          d="M11.2 6.2 L8.9 9 L11.2 11.8"
           stroke={stroke}
           strokeWidth={w}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <path d="M6.5 6 H18.5" stroke={stroke} strokeWidth={w} strokeLinecap="round" />
-        <path d="M4 13 H18.5" stroke={stroke} strokeWidth={w} strokeLinecap="round" />
-        <path d="M4 16.5 H18.5" stroke={stroke} strokeWidth={w} strokeLinecap="round" />
       </svg>
     );
   }
   return (
-    <svg width="22" height="18" viewBox="0 0 22 18" fill="none" aria-hidden>
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+      <rect x="2" y="2.25" width="14" height="13.5" rx="2.5" stroke={stroke} strokeWidth="1.35" />
+      <path d="M11.35 4.8 V13.2" stroke={stroke} strokeWidth="1.35" strokeLinecap="round" />
       <path
-        d="M14.5 3 L18.5 6 L14.5 9"
+        d="M6.8 6.2 L9.1 9 L6.8 11.8"
         stroke={stroke}
         strokeWidth={w}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path d="M15.5 6 H3.5" stroke={stroke} strokeWidth={w} strokeLinecap="round" />
-      <path d="M3.5 13 H18" stroke={stroke} strokeWidth={w} strokeLinecap="round" />
-      <path d="M3.5 16.5 H18" stroke={stroke} strokeWidth={w} strokeLinecap="round" />
     </svg>
   );
 }

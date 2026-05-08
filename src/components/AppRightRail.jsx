@@ -234,7 +234,14 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
                   )}
                   <span className="header-pop__profile-name">{profileName}</span>
                 </div>
-                <button type="button" className="header-pop__item" onClick={() => setProfileOpen(false)}>
+                <button
+                  type="button"
+                  className="header-pop__item"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    navigate('/about');
+                  }}
+                >
                   Your Profile
                 </button>
                 <button type="button" className="header-pop__item" onClick={() => setProfileOpen(false)}>
@@ -263,7 +270,7 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
           >
             <IcoAnalytics />
           </button>
-          <Link
+          {/* <Link
             to="/odin-signals"
             className="app-right-rail__btn"
             title="Odin Signals"
@@ -273,7 +280,7 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
             }}
           >
             <IcoOdinSignals />
-          </Link>
+          </Link> */}
           <Link
             to="/market-movers"
             className="app-right-rail__btn"

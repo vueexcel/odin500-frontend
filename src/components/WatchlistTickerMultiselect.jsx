@@ -21,6 +21,14 @@ function activeTokenFromQuery(rawQuery) {
   return sanitizeTickerSearchInput(lastPart);
 }
 
+function IconClear() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /**
  * @typedef {{ id: string, symbol: string, company_name?: string | null }} WatchlistTickerPick
  */
@@ -375,6 +383,24 @@ export function WatchlistTickerMultiselect({
           }}
           onFocus={() => setOpen(true)}
         />
+        {query ? (
+          <button
+            type="button"
+            className="wl-ticker-ms__clear"
+            aria-label="Clear ticker search"
+            title="Clear"
+            disabled={disabled}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setQuery('');
+              setOpen(false);
+              setResults([]);
+              setSearchErr('');
+            }}
+          >
+            <IconClear />
+          </button>
+        ) : null}
       </div>
       {dropdownNode}
     </div>

@@ -76,6 +76,8 @@ export function NormalizedPerformanceCard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [series, setSeries] = useState({});
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const cardRef = useRef(null);
   const chartHostRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRefs = useRef(new Map());
@@ -365,18 +367,85 @@ export function NormalizedPerformanceCard({
     });
   }, [series, activeKeys, axisMode, loading, chartTheme, updateAxisBadgePositions]);
 
+  const toggleFullscreen = useCallback(async () => {
+    const el = cardRef.current;
+    if (!el) return;
+    /** @type {Document & { webkitFullscreenElement?: Element | null, webkitExitFullscreen?: () => Promise<void> | void }} */
+    const d = document;
+    const fsEl = d.fullscreenElement ?? d.webkitFullscreenElement;
+    try {
+      if (fsEl === el) {
+        if (d.exitFullscreen) await d.exitFullscreen();
+        else d.webkitExitFullscreen?.();
+      } else if (el.requestFullscreen) {
+        await el.requestFullscreen();
+      } else {
+        /** @type {{ webkitRequestFullscreen?: () => Promise<void> | void }} */
+        (el).webkitRequestFullscreen?.();
+      }
+    } catch {
+      // Ignore user gesture/fullscreen API failures.
+    }
+  }, []);
+
+  const downloadSnapshot = useCallback(() => {
+    const chart = chartRef.current;
+    const host = chartHostRef.current;
+    if (!host) return;
+    let canvas = null;
+    if (chart && typeof chart.takeScreenshot === 'function') {
+      try {
+        canvas = chart.takeScreenshot();
+      } catch {
+        canvas = null;
+      }
+    }
+    if (!canvas) {
+      canvas = host.querySelector('canvas');
+    }
+    if (!canvas) return;
+    const link = document.createElement('a');
+    const datePart = new Date().toISOString().slice(0, 10);
+    const tfPart = String(tf || 'range').toLowerCase();
+    link.href = canvas.toDataURL('image/png');
+    link.download = `normalized-performance-${tfPart}-${datePart}.png`;
+    link.click();
+  }, [tf]);
+
+  useEffect(() => {
+    const onFsChange = () => {
+      const el = cardRef.current;
+      /** @type {Document & { webkitFullscreenElement?: Element | null }} */
+      const d = document;
+      const fsEl = d.fullscreenElement ?? d.webkitFullscreenElement;
+      setIsFullscreen(Boolean(el && fsEl === el));
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    onFsChange();
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+    };
+  }, []);
+
   return (
-    <section className="np-card" aria-label="Normalized performance">
+    <section ref={cardRef} className="np-card" aria-label="Normalized performance">
       <header className="np-card__head">
         <h2 className="np-card__title">
           Normalized Performance <ChartInfoTip tip={CHART_INFO_TIPS.normalizedPerformance} align="start" />
         </h2>
         <div className="np-card__head-actions">
-          <button type="button" className="np-card__linkbtn">
+          <button type="button" className="np-card__linkbtn" onClick={downloadSnapshot} disabled={loading}>
             Export
           </button>
-          <button type="button" className="np-card__iconbtn" aria-label="Open in new">
-            ↗
+          <button
+            type="button"
+            className="np-card__iconbtn"
+            aria-label={isFullscreen ? 'Exit full screen chart' : 'Open full screen chart'}
+            onClick={toggleFullscreen}
+          >
+            {isFullscreen ? '×' : '↗'}
           </button>
         </div>
       </header>

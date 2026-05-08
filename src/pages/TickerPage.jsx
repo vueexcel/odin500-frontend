@@ -2009,6 +2009,19 @@ export default function TickerPage() {
           </TickerChartResizeScope> */}
           
           <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>
+          <div className="flex align-centers"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
+<g clip-path="url(#clip0_609_23954)">
+<path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<clipPath id="clip0_609_23954">
+<rect width="14" height="14" fill="white"/>
+</clipPath>
+</defs>
+</svg>
+</div>
+
             <h3 className="ticker-subh ticker-subh--flex">Relative Strength selector</h3>
             <DataInfoTip align="start">
               <p className="ticker-data-tip__p">
@@ -2102,9 +2115,18 @@ export default function TickerPage() {
             <div className="ticker-signal-foot">
               <Link to="/odin-signals" className="ticker-signal-foot__link">
                 Learn more about Odin Signals
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                  <path d="M14 5h5v5M10 14l9-9M19 14v5H5V5h5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none">
+<g clip-path="url(#clip0_609_26680)">
+<path d="M4.71094 7.18266L11.2734 0.726562" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M11.2734 4.41609V0.726562H7.52344" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6.05859 3.07031H1.13672C1.02794 3.07031 0.923614 3.11353 0.846694 3.19044C0.769775 3.26736 0.726562 3.37169 0.726562 3.48047V10.8633C0.726563 10.9721 0.769775 11.0764 0.846694 11.1533C0.923614 11.2302 1.02794 11.2734 1.13672 11.2734H8.51953C8.62831 11.2734 8.73264 11.2302 8.80956 11.1533C8.88647 11.0764 8.92969 10.9721 8.92969 10.8633V5.94141" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<clipPath id="clip0_609_26680">
+<rect width="12" height="12" fill="white"/>
+</clipPath>
+</defs>
+</svg>
               </Link>
             </div>
           </section>
@@ -2172,7 +2194,7 @@ export default function TickerPage() {
               </dl>
             </div>
             <p className="ticker-page__label ticker-kd-comp-label">
-              <span>RELATED INDICES</span>
+              <span>INDICES</span>
               <span className="ticker-kd-comp-label__links">
                 {RELATED_INDEX_LINKS.map((idx) => (
                   <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">

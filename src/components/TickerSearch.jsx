@@ -56,6 +56,23 @@ export function TickerSearch({ value, onChange, allTickers, onInvalidateOdin }) 
             }
           }}
         />
+        {value ? (
+          <button
+            type="button"
+            className="ticker-search-clear"
+            aria-label="Clear ticker search"
+            title="Clear"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              onChange('');
+              onInvalidateOdin();
+              setFiltered(allTickers.slice(0, 30));
+              setMenuOpen(false);
+            }}
+          >
+            ×
+          </button>
+        ) : null}
         <div className={'ticker-menu' + (menuOpen ? '' : ' hidden')}>
           {!filtered.length ? (
             <div className="ticker-empty">No tickers found</div>

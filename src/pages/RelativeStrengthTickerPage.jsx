@@ -400,7 +400,11 @@ export default function RelativeStrengthTickerPage() {
       </div>
 
       <div className="relative-strength-page__chart-card">
-        
+        {loading ? (
+          <div className="relative-strength-page__chart-skel-overlay">
+            <LightweightChartAreaSkeleton minHeight={360} className="relative-strength-page__chart-skel-fill" />
+          </div>
+        ) : null}
         {!loading && error ? <div className="relative-strength-page__state relative-strength-page__state--error">{error}</div> : null}
         <div
           className={'relative-strength-page__chart-host' + (loading ? ' relative-strength-page__chart-host--loading' : '')}

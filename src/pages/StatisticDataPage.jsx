@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { FigmaDataTable } from '../components/FigmaDataTable.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
@@ -22,6 +23,12 @@ const TABLE_RANGE_DROPDOWN_OPTIONS = TABLE_RANGE_OPTIONS.map((opt) => ({
 const PREDEFINED_YEAR_BUCKETS = [5, 10, 15, 20, 25, 50];
 const TABLE_PAGE_SIZE = 30;
 const PAGER_SIBLING_COUNT = 1;
+const RETURN_TABLE_HEADERS = [
+  { key: 'period', label: 'Period' },
+  { key: 'startClose', label: 'Start Close' },
+  { key: 'endClose', label: 'End Close' },
+  { key: 'returnPct', label: 'Return' }
+];
 
 function pickNum(row, keys) {
   for (const key of keys) {
@@ -343,6 +350,10 @@ function ReturnTable({
   const pageSafe = Math.min(page, totalPages);
   const startIdx = (pageSafe - 1) * TABLE_PAGE_SIZE;
   const pageRows = rows.slice(startIdx, startIdx + TABLE_PAGE_SIZE);
+  const skeletonRows = useMemo(
+    () => Array.from({ length: TABLE_PAGE_SIZE }, (_, i) => ({ __skeleton: true, __index: i })),
+    []
+  );
 
   useEffect(() => {
     setPage(1);
@@ -402,82 +413,50 @@ function ReturnTable({
           </button>
         </div>
       </div>
-      <div className={'statistic-data__table-wrap' + (loading ? ' statistic-data__table-wrap--loading-skel' : '')}>
-        <table className="statistic-data__table" aria-busy={loading}>
-          <thead>
-            <tr>
-              <th>Period</th>
-              <th>Start Close</th>
-              <th>End Close</th>
-              <th>Return</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              Array.from({ length: TABLE_PAGE_SIZE }, (_, i) => (
-                <tr key={`${title}-skel-${i}`} className="statistic-data__tr--skeleton">
-                  <td>
-                    <span
-                      className="statistic-data__skel-cell"
-                      style={{ maxWidth: '88%', animationDelay: `${i * 0.04}s` }}
-                    />
-                  </td>
-                  <td>
-                    <span
-                      className="statistic-data__skel-cell"
-                      style={{ maxWidth: '72%', animationDelay: `${i * 0.04 + 0.02}s` }}
-                    />
-                  </td>
-                  <td>
-                    <span
-                      className="statistic-data__skel-cell"
-                      style={{ maxWidth: '80%', animationDelay: `${i * 0.04 + 0.04}s` }}
-                    />
-                  </td>
-                  <td>
-                    <span
-                      className="statistic-data__skel-cell"
-                      style={{ maxWidth: '56%', animationDelay: `${i * 0.04 + 0.06}s` }}
-                    />
-                  </td>
-                </tr>
-              ))
-            ) : pageRows.length ? (
-              pageRows.map((row) => (
-                <tr key={`${title}-${row.period}`}>
-                  <td>{row.period}</td>
-                  <td>{Number.isFinite(row.startClose) ? row.startClose.toFixed(2) : '—'}</td>
-                  <td>
-                    {Number.isFinite(row.endClose)
-                      ? row.endClose.toFixed(2)
-                      : row.unavailableReason
-                        ? row.unavailableReason
-                        : '—'}
-                  </td>
-                  <td className={pctTone(row.returnPct)}>{fmtPct(row.returnPct)}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={4} className="statistic-data__empty">
-                  No rows yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <FigmaDataTable
+        headers={RETURN_TABLE_HEADERS}
+        rows={loading ? skeletonRows : pageRows}
+        getRowKey={(row) => (row.__skeleton ? `${title}-skel-${row.__index}` : `${title}-${row.period}`)}
+        getRowClassName={(row) => (row.__skeleton ? 'statistic-data__tr--skeleton' : '')}
+        wrapClassName={'statistic-data__table-wrap' + (loading ? ' statistic-data__table-wrap--loading-skel' : '')}
+        tableAriaBusy={loading}
+        emptyText="No rows yet."
+        emptyColSpan={4}
+        renderCell={({ header, row }) => {
+          if (row.__skeleton) {
+            const i = Number(row.__index) || 0;
+            if (header.key === 'period') {
+              return <span className="statistic-data__skel-cell" style={{ maxWidth: '88%', animationDelay: `${i * 0.04}s` }} />;
+            }
+            if (header.key === 'startClose') {
+              return <span className="statistic-data__skel-cell" style={{ maxWidth: '72%', animationDelay: `${i * 0.04 + 0.02}s` }} />;
+            }
+            if (header.key === 'endClose') {
+              return <span className="statistic-data__skel-cell" style={{ maxWidth: '80%', animationDelay: `${i * 0.04 + 0.04}s` }} />;
+            }
+            return <span className="statistic-data__skel-cell" style={{ maxWidth: '56%', animationDelay: `${i * 0.04 + 0.06}s` }} />;
+          }
+          if (header.key === 'period') return row.period;
+          if (header.key === 'startClose') return Number.isFinite(row.startClose) ? row.startClose.toFixed(2) : '—';
+          if (header.key === 'endClose') {
+            return Number.isFinite(row.endClose) ? row.endClose.toFixed(2) : row.unavailableReason ? row.unavailableReason : '—';
+          }
+          return fmtPct(row.returnPct);
+        }}
+        cellClassName={({ header, row }) => (row.__skeleton ? '' : header.key === 'returnPct' ? pctTone(row.returnPct) : '')}
+      />
       <div className="statistic-data__pager">
         {loading ? (
           <span className="statistic-data__pager-meta statistic-data__pager-meta--stretch">Loading…</span>
-        ) : (
+        ) : totalPages > 1 ? (
           <>
             <FigmaPagination page={pageSafe} totalPages={totalPages} onPageChange={setPage} />
             <span className="statistic-data__pager-meta">
               Page {pageSafe} of {totalPages} ({rows.length} rows)
             </span>
           </>
-        )}
+        ) : null
+        }
       </div>
     </section>
   );
@@ -507,7 +486,10 @@ export default function StatisticDataPage() {
     canonicalPath: '/statistic-data',
     noindex: Boolean(location.search)
   });
-  const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
+  const [symbol, setSymbol] = useState(() => {
+    const qsSymbol = sanitizeTickerPageInput(new URLSearchParams(location.search).get('symbol') || '');
+    return qsSymbol || DEFAULT_SYMBOL;
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [ohlcRows, setOhlcRows] = useState([]);
@@ -566,6 +548,12 @@ export default function StatisticDataPage() {
     if (targetRef?.current) {
       targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+  }, [location.search]);
+
+  useEffect(() => {
+    const qsSymbol = sanitizeTickerPageInput(new URLSearchParams(location.search).get('symbol') || '');
+    if (!qsSymbol) return;
+    setSymbol((prev) => (prev === qsSymbol ? prev : qsSymbol));
   }, [location.search]);
 
   useEffect(() => {
