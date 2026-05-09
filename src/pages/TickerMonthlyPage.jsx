@@ -55,14 +55,17 @@ const COMPARE_ROWS = [
 ];
 const TABLE_PAGE_SIZE = 30;
 const PAGER_SIBLING_COUNT = 1;
-const TABLE_RANGE_OPTIONS = [
-  { value: '1', label: '1Y' },
-  { value: '3', label: '3Y' },
-  { value: '5', label: '5Y' },
-  { value: '10', label: '10Y' },
-  { value: 'max', label: 'Max' }
+const TABLE_RANGE_YEARS = { '1Y': 1, '3Y': 3, '5Y': 5, '10Y': 10, '15Y': 15, '20Y': 20 };
+const DEFAULT_TABLE_RANGE_PRESET = '20Y';
+const TABLE_RANGE_DROPDOWN_OPTIONS = [
+  { id: '1Y', label: '1Y' },
+  { id: '3Y', label: '3Y' },
+  { id: '5Y', label: '5Y' },
+  { id: '10Y', label: '10Y' },
+  { id: '15Y', label: '15Y' },
+  { id: '20Y', label: '20Y' },
+  { id: 'MAX', label: 'MAX' }
 ];
-const TABLE_RANGE_DROPDOWN_OPTIONS = TABLE_RANGE_OPTIONS.map((opt) => ({ id: opt.value, label: opt.label }));
 
 function minMaxDailyPeriod(rows) {
   let min = '';
@@ -120,8 +123,18 @@ function sortRowsAsc(rows) {
   });
 }
 function parseYear(period) {
-  const m = String(period || '').match(/^(\d{4})/);
+  const m = String(period || '').match(/(\d{4})/);
   return m ? Number(m[1]) : null;
+}
+
+function monthPeriodOrderKey(row) {
+  const end = row?.endDate && String(row.endDate).slice(0, 10);
+  if (end && !Number.isNaN(Date.parse(end))) return Date.parse(end);
+  const start = row?.startDate && String(row.startDate).slice(0, 10);
+  if (start && !Number.isNaN(Date.parse(start))) return Date.parse(start);
+  const y = row?.year;
+  if (Number.isFinite(y)) return y * 100;
+  return 0;
 }
 function signalBucket(sig) {
   const s = String(sig || 'N').trim().toUpperCase();
@@ -328,7 +341,8 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
   const [chartEndYear, setChartEndYear] = useState(String(DEFAULT_MONTHLY_END_YEAR));
   const [weeklyStartYear, setWeeklyStartYear] = useState(String(DEFAULT_WEEKLY_START_YEAR));
   const [weeklyEndYear, setWeeklyEndYear] = useState(String(DEFAULT_WEEKLY_END_YEAR));
-  const [tableRange, setTableRange] = useState('max');
+  const [tableRange, setTableRange] = useState(DEFAULT_TABLE_RANGE_PRESET);
+  const [tableSort, setTableSort] = useState({ column: 'period', direction: 'desc' });
   const [tablePage, setTablePage] = useState(1);
   const [dailyFilter, setDailyFilter] = useState(() => ({ start: '', end: '' }));
   const [dailyFilterDraft, setDailyFilterDraft] = useState(() => ({ start: '', end: '' }));
@@ -768,17 +782,24 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
       />
     </div>
   ) : null;
-  const tableRows = useMemo(() => {
-    const source = isDaily ? (dailyReturnsForUi || []) : monthlyReturnsRaw;
-    const rows = (Array.isArray(source) ? source : []).map((r) => ({
-      period: r?.period,
-      startDate: r?.startDate,
-      endDate: r?.endDate,
-      startClose: r?.startPrice,
-      endClose: r?.endPrice,
-      returnPct: r?.totalReturn,
-      year: parseYear(r?.period)
-    })).filter((r) => r.period);
+  const tableRowsFiltered = useMemo(() => {
+    const source = isDaily ? dailyReturnsForUi || [] : monthlyReturnsRaw;
+    const rows = (Array.isArray(source) ? source : [])
+      .map((r) => ({
+        period: r?.period,
+        startDate: r?.startDate,
+        endDate: r?.endDate,
+        startClose: r?.startPrice,
+        endClose: r?.endPrice,
+        returnPct: r?.totalReturn,
+        year: (() => {
+          let y = parseYear(r?.period);
+          if (!Number.isFinite(y)) y = Number(String(r?.startDate || '').slice(0, 4));
+          if (!Number.isFinite(y)) y = Number(String(r?.endDate || '').slice(0, 4));
+          return Number.isFinite(y) ? y : null;
+        })()
+      }))
+      .filter((r) => r.period);
     if (isDaily) return rows;
     if (isWeekly) {
       const startY = Number(weeklyStartYear);
@@ -788,21 +809,84 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
       const hi = Math.max(startY, endY);
       return rows.filter((r) => Number.isFinite(r.year) && r.year >= lo && r.year <= hi);
     }
-    if (tableRange === 'max') return rows;
-    const years = Number(tableRange);
-    if (!Number.isFinite(years) || years <= 0) return rows;
-    const cutoff = new Date().getFullYear() - years + 1;
-    return rows.filter((r) => Number.isFinite(r.year) && r.year >= cutoff);
-  }, [monthlyReturnsRaw, tableRange, isDaily, dailyReturnsForUi, isWeekly, weeklyEndYear, weeklyStartYear]);
-  const tableTotalPages = useMemo(() => Math.max(1, Math.ceil(tableRows.length / TABLE_PAGE_SIZE)), [tableRows.length]);
+    const ys = rows.map((r) => r.year).filter(Number.isFinite);
+    if (!ys.length) return [];
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const hi = maxY;
+    let lo;
+    if (tableRange === 'MAX') {
+      lo = minY;
+    } else {
+      const span = TABLE_RANGE_YEARS[tableRange];
+      if (!Number.isFinite(span)) return [];
+      lo = hi - (span - 1);
+      if (lo < minY) lo = minY;
+    }
+    return rows.filter((r) => Number.isFinite(r.year) && r.year >= lo && r.year <= hi);
+  }, [
+    monthlyReturnsRaw,
+    tableRange,
+    isDaily,
+    dailyReturnsForUi,
+    isWeekly,
+    weeklyEndYear,
+    weeklyStartYear
+  ]);
+
+  const tableRowsSorted = useMemo(() => {
+    const rows = [...tableRowsFiltered];
+    const { column, direction } = tableSort;
+    const dir = direction === 'asc' ? 1 : -1;
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+    rows.sort((a, b) => {
+      let cmp = 0;
+      switch (column) {
+        case 'period':
+          cmp = monthPeriodOrderKey(a) - monthPeriodOrderKey(b);
+          break;
+        case 'startDate':
+          cmp = String(a.startDate || '').localeCompare(String(b.startDate || ''));
+          break;
+        case 'endDate':
+          cmp = String(a.endDate || '').localeCompare(String(b.endDate || ''));
+          break;
+        case 'startPrice':
+          cmp = (num(a.startClose) ?? -Infinity) - (num(b.startClose) ?? -Infinity);
+          break;
+        case 'endPrice':
+          cmp = (num(a.endClose) ?? -Infinity) - (num(b.endClose) ?? -Infinity);
+          break;
+        case 'return':
+          cmp = (num(a.returnPct) ?? -Infinity) - (num(b.returnPct) ?? -Infinity);
+          break;
+        default:
+          cmp = 0;
+      }
+      return dir * cmp;
+    });
+    return rows;
+  }, [tableRowsFiltered, tableSort]);
+
+  const tableTotalPages = useMemo(() => Math.max(1, Math.ceil(tableRowsSorted.length / TABLE_PAGE_SIZE)), [tableRowsSorted.length]);
   const tablePageSafe = useMemo(() => Math.min(Math.max(1, tablePage), tableTotalPages), [tablePage, tableTotalPages]);
   const tablePageRows = useMemo(() => {
     const start = (tablePageSafe - 1) * TABLE_PAGE_SIZE;
-    return tableRows.slice(start, start + TABLE_PAGE_SIZE);
-  }, [tableRows, tablePageSafe]);
+    return tableRowsSorted.slice(start, start + TABLE_PAGE_SIZE);
+  }, [tableRowsSorted, tablePageSafe]);
+
+  const onTableSortClick = useCallback((column) => {
+    setTableSort((prev) => {
+      if (prev.column === column) {
+        return { column, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { column, direction: 'desc' };
+    });
+  }, []);
+
   useEffect(() => {
     setTablePage(1);
-  }, [sym, tableRange, dailyFilter.start, dailyFilter.end, isDaily, isWeekly, weeklyStartYear, weeklyEndYear]);
+  }, [sym, tableRange, dailyFilter.start, dailyFilter.end, isDaily, isWeekly, weeklyStartYear, weeklyEndYear, tableSort.column, tableSort.direction]);
   useEffect(() => { setTablePage((p) => Math.min(Math.max(1, p), tableTotalPages)); }, [tableTotalPages]);
 
   const symU = String(sym || '').toUpperCase();
@@ -1062,7 +1146,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
                       onChange={setTableRange}
                       title="Table range"
                       ariaLabelPrefix="Range"
-                      labelFallback={TABLE_RANGE_OPTIONS.find((o) => o.value === tableRange)?.label ?? tableRange}
+                      labelFallback={TABLE_RANGE_DROPDOWN_OPTIONS.find((o) => o.id === tableRange)?.label ?? tableRange}
                     />
                   </label>
                 )}
@@ -1071,26 +1155,118 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
             <div className="statistic-data__table-wrap">
               <table className="statistic-data__table">
                 <thead>
-                  <tr><th>Period</th><th>Start</th><th>End</th><th>Start Close</th><th>End Close</th><th>Return</th></tr>
+                  <tr>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onTableSortClick('period')}
+                        aria-sort={
+                          tableSort.column === 'period'
+                            ? tableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        Period
+                        {tableSort.column === 'period' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {tableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                    
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onTableSortClick('startPrice')}
+                        aria-sort={
+                          tableSort.column === 'startPrice'
+                            ? tableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        Start Price
+                        {tableSort.column === 'startPrice' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {tableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onTableSortClick('endPrice')}
+                        aria-sort={
+                          tableSort.column === 'endPrice'
+                            ? tableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        End Price
+                        {tableSort.column === 'endPrice' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {tableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onTableSortClick('return')}
+                        aria-sort={
+                          tableSort.column === 'return'
+                            ? tableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        Return
+                        {tableSort.column === 'return' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {tableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                  </tr>
                 </thead>
                 <tbody>
-                  {tablePageRows.length ? tablePageRows.map((row) => (
-                    <tr key={`monthly-table-${row.period}`}>
-                      <td>{row.period}</td>
-                      <td>{row.startDate || '—'}</td>
-                      <td>{row.endDate || '—'}</td>
-                      <td>{Number.isFinite(Number(row.startClose)) ? Number(row.startClose).toFixed(2) : '—'}</td>
-                      <td>{Number.isFinite(Number(row.endClose)) ? Number(row.endClose).toFixed(2) : '—'}</td>
-                      <td className={pctTone(row.returnPct)}>{fmtPct(row.returnPct)}</td>
+                  {tablePageRows.length ? (
+                    tablePageRows.map((row) => (
+                      <tr key={`monthly-table-${row.period}`}>
+                        <td>{row.period}</td>
+                        <td>{Number.isFinite(Number(row.startClose)) ? Number(row.startClose).toFixed(2) : '—'}</td>
+                        <td>{Number.isFinite(Number(row.endClose)) ? Number(row.endClose).toFixed(2) : '—'}</td>
+                        <td className={pctTone(row.returnPct)}>{fmtPct(row.returnPct)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="statistic-data__empty">
+                        No {modeSlug} rows yet.
+                      </td>
                     </tr>
-                  )) : <tr><td colSpan={6} className="statistic-data__empty">No {modeSlug} rows yet.</td></tr>}
+                  )}
                 </tbody>
               </table>
             </div>
             {tableTotalPages > 1 ? (
               <div className="statistic-data__pager">
                 <FigmaPagination page={tablePageSafe} totalPages={tableTotalPages} onPageChange={setTablePage} />
-                <span className="statistic-data__pager-meta">Page {tablePageSafe} of {tableTotalPages} ({tableRows.length} rows)</span>
+                <span className="statistic-data__pager-meta">Page {tablePageSafe} of {tableTotalPages} ({tableRowsSorted.length} rows)</span>
               </div>
             ) : null}
           </section>

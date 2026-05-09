@@ -49,6 +49,17 @@ const COMPARE_ROWS = [
 ];
 const TABLE_PAGE_SIZE = 30;
 const PAGER_SIBLING_COUNT = 1;
+const TABLE_RANGE_YEARS = { '1Y': 1, '3Y': 3, '5Y': 5, '10Y': 10, '15Y': 15, '20Y': 20 };
+const DEFAULT_TABLE_RANGE_PRESET = '20Y';
+const TABLE_RANGE_DROPDOWN_OPTIONS = [
+  { id: '1Y', label: '1Y' },
+  { id: '3Y', label: '3Y' },
+  { id: '5Y', label: '5Y' },
+  { id: '10Y', label: '10Y' },
+  { id: '15Y', label: '15Y' },
+  { id: '20Y', label: '20Y' },
+  { id: 'MAX', label: 'MAX' }
+];
 
 function fmtPct(v) {
   if (v == null || !Number.isFinite(Number(v))) return '—';
@@ -66,6 +77,18 @@ function pctTone(v) {
 function parseYear(period) {
   const m = String(period || '').match(/(\d{4})/);
   return m ? Number(m[1]) : null;
+}
+
+/** Sort key: later quarter = larger (for chronological compare). */
+function quarterOrderKey(row) {
+  const end = row?.endDate && String(row.endDate).slice(0, 10);
+  if (end && !Number.isNaN(Date.parse(end))) return Date.parse(end);
+  const y = row?.year;
+  const p = String(row?.period || '');
+  const qm = p.match(/Q\s*([1-4])/i);
+  const q = qm ? Number(qm[1]) : 0;
+  if (Number.isFinite(y)) return y * 10 + q;
+  return 0;
 }
 
 function formatPct(v) {
@@ -305,8 +328,8 @@ export default function TickerQuarterlyPage() {
   const [detailRows, setDetailRows] = useState([]);
   const [chartStartYear, setChartStartYear] = useState(String(DEFAULT_START_YEAR));
   const [chartEndYear, setChartEndYear] = useState(String(DEFAULT_END_YEAR));
-  const [tableStartYear, setTableStartYear] = useState(String(DEFAULT_START_YEAR));
-  const [tableEndYear, setTableEndYear] = useState(String(DEFAULT_END_YEAR));
+  const [tableRangePreset, setTableRangePreset] = useState(DEFAULT_TABLE_RANGE_PRESET);
+  const [tableSort, setTableSort] = useState({ column: 'period', direction: 'desc' });
   const [tablePage, setTablePage] = useState(1);
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
 
@@ -483,25 +506,75 @@ export default function TickerQuarterlyPage() {
     return filterRowsByYearRange(aligned, chartStartYear, chartEndYear);
   }, [quarterlyReturnsRaw, quarterlyReturnsBenchRaw, chartStartYear, chartEndYear]);
 
-  const tableRows = useMemo(() => {
-    const startY = Number(tableStartYear);
-    const endY = Number(tableEndYear);
-    if (!Number.isFinite(startY) || !Number.isFinite(endY)) return quarterlyRowsNormalized;
-    const lo = Math.min(startY, endY);
-    const hi = Math.max(startY, endY);
-    return quarterlyRowsNormalized.filter((r) => r.year >= lo && r.year <= hi);
-  }, [quarterlyRowsNormalized, tableEndYear, tableStartYear]);
+  const tableYearBounds = useMemo(() => {
+    const ys = quarterlyRowsNormalized.map((r) => r.year).filter(Number.isFinite);
+    if (!ys.length) return { min: null, max: null };
+    return { min: Math.min(...ys), max: Math.max(...ys) };
+  }, [quarterlyRowsNormalized]);
 
-  const tableTotalPages = useMemo(() => Math.max(1, Math.ceil(tableRows.length / TABLE_PAGE_SIZE)), [tableRows.length]);
+  const tableRows = useMemo(() => {
+    const { min, max } = tableYearBounds;
+    if (min == null || max == null) return [];
+    const hi = max;
+    let lo;
+    if (tableRangePreset === 'MAX') {
+      lo = min;
+    } else {
+      const span = TABLE_RANGE_YEARS[tableRangePreset];
+      if (!Number.isFinite(span)) return [];
+      lo = hi - (span - 1);
+      if (lo < min) lo = min;
+    }
+    return quarterlyRowsNormalized.filter((r) => r.year >= lo && r.year <= hi);
+  }, [quarterlyRowsNormalized, tableRangePreset, tableYearBounds]);
+
+  const tableRowsSorted = useMemo(() => {
+    const rows = [...tableRows];
+    const { column, direction } = tableSort;
+    const dir = direction === 'asc' ? 1 : -1;
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+    rows.sort((a, b) => {
+      let cmp = 0;
+      switch (column) {
+        case 'period':
+          cmp = quarterOrderKey(a) - quarterOrderKey(b);
+          break;
+        case 'startPrice':
+          cmp = (num(a.startClose) ?? -Infinity) - (num(b.startClose) ?? -Infinity);
+          break;
+        case 'endPrice':
+          cmp = (num(a.endClose) ?? -Infinity) - (num(b.endClose) ?? -Infinity);
+          break;
+        case 'return':
+          cmp = (num(a.returnPct) ?? -Infinity) - (num(b.returnPct) ?? -Infinity);
+          break;
+        default:
+          cmp = 0;
+      }
+      return dir * cmp;
+    });
+    return rows;
+  }, [tableRows, tableSort]);
+
+  const tableTotalPages = useMemo(() => Math.max(1, Math.ceil(tableRowsSorted.length / TABLE_PAGE_SIZE)), [tableRowsSorted.length]);
   const tablePageSafe = useMemo(() => Math.min(Math.max(1, tablePage), tableTotalPages), [tablePage, tableTotalPages]);
   const tablePageRows = useMemo(() => {
     const start = (tablePageSafe - 1) * TABLE_PAGE_SIZE;
-    return tableRows.slice(start, start + TABLE_PAGE_SIZE);
-  }, [tableRows, tablePageSafe]);
+    return tableRowsSorted.slice(start, start + TABLE_PAGE_SIZE);
+  }, [tableRowsSorted, tablePageSafe]);
 
   useEffect(() => {
     setTablePage(1);
-  }, [sym, tableStartYear, tableEndYear]);
+  }, [sym, tableRangePreset, tableSort.column, tableSort.direction]);
+
+  const onTableSortClick = useCallback((column) => {
+    setTableSort((prev) => {
+      if (prev.column === column) {
+        return { column, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { column, direction: 'desc' };
+    });
+  }, []);
 
   useEffect(() => {
     setTablePage((p) => Math.min(Math.max(1, p), tableTotalPages));
@@ -517,12 +590,6 @@ export default function TickerQuarterlyPage() {
       quarterYearOptions.includes(Number(prev)) ? prev : String(nextStart)
     );
     setChartEndYear((prev) =>
-      quarterYearOptions.includes(Number(prev)) ? prev : String(nextEnd)
-    );
-    setTableStartYear((prev) =>
-      quarterYearOptions.includes(Number(prev)) ? prev : String(nextStart)
-    );
-    setTableEndYear((prev) =>
       quarterYearOptions.includes(Number(prev)) ? prev : String(nextEnd)
     );
   }, [quarterYearOptions]);
@@ -703,28 +770,17 @@ export default function TickerQuarterlyPage() {
             <div className="statistic-data__table-head">
               <h2 className="statistic-data__table-title">Quarterly Returns</h2>
               <div className="statistic-data__head-actions">
-                <div className="ticker-page__custom-range" aria-label="Quarterly table year range">
-                  <span className="ticker-page__label ticker-page__label--inline">Start</span>
+                <div className="ticker-page__custom-range" aria-label="Quarterly table range">
+                  <span className="ticker-page__label ticker-page__label--inline">Range</span>
                   <ThemedDropdown
                     size="sm"
                     style={{ minWidth: 96 }}
-                    value={tableStartYear}
-                    options={quarterYearDropdownOptions}
-                    onChange={setTableStartYear}
-                    title="Table start year"
-                    ariaLabelPrefix="Start year"
-                    labelFallback={tableStartYear}
-                  />
-                  <span className="ticker-page__label ticker-page__label--inline">End</span>
-                  <ThemedDropdown
-                    size="sm"
-                    style={{ minWidth: 96 }}
-                    value={tableEndYear}
-                    options={quarterYearDropdownOptions}
-                    onChange={setTableEndYear}
-                    title="Table end year"
-                    ariaLabelPrefix="End year"
-                    labelFallback={tableEndYear}
+                    value={tableRangePreset}
+                    options={TABLE_RANGE_DROPDOWN_OPTIONS}
+                    onChange={setTableRangePreset}
+                    title="Table year range"
+                    ariaLabelPrefix="Year range"
+                    labelFallback={tableRangePreset}
                   />
                 </div>
               </div>
@@ -733,12 +789,90 @@ export default function TickerQuarterlyPage() {
               <table className="statistic-data__table">
                 <thead>
                   <tr>
-                    <th>Period</th>
-                    {/* <th>Start</th>
-                    <th>End</th> */}
-                    <th>Start Price</th>
-                    <th>End Price</th>
-                    <th>Return</th>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onTableSortClick('period')}
+                        aria-sort={
+                          tableSort.column === 'period'
+                            ? tableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        Period
+                        {tableSort.column === 'period' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {tableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onTableSortClick('startPrice')}
+                        aria-sort={
+                          tableSort.column === 'startPrice'
+                            ? tableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        Start Price
+                        {tableSort.column === 'startPrice' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {tableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onTableSortClick('endPrice')}
+                        aria-sort={
+                          tableSort.column === 'endPrice'
+                            ? tableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        End Price
+                        {tableSort.column === 'endPrice' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {tableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onTableSortClick('return')}
+                        aria-sort={
+                          tableSort.column === 'return'
+                            ? tableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        Return
+                        {tableSort.column === 'return' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {tableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -755,7 +889,7 @@ export default function TickerQuarterlyPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={6} className="statistic-data__empty">
+                      <td colSpan={4} className="statistic-data__empty">
                         No quarterly rows yet.
                       </td>
                     </tr>
@@ -767,7 +901,7 @@ export default function TickerQuarterlyPage() {
               <div className="statistic-data__pager">
                 <FigmaPagination page={tablePageSafe} totalPages={tableTotalPages} onPageChange={setTablePage} />
                 <span className="statistic-data__pager-meta">
-                  Page {tablePageSafe} of {tableTotalPages} ({tableRows.length} rows)
+                  Page {tablePageSafe} of {tableTotalPages} ({tableRowsSorted.length} rows)
                 </span>
               </div>
             ) : null}

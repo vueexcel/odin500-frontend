@@ -14116,6 +14116,39 @@ html[data-theme='light'] .about-legal-item {
   letter-spacing: 0.04em;
 }
 
+.statistic-data__th-sort {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-align: left;
+  width: 100%;
+}
+
+.statistic-data__th-sort:hover {
+  color: #e2e8f0;
+}
+
+.statistic-data__th-sort:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.8);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.statistic-data__th-sort-indicator {
+  font-size: 0.75em;
+  opacity: 0.85;
+}
+
 .statistic-data__table td {
   color: #e2e8f0;
 }
@@ -14412,6 +14445,10 @@ html[data-theme='light'] .about-legal-item {
 
 [data-theme='light'] .statistic-data__table th {
   color: #64748b;
+}
+
+[data-theme='light'] .statistic-data__th-sort:hover {
+  color: #0f172a;
 }
 
 [data-theme='light'] .statistic-data__table td {

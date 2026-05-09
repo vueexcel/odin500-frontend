@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
-import { FigmaDataTable } from '../components/FigmaDataTable.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
@@ -45,22 +44,19 @@ const COMPARE_ROWS = [
   { key: '10Y', period: 'Last 10 years' },
   { key: '20Y', period: 'Last 20 years' }
 ];
-const TABLE_RANGE_OPTIONS = [
-  { value: '1', label: '1Y' },
-  { value: '3', label: '3Y' },
-  { value: '5', label: '5Y' },
-  { value: '10', label: '10Y' },
-  { value: 'max', label: 'Max' }
+const TABLE_RANGE_YEARS = { '1Y': 1, '3Y': 3, '5Y': 5, '10Y': 10, '15Y': 15, '20Y': 20 };
+const DEFAULT_TABLE_RANGE_PRESET = '20Y';
+const TABLE_RANGE_DROPDOWN_OPTIONS = [
+  { id: '1Y', label: '1Y' },
+  { id: '3Y', label: '3Y' },
+  { id: '5Y', label: '5Y' },
+  { id: '10Y', label: '10Y' },
+  { id: '15Y', label: '15Y' },
+  { id: '20Y', label: '20Y' },
+  { id: 'MAX', label: 'MAX' }
 ];
-const TABLE_RANGE_DROPDOWN_OPTIONS = TABLE_RANGE_OPTIONS.map((opt) => ({ id: opt.value, label: opt.label }));
 const TABLE_PAGE_SIZE = 30;
 const PAGER_SIBLING_COUNT = 1;
-const ANNUAL_TABLE_HEADERS = [
-  { key: 'period', label: 'Period' },
-  { key: 'startClose', label: 'Start Close' },
-  { key: 'endClose', label: 'End Close' },
-  { key: 'returnPct', label: 'Return' }
-];
 
 function fmtPct(v) {
   if (v == null || !Number.isFinite(Number(v))) return '—';
@@ -82,6 +78,14 @@ function pctTone(v) {
 function parseYear(period) {
   const m = String(period || '').match(/(\d{4})/);
   return m ? Number(m[1]) : null;
+}
+
+function annualPeriodOrderKey(row) {
+  const end = row?.endDate && String(row.endDate).slice(0, 10);
+  if (end && !Number.isNaN(Date.parse(end))) return Date.parse(end);
+  const y = row?.year;
+  if (Number.isFinite(y)) return y * 100;
+  return 0;
 }
 
 function pickNum(row, keys) {
@@ -328,7 +332,8 @@ export default function TickerAnnualPage() {
   const [statsRows, setStatsRows] = useState([]);
   const [statsRowsSpy, setStatsRowsSpy] = useState([]);
   const [detailRows, setDetailRows] = useState([]);
-  const [annualRange, setAnnualRange] = useState('max');
+  const [annualRange, setAnnualRange] = useState(DEFAULT_TABLE_RANGE_PRESET);
+  const [annualTableSort, setAnnualTableSort] = useState({ column: 'period', direction: 'desc' });
   const [annualTablePage, setAnnualTablePage] = useState(1);
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
 
@@ -629,29 +634,79 @@ export default function TickerAnnualPage() {
       />
     </div>
   );
-  const annualTableRows = useMemo(() => {
+  const annualTableRowsBase = useMemo(() => {
     const source = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
-    const rows = source
+    return source
       .map((r) => ({
         period: r?.period,
+        startDate: r?.startDate,
+        endDate: r?.endDate,
         returnPct: r?.totalReturn,
         startClose: r?.startPrice,
         endClose: r?.endPrice,
-        year: parseYear(r?.period)
+        year: (() => {
+          let y = parseYear(r?.period);
+          if (!Number.isFinite(y)) y = Number(String(r?.startDate || '').slice(0, 4));
+          if (!Number.isFinite(y)) y = Number(String(r?.endDate || '').slice(0, 4));
+          return Number.isFinite(y) ? y : null;
+        })()
       }))
       .filter((r) => r.period);
+  }, [annualReturnsRaw]);
 
-    if (annualRange === 'max') return rows;
-    const years = Number(annualRange);
-    if (!Number.isFinite(years) || years <= 0) return rows;
-    const nowYear = new Date().getFullYear();
-    const cutoff = nowYear - years + 1;
-    return rows.filter((r) => Number.isFinite(r.year) && r.year >= cutoff);
-  }, [annualReturnsRaw, annualRange]);
+  const annualTableYearBounds = useMemo(() => {
+    const ys = annualTableRowsBase.map((r) => r.year).filter(Number.isFinite);
+    if (!ys.length) return { min: null, max: null };
+    return { min: Math.min(...ys), max: Math.max(...ys) };
+  }, [annualTableRowsBase]);
+
+  const annualTableRows = useMemo(() => {
+    const { min, max } = annualTableYearBounds;
+    if (min == null || max == null) return [];
+    const hi = max;
+    let lo;
+    if (annualRange === 'MAX') {
+      lo = min;
+    } else {
+      const span = TABLE_RANGE_YEARS[annualRange];
+      if (!Number.isFinite(span)) return [];
+      lo = hi - (span - 1);
+      if (lo < min) lo = min;
+    }
+    return annualTableRowsBase.filter((r) => Number.isFinite(r.year) && r.year >= lo && r.year <= hi);
+  }, [annualTableRowsBase, annualTableYearBounds, annualRange]);
+
+  const annualTableRowsSorted = useMemo(() => {
+    const rows = [...annualTableRows];
+    const { column, direction } = annualTableSort;
+    const dir = direction === 'asc' ? 1 : -1;
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+    rows.sort((a, b) => {
+      let cmp = 0;
+      switch (column) {
+        case 'period':
+          cmp = annualPeriodOrderKey(a) - annualPeriodOrderKey(b);
+          break;
+        case 'startPrice':
+          cmp = (num(a.startClose) ?? -Infinity) - (num(b.startClose) ?? -Infinity);
+          break;
+        case 'endPrice':
+          cmp = (num(a.endClose) ?? -Infinity) - (num(b.endClose) ?? -Infinity);
+          break;
+        case 'return':
+          cmp = (num(a.returnPct) ?? -Infinity) - (num(b.returnPct) ?? -Infinity);
+          break;
+        default:
+          cmp = 0;
+      }
+      return dir * cmp;
+    });
+    return rows;
+  }, [annualTableRows, annualTableSort]);
 
   const annualTableTotalPages = useMemo(
-    () => Math.max(1, Math.ceil(annualTableRows.length / TABLE_PAGE_SIZE)),
-    [annualTableRows.length]
+    () => Math.max(1, Math.ceil(annualTableRowsSorted.length / TABLE_PAGE_SIZE)),
+    [annualTableRowsSorted.length]
   );
   const annualTablePageSafe = useMemo(
     () => Math.min(Math.max(1, annualTablePage), annualTableTotalPages),
@@ -659,12 +714,21 @@ export default function TickerAnnualPage() {
   );
   const annualTablePageRows = useMemo(() => {
     const startIdx = (annualTablePageSafe - 1) * TABLE_PAGE_SIZE;
-    return annualTableRows.slice(startIdx, startIdx + TABLE_PAGE_SIZE);
-  }, [annualTableRows, annualTablePageSafe]);
+    return annualTableRowsSorted.slice(startIdx, startIdx + TABLE_PAGE_SIZE);
+  }, [annualTableRowsSorted, annualTablePageSafe]);
+
+  const onAnnualTableSortClick = useCallback((column) => {
+    setAnnualTableSort((prev) => {
+      if (prev.column === column) {
+        return { column, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { column, direction: 'desc' };
+    });
+  }, []);
 
   useEffect(() => {
     setAnnualTablePage(1);
-  }, [sym, annualRange]);
+  }, [sym, annualRange, annualTableSort.column, annualTableSort.direction]);
 
   useEffect(() => {
     setAnnualTablePage((prev) => Math.min(Math.max(1, prev), annualTableTotalPages));
@@ -768,30 +832,126 @@ export default function TickerAnnualPage() {
                     onChange={setAnnualRange}
                     title="Table range"
                     ariaLabelPrefix="Range"
-                    labelFallback={TABLE_RANGE_OPTIONS.find((o) => o.value === annualRange)?.label ?? annualRange}
+                    labelFallback={TABLE_RANGE_DROPDOWN_OPTIONS.find((o) => o.id === annualRange)?.label ?? annualRange}
                   />
                 </label>
               </div>
             </div>
-            <FigmaDataTable
-              headers={ANNUAL_TABLE_HEADERS}
-              rows={annualTablePageRows}
-              getRowKey={(row) => `annual-table-${row.period}`}
-              emptyText="No annual rows yet."
-              emptyColSpan={4}
-              renderCell={({ header, row }) => {
-                if (header.key === 'returnPct') return fmtPct(row.returnPct);
-                if (header.key === 'startClose') return Number.isFinite(Number(row.startClose)) ? Number(row.startClose).toFixed(2) : '—';
-                if (header.key === 'endClose') return Number.isFinite(Number(row.endClose)) ? Number(row.endClose).toFixed(2) : '—';
-                return row[header.key];
-              }}
-              cellClassName={({ header, row }) => (header.key === 'returnPct' ? pctTone(row.returnPct) : '')}
-            />
+            <div className="statistic-data__table-wrap">
+              <table className="statistic-data__table">
+                <thead>
+                  <tr>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onAnnualTableSortClick('period')}
+                        aria-sort={
+                          annualTableSort.column === 'period'
+                            ? annualTableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        Period
+                        {annualTableSort.column === 'period' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {annualTableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onAnnualTableSortClick('startPrice')}
+                        aria-sort={
+                          annualTableSort.column === 'startPrice'
+                            ? annualTableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        Start Price
+                        {annualTableSort.column === 'startPrice' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {annualTableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onAnnualTableSortClick('endPrice')}
+                        aria-sort={
+                          annualTableSort.column === 'endPrice'
+                            ? annualTableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        End Price
+                        {annualTableSort.column === 'endPrice' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {annualTableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th scope="col">
+                      <button
+                        type="button"
+                        className="statistic-data__th-sort"
+                        onClick={() => onAnnualTableSortClick('return')}
+                        aria-sort={
+                          annualTableSort.column === 'return'
+                            ? annualTableSort.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                        }
+                      >
+                        Return
+                        {annualTableSort.column === 'return' ? (
+                          <span className="statistic-data__th-sort-indicator" aria-hidden>
+                            {annualTableSort.direction === 'desc' ? ' ▼' : ' ▲'}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {annualTablePageRows.length ? (
+                    annualTablePageRows.map((row) => (
+                      <tr key={`annual-table-${row.period}`}>
+                        <td>{row.period}</td>
+                        <td>{Number.isFinite(Number(row.startClose)) ? Number(row.startClose).toFixed(2) : '—'}</td>
+                        <td>{Number.isFinite(Number(row.endClose)) ? Number(row.endClose).toFixed(2) : '—'}</td>
+                        <td className={pctTone(row.returnPct)}>{fmtPct(row.returnPct)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="statistic-data__empty">
+                        No annual rows yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
             {annualTableTotalPages > 1 ? (
               <div className="statistic-data__pager">
                 <FigmaPagination page={annualTablePageSafe} totalPages={annualTableTotalPages} onPageChange={setAnnualTablePage} />
                 <span className="statistic-data__pager-meta">
-                  Page {annualTablePageSafe} of {annualTableTotalPages} ({annualTableRows.length} rows)
+                  Page {annualTablePageSafe} of {annualTableTotalPages} ({annualTableRowsSorted.length} rows)
                 </span>
               </div>
             ) : null}
