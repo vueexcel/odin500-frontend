@@ -11,7 +11,7 @@ import { useSitewideSeo } from '../seo/usePageSeo.js';
 export function ProtectedLayout() {
   useSitewideSeo();
   const location = useLocation();
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
   const [mobileRightOpen, setMobileRightOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => {
@@ -73,11 +73,6 @@ export function ProtectedLayout() {
       setMobileRightOpen(false);
     }
   }, [isMobile, sidebarExpanded]);
-
-  useEffect(() => {
-    if (!isMobile) return;
-    setMobileLeftOpen(false);
-  }, [location.pathname, location.search, isMobile]);
 
   useEffect(() => {
     const scroller = mainScrollRef.current;

@@ -2007,56 +2007,7 @@ export default function IndexPage() {
                   </div>
                 );
               })}
-            </div>
-
-            <div className="ticker-subh-with-tip" style={{ marginTop: 14 }}>
-              <h3 className="ticker-subh ticker-subh--flex">{activeMeta.label} Constituents</h3>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  Source: <code className="ticker-data-tip__code">POST /api/market/ticker-details</code> with period{' '}
-                  <code className="ticker-data-tip__code">last-date</code>. Return % is 1D.
-                </p>
-              </DataInfoTip>
-            </div>
-            <div className="index-constituents-card">
-              <div className="index-constituents-table-wrap">
-                <table className="index-constituents-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Close</th>
-                      <th>Return %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {indexTickersPageRows.map((row) => (
-                      <tr key={row.symbol}>
-                        <td>
-                          <button
-                            type="button"
-                            className="index-constituents-link"
-                            onClick={() => navigate(`/ticker/${encodeURIComponent(row.symbol)}?ticker=${encodeURIComponent(row.symbol)}`)}
-                          >
-                            {row.symbol}
-                          </button>
-                        </td>
-                        <td>{formatPx(row.close)}</td>
-                        <td className={pctClass(row.ret1d)}>{formatPct(row.ret1d)}</td>
-                      </tr>
-                    ))}
-                    {!indexTickersBusy && !indexTickersPageRows.length ? (
-                      <tr>
-                        <td colSpan={3} className="index-constituents-empty">No constituents found.</td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-                {indexTickersBusy ? <p className="ticker-page__news-sample-note">Loading constituents…</p> : null}
-              </div>
-              {indexTickersTotalPages > 1 ? (
-                <FigmaPagination page={indexTickersPageSafe} totalPages={indexTickersTotalPages} onPageChange={setIndexTickersPage} />
-              ) : null}
-            </div>
+            </div>            
           </section>
         </aside>
       </div>
