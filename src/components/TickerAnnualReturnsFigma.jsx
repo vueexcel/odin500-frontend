@@ -172,13 +172,13 @@ function labelOnDonut(r, degMid) {
 function IcoTable() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-<path d="M12.0586 2.13281C12.6602 2.13281 13.1523 2.625 13.1523 3.22656V5.41406H0.847656V3.22656C0.847656 2.625 1.33984 2.13281 1.94141 2.13281H12.0586Z" stroke="white" stroke-width="0.875" stroke-miterlimit="10" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M4.94922 5.41406V11.8672H1.94141C1.33984 11.8672 0.847656 11.375 0.847656 10.7734V5.41406H4.94922Z" stroke="white" stroke-width="0.875" stroke-miterlimit="10" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M0.847656 8.69531H4.94922" stroke="white" stroke-width="0.875" stroke-miterlimit="10" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M9.05078 5.41406H4.94922V11.8672H9.05078V5.41406Z" stroke="white" stroke-width="0.875" stroke-miterlimit="10" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M4.94922 8.69531H9.05078" stroke="white" stroke-width="0.875" stroke-miterlimit="10" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M13.1523 5.41406V10.7734C13.1523 11.375 12.6602 11.8672 12.0586 11.8672H9.05078V5.41406H13.1523Z" stroke="white" stroke-width="0.875" stroke-miterlimit="10" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M9.05078 8.69531H13.1523" stroke="white" stroke-width="0.875" stroke-miterlimit="10" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12.0586 2.13281C12.6602 2.13281 13.1523 2.625 13.1523 3.22656V5.41406H0.847656V3.22656C0.847656 2.625 1.33984 2.13281 1.94141 2.13281H12.0586Z" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
+<path d="M4.94922 5.41406V11.8672H1.94141C1.33984 11.8672 0.847656 11.375 0.847656 10.7734V5.41406H4.94922Z" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
+<path d="M0.847656 8.69531H4.94922" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
+<path d="M9.05078 5.41406H4.94922V11.8672H9.05078V5.41406Z" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
+<path d="M4.94922 8.69531H9.05078" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
+<path d="M13.1523 5.41406V10.7734C13.1523 11.375 12.6602 11.8672 12.0586 11.8672H9.05078V5.41406H13.1523Z" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
+<path d="M9.05078 8.69531H13.1523" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
 </svg>
   );
 }
@@ -186,9 +186,9 @@ function IcoTable() {
 function IcoDownload() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-<path d="M7.00049 2.48828V9.05078" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M4.53955 6.58984L7.00049 9.05078L9.46143 6.58984" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M13.1528 9.05078V9.87109C13.1528 10.3062 12.98 10.7235 12.6723 11.0312C12.3646 11.3389 11.9473 11.5117 11.5122 11.5117H2.48877C2.05365 11.5117 1.63635 11.3389 1.32867 11.0312C1.021 10.7235 0.848145 10.3062 0.848145 9.87109V9.05078" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.00049 2.48828V9.05078" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
+<path d="M4.53955 6.58984L7.00049 9.05078L9.46143 6.58984" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
+<path d="M13.1528 9.05078V9.87109C13.1528 10.3062 12.98 10.7235 12.6723 11.0312C12.3646 11.3389 11.9473 11.5117 11.5122 11.5117H2.48877C2.05365 11.5117 1.63635 11.3389 1.32867 11.0312C1.021 10.7235 0.848145 10.3062 0.848145 9.87109V9.05078" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
 </svg>
   );
 }
@@ -895,9 +895,9 @@ export function TickerAnnualReturnsFigma({
       >
         <div className="ticker-annual-figma__toolbar">
           <div className="flex align-centers"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-<g clip-path="url(#clip0_609_23954)">
-<path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+<g clipPath="url(#clip0_609_23954)">
+<path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
+<path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
 </g>
 <defs>
 <clipPath id="clip0_609_23954">
@@ -1043,9 +1043,9 @@ export function TickerAnnualReturnsFigma({
           <div className="ticker-annual-figma__stats-head">
             <span className="ticker-annual-figma__badge">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <g clip-path="url(#clip0_609_23954)">
-                <path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+                <g clipPath="url(#clip0_609_23954)">
+                <path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
                 </g>
                 <defs>
                 <clipPath id="clip0_609_23954">
