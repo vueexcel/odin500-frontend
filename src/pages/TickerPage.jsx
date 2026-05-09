@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
+import { FigmaPagination } from '../components/FigmaPagination.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
 import { TickerMonthlyReturnsChart } from '../components/TickerMonthlyReturnsChart.jsx';
 import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyReturnsWaterfallDonut.jsx';
@@ -579,6 +580,16 @@ export default function TickerPage() {
     setWatchlistMounted(true);
     setWatchlistDocked(true);
   }, []);
+  const onAddTickerToWatchlist = useCallback(() => {
+    const ticker = String(sym || '').toUpperCase().trim();
+    openDockedWatchlist();
+    try {
+      if (ticker) sessionStorage.setItem('watchlist_add_symbol', ticker);
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new CustomEvent('watchlist:add-ticker', { detail: { symbol: ticker } }));
+  }, [openDockedWatchlist, sym]);
 
   useEffect(() => {
     const next = sanitizeTickerPageInput(symbolParam) || 'AAPL';
@@ -1279,27 +1290,16 @@ export default function TickerPage() {
   const annualReturnsRaw = returnsSym?.performance?.annualReturns;
   const quarterlyReturnsRaw = returnsSym?.performance?.quarterlyReturns;
   const monthlyReturnsRaw = returnsSym?.performance?.monthlyReturns;
-  const annualReturnsDefaultRange = useMemo(() => {
-    const rows = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
-    return rows.filter((r) => {
-      const y = Number(String(r?.period || '').slice(0, 4));
-      return Number.isFinite(y) && y >= 2018 && y <= 2026;
-    });
-  }, [annualReturnsRaw]);
-  const quarterlyReturnsDefaultRange = useMemo(() => {
-    const rows = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
-    return rows.filter((r) => {
-      const y = Number(String(r?.period || '').slice(0, 4));
-      return Number.isFinite(y) && y >= 2020 && y <= 2026;
-    });
-  }, [quarterlyReturnsRaw]);
-  const quarterlyReturnsCurrentRange = useMemo(() => {
-    const rows = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
-    return rows.filter((r) => {
-      const y = Number(String(r?.period || '').slice(0, 4));
-      return Number.isFinite(y) && y >= 2025 && y <= 2026;
-    });
-  }, [quarterlyReturnsRaw]);
+  /** Full series for annual chart; in-card start/end year dropdowns filter the visible range. */
+  const annualReturnsForChart = useMemo(
+    () => (Array.isArray(annualReturnsRaw) ? annualReturnsRaw : []),
+    [annualReturnsRaw]
+  );
+  /** Full series for quarterly chart; in-card start/end year dropdowns filter the visible range. */
+  const quarterlyReturnsForChart = useMemo(
+    () => (Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : []),
+    [quarterlyReturnsRaw]
+  );
   const tickerSelectOptions = useMemo(() => {
     const base = [sym, BENCHMARK, ...(detailRows || []).map((r) => String(r.symbol || '').toUpperCase().trim())];
     return [...new Set(base.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
@@ -1611,6 +1611,12 @@ export default function TickerPage() {
     relativeTickerSeriesBySymbol[selectedTickerKey] || { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd };
   const selectedIndexLabel =
     RELATIVE_INDEX_OPTIONS.find((x) => x.key === relativeIndexKey)?.label || RELATIVE_INDEX_OPTIONS[0].label;
+  const onOpenRelativeStrengthPage = useCallback(() => {
+    const ticker = String(relativeTickerSymbol || '').toUpperCase().trim();
+    const qs = new URLSearchParams();
+    if (ticker) qs.set('ticker', ticker);
+    navigate(`/relative-strength/ticker${qs.toString() ? `?${qs.toString()}` : ''}`);
+  }, [navigate, relativeTickerSymbol]);
 
   const section16Rows = useMemo(() => {
     const compact = COMPARE_ROWS.filter((r) => ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD'].includes(r.key));
@@ -1707,7 +1713,7 @@ export default function TickerPage() {
             </DataInfoTip>
           </div>
           <div className="ticker-page__header-actions">
-            <button type="button" className="ticker-outline-btn">
+            <button type="button" className="ticker-outline-btn" onClick={onAddTickerToWatchlist}>
               <IconPlus className="ticker-outline-btn__ico" /> In My Watchlists
             </button>
           </div>
@@ -1973,7 +1979,10 @@ export default function TickerPage() {
               <h2 className="ticker-card__h ticker-card__h--flex" id="ticker-news-h">
                 News
               </h2>
-              <Link to="/news" className="ticker-outline-btn ticker-outline-btn--sm">
+              <Link
+                to={`/news?ticker=${encodeURIComponent(sym)}`}
+                className="ticker-outline-btn ticker-outline-btn--sm"
+              >
                 View More
               </Link>
             </div>
@@ -2005,47 +2014,38 @@ export default function TickerPage() {
               ))}
             </ul>
             {liveNews.length > NEWS_PAGE_SIZE ? (
-              <div className="ticker-news-pagination" aria-label="News pagination">
-                <button
-                  type="button"
-                  className="ticker-outline-btn"
-                  disabled={newsPageSafe <= 1}
-                  onClick={() => setNewsPage((p) => Math.max(1, p - 1))}
-                >
-                  Prev
-                </button>
-                <span className="ticker-news-pagination__label">
-                  Page {newsPageSafe} of {newsTotalPages}
-                </span>
-                <button
-                  type="button"
-                  className="ticker-outline-btn"
-                  disabled={newsPageSafe >= newsTotalPages}
-                  onClick={() => setNewsPage((p) => Math.min(newsTotalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
+              <FigmaPagination
+                page={newsPageSafe}
+                totalPages={newsTotalPages}
+                onPageChange={setNewsPage}
+                ariaLabel="News pagination"
+              />
             ) : null}
           </section>
 
           <TickerAnnualReturnsFigma
             symbol={sym}
-            annualReturns={annualReturnsDefaultRange}
+            annualReturns={annualReturnsForChart}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
             hideStatsSection
+            enableInlineYearDropdowns
+            defaultStartYear={2017}
+            defaultEndYear={2026}
             loading={metaBusy}
           />
           <TickerAnnualReturnsFigma
             symbol={sym}
-            annualReturns={quarterlyReturnsCurrentRange}
+            annualReturns={quarterlyReturnsForChart}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_QUARTERLY_FIGMA}
             resizeDefaultHeight={260}
             periodMode="quarterly"
             hideStatsSection
+            enableInlineYearDropdowns
+            defaultStartYear={2023}
+            defaultEndYear={2026}
             loading={metaBusy}
           />
           <TickerChartResizeScope storageKey={RESIZE_KEY_MONTHLY} defaultHeight={278}>
@@ -2054,6 +2054,8 @@ export default function TickerPage() {
               monthlyReturns={monthlyReturnsRaw}
               asOfDate={asOfDate}
               suppressChartDateFilter
+              useThemedYearDropdown
+              defaultToLatestYear
               loading={metaBusy}
             />
           </TickerChartResizeScope>
@@ -2067,48 +2069,49 @@ export default function TickerPage() {
           </TickerChartResizeScope> */}
           
           <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>
-          <div className="flex align-centers"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-<g clip-path="url(#clip0_609_23954)">
-<path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
-<defs>
-<clipPath id="clip0_609_23954">
-<rect width="14" height="14" fill="white"/>
-</clipPath>
-</defs>
-</svg>
-</div>
+                <div className="flex align-centers"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <g clip-path="url(#clip0_609_23954)">
+                  <path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+                  </g>
+                  <defs>
+                  <clipPath id="clip0_609_23954">
+                  <rect width="14" height="14" fill="white"/>
+                  </clipPath>
+                  </defs>
+                  </svg>
+                </div>
 
-            <h3 className="ticker-subh ticker-subh--flex">Relative Strength selector</h3>
-            <DataInfoTip align="start">
-              <p className="ticker-data-tip__p">
-                Choose one index and one ticker; relative strength is shown as <strong>index return − ticker return</strong>.
-              </p>
-            </DataInfoTip>
-          </div>
-          <div className="ticker-rs-controls">
-            <ThemedDropdown
-              wideLabel
-              style={{ minWidth: 220, flex: '1 1 220px' }}
-              value={relativeIndexKey}
-              options={RELATIVE_INDEX_DROPDOWN_OPTIONS}
-              onChange={setRelativeIndexKey}
-              title="Benchmark index"
-              ariaLabelPrefix="Index"
-              labelFallback={RELATIVE_INDEX_OPTIONS.find((o) => o.key === relativeIndexKey)?.label ?? ''}
-            />
-            <ThemedDropdown
-              wideLabel
-              style={{ minWidth: 220, flex: '1 1 220px' }}
-              value={relativeTickerSymbol}
-              options={tickerRsDropdownOptions}
-              onChange={setRelativeTickerSymbol}
-              title="Compare ticker"
-              ariaLabelPrefix="Ticker"
-              labelFallback={relativeTickerSymbol}
-            />
-            {relativeCompareBusy ? <span className="ticker-page__loading-pill">Loading relative strength…</span> : null}
+            <div className="ticker-subh-left">
+              <h3 className="ticker-subh ticker-subh--flex">Relative Strength selector</h3>
+              <DataInfoTip align="start">
+                <p className="ticker-data-tip__p">
+                  Choose one index and one ticker; relative strength is shown as <strong>index return − ticker return</strong>.
+                </p>
+              </DataInfoTip>
+            </div>
+            <div className="ticker-rs-controls ticker-rs-controls--inline">
+              <ThemedDropdown
+                value={relativeTickerSymbol}
+                options={tickerRsDropdownOptions}
+                onChange={setRelativeTickerSymbol}
+                title="Compare ticker"
+                ariaLabelPrefix="Ticker"
+                labelFallback={relativeTickerSymbol}
+              />
+              <ThemedDropdown
+                value={relativeIndexKey}
+                options={RELATIVE_INDEX_DROPDOWN_OPTIONS}
+                onChange={setRelativeIndexKey}
+                title="Benchmark index"
+                ariaLabelPrefix="Index"
+                labelFallback={RELATIVE_INDEX_OPTIONS.find((o) => o.key === relativeIndexKey)?.label ?? ''}
+              />
+              <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onOpenRelativeStrengthPage}>
+                Open Relative Strength
+              </button>
+              {relativeCompareBusy ? <span className="ticker-page__loading-pill">Loading relative strength…</span> : null}
+            </div>
           </div>
           <TickerSection16Section17
             rows={section16Rows}
@@ -2281,7 +2284,7 @@ export default function TickerPage() {
 
             <div className="ticker-subh-with-tip">
               <h3 className="ticker-subh ticker-subh--flex">
-                vs {selectedTickerKey || relativeTickerSymbol} (total return %, then difference)
+              Relative Performance (%)
               </h3>
               <DataInfoTip align="start">
                 <p className="ticker-data-tip__p">
@@ -2302,8 +2305,8 @@ export default function TickerPage() {
             <div className="ticker-compare">
               <div className="ticker-compare__head">
                 <span />
-                <span>{selectedIndexLabel}</span>
                 <span>{selectedTickerKey || relativeTickerSymbol}</span>
+                <span>{selectedIndexLabel}</span>
                 <span>Diff</span>
               </div>
               {COMPARE_ROWS.map((row) => {
@@ -2328,8 +2331,8 @@ export default function TickerPage() {
                 return (
                   <div key={row.key} className="ticker-compare__row">
                     <span className="ticker-compare__tf">{row.key}</span>
-                    <span className={'ticker-compare__cell ' + pctClass(symPct)}>{formatPct(symPct)}</span>
                     <span className={'ticker-compare__cell ' + pctClass(spyPct)}>{formatPct(spyPct)}</span>
+                    <span className={'ticker-compare__cell ' + pctClass(symPct)}>{formatPct(symPct)}</span>
                     <span className={'ticker-compare__cell ' + pctClass(diff)}>{formatPct(diff)}</span>
                   </div>
                 );

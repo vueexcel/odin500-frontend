@@ -603,6 +603,20 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
     const lo = 1980;
     return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
   }, [isWeekly, monthlyReturnsRaw]);
+  const monthYearDropdownOptions = useMemo(
+    () =>
+      [...monthYearOptions]
+        .sort((a, b) => b - a)
+        .map((y) => ({ id: String(y), label: String(y) })),
+    [monthYearOptions]
+  );
+  const weekYearDropdownOptions = useMemo(
+    () =>
+      [...weekYearOptions]
+        .sort((a, b) => b - a)
+        .map((y) => ({ id: String(y), label: String(y) })),
+    [weekYearOptions]
+  );
 
   /** Avoid resetting user-defined weekly start/end when only raw rows refresh; reset when span or symbol changes. */
   const weekYearSpanKey = useMemo(() => {
@@ -709,7 +723,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
         size="sm"
         style={{ minWidth: 96 }}
         value={chartStartYear}
-        options={monthYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+        options={monthYearDropdownOptions}
         onChange={setChartStartYear}
         title="Start year"
         ariaLabelPrefix="Start year"
@@ -720,7 +734,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
         size="sm"
         style={{ minWidth: 96 }}
         value={chartEndYear}
-        options={monthYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+        options={monthYearDropdownOptions}
         onChange={setChartEndYear}
         title="End year"
         ariaLabelPrefix="End year"
@@ -735,7 +749,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
         size="sm"
         style={{ minWidth: 96 }}
         value={weeklyStartYear}
-        options={weekYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+        options={weekYearDropdownOptions}
         onChange={setWeeklyStartYear}
         title="Weekly start year"
         ariaLabelPrefix="Start year"
@@ -746,7 +760,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
         size="sm"
         style={{ minWidth: 96 }}
         value={weeklyEndYear}
-        options={weekYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+        options={weekYearDropdownOptions}
         onChange={setWeeklyEndYear}
         title="Weekly end year"
         ariaLabelPrefix="End year"
@@ -842,7 +856,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
       <header className="ticker-page__header ticker-page__header--figma">
         <div className="ticker-page__header-top">
           <div className="ticker-page__header-identity">
-            <h1 className="ticker-page__company ticker-page__company--hero">{symU} {modeLabel} Returns</h1>
+            <h1 className="ticker-page__company ticker-page__company--hero">{symU} {modeLabel} Statistics</h1>
           </div>
           <div className="ticker-page__header-controls">
             <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId={`ticker-${modeSlug}-symbol`} />
@@ -1016,7 +1030,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
                         size="sm"
                         style={{ minWidth: 86 }}
                         value={weeklyStartYear}
-                        options={weekYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+                        options={weekYearDropdownOptions}
                         onChange={setWeeklyStartYear}
                         title="Table start year"
                         ariaLabelPrefix="Start"
@@ -1029,7 +1043,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
                         size="sm"
                         style={{ minWidth: 86 }}
                         value={weeklyEndYear}
-                        options={weekYearOptions.map((y) => ({ id: String(y), label: String(y) }))}
+                        options={weekYearDropdownOptions}
                         onChange={setWeeklyEndYear}
                         title="Table end year"
                         ariaLabelPrefix="End"
@@ -1083,7 +1097,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
         </div>
 
         <aside className="ticker-page__aside">
-          <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h-m">
+          {/* <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h-m">
             <div className="ticker-signal-head">
               <span className="ticker-signal-logo" aria-hidden />
               <h2 className="ticker-card__h ticker-card__h--inline" id="odin-signal-h-m">Odin Signal</h2>
@@ -1095,7 +1109,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               ))}
             </div>
             <div className="ticker-signal-foot"><IconTrendUp className="ticker-signal-foot__ico" /><IconTrendDown className="ticker-signal-foot__ico" /></div>
-          </section>
+          </section> */}
 
           <section className="ticker-card" aria-labelledby="key-data-h-m">
             <div className="ticker-card__h-with-tip">
@@ -1133,7 +1147,7 @@ export default function TickerMonthlyPage({ periodMode = 'monthly' }) {
               </span>
             </p>
             
-            <div className="ticker-subh-with-tip"><h3 className="ticker-subh ticker-subh--flex">vs {benchmarkIndex} (total return %, then difference)</h3></div>
+            <div className="ticker-subh-with-tip"><p className="ticker-subh ticker-subh--flex">Relative Performance (%) </p></div>
             <div className="ticker-compare">
               <div className="ticker-compare__head"><span /><span>{symU}</span><span>{benchmarkIndex}</span><span>Diff</span></div>
               {COMPARE_ROWS.map((row) => {

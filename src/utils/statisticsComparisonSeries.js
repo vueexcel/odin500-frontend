@@ -3,6 +3,25 @@ function safeNum(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+function deriveReturnPct(row) {
+  const direct = safeNum(row?.totalReturn);
+  const start = safeNum(row?.startPrice ?? row?.startClose);
+  const end = safeNum(row?.endPrice ?? row?.endClose);
+  const computed =
+    start != null && end != null && start !== 0 ? ((end - start) / start) * 100 : null;
+  if (direct == null) return computed;
+  // Some payloads occasionally emit `totalReturn: 0` while start/end prices imply a move.
+  if (
+    direct === 0 &&
+    computed != null &&
+    Number.isFinite(computed) &&
+    Math.abs(computed) >= 0.01
+  ) {
+    return computed;
+  }
+  return direct;
+}
+
 function iso(s) {
   return String(s || '').slice(0, 10);
 }
@@ -23,7 +42,7 @@ export function normalizePeriodReturnsRows(rows, mode) {
   return rows
     .map((r) => {
       const period = String(r?.period || '').trim();
-      const ret = safeNum(r?.totalReturn);
+      const ret = deriveReturnPct(r);
       if (!period || ret == null) return null;
       const startDate = iso(r?.startDate);
       const endDate = iso(r?.endDate);

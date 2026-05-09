@@ -273,18 +273,7 @@ export function TickerSection23Section24({
           <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
         </div>
         <div className="ticker-s23s24__controls">
-          <ThemedDropdown
-            className="ticker-s23s24__select-dd"
-            style={{ width: '100%' }}
-            size="sm"
-            wideLabel
-            value={groupId}
-            options={GROUPS.map((g) => ({ id: g.id, label: g.label }))}
-            onChange={setGroupId}
-            title="Index group"
-            ariaLabelPrefix="Group"
-          />
-          <ThemedDropdown
+        <ThemedDropdown
             className="ticker-s23s24__select-dd"
             style={{ width: '100%' }}
             size="sm"
@@ -299,6 +288,17 @@ export function TickerSection23Section24({
             ariaLabelPrefix="Ticker"
             disabled={!groupRows.length}
             labelFallback="—"
+          />
+          <ThemedDropdown
+            className="ticker-s23s24__select-dd"
+            style={{ width: '100%' }}
+            size="sm"
+            wideLabel
+            value={groupId}
+            options={GROUPS.map((g) => ({ id: g.id, label: g.label }))}
+            onChange={setGroupId}
+            title="Index group"
+            ariaLabelPrefix="Group"
           />
         </div>
         <table className="ticker-s23__table">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { fetchJsonCached, fetchWithAuth, peekJsonCached } from '../store/apiStore.js';
+import { fetchJsonCached, fetchWithAuth, peekJsonCached, resolveTickerSymbols } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { WatchlistTickerMultiselect } from './WatchlistTickerMultiselect.jsx';
 
@@ -228,15 +228,29 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
   const [updateBusy, setUpdateBusy] = useState(false);
   const [updateErr, setUpdateErr] = useState('');
   const [deleteBusyId, setDeleteBusyId] = useState('');
+  const [quickAddBusyId, setQuickAddBusyId] = useState('');
+  const [updatePickErr, setUpdatePickErr] = useState('');
+  const [pendingAddSymbol, setPendingAddSymbol] = useState('');
 
   const closeManageUi = useCallback(() => {
     setManagePanel(null);
     setSettingsOpen(false);
     setCreateErr('');
     setUpdateErr('');
+    setUpdatePickErr('');
     setCreateBusy(false);
     setUpdateBusy(false);
+    setQuickAddBusyId('');
     setDeleteBusyId('');
+  }, []);
+
+  const primePendingAddSymbol = useCallback((raw) => {
+    const sym = String(raw || '').trim().toUpperCase();
+    if (!sym) return;
+    setPendingAddSymbol(sym);
+    setUpdatePickErr('');
+    setSettingsOpen(false);
+    setManagePanel('update-pick');
   }, []);
 
   useEffect(() => {
@@ -474,6 +488,48 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
     }
   };
 
+  const quickAddPendingTickerToWatchlist = useCallback(
+    async (opt) => {
+      if (!opt?.watchlistId) return;
+      const symbol = String(pendingAddSymbol || '').toUpperCase().trim();
+      if (!symbol) {
+        beginUpdateEdit(opt);
+        return;
+      }
+      setQuickAddBusyId(String(opt.watchlistId));
+      setUpdatePickErr('');
+      try {
+        const resolved = await resolveTickerSymbols([symbol]);
+        const hit = resolved.get(symbol);
+        if (!hit?.id) {
+          setUpdatePickErr(`Could not resolve ticker ${symbol}. Please try editing watchlist manually.`);
+          beginUpdateEdit(opt);
+          return;
+        }
+        const existingIds = opt.tickers.map((t) => String(t.tickerId || '')).filter(Boolean);
+        const ticker_ids = [...new Set([...existingIds, String(hit.id)])];
+        await apiJsonAuth('/api/watchlists/' + encodeURIComponent(opt.watchlistId), {
+          method: 'PATCH',
+          body: { name: String(opt.name || '').trim() || 'Untitled', ticker_ids }
+        });
+        setPendingAddSymbol('');
+        try {
+          sessionStorage.removeItem('watchlist_add_symbol');
+        } catch {
+          /* ignore */
+        }
+        closeManageUi();
+        await load({ forceMine: true });
+        setSelectedKey('usr:' + opt.watchlistId);
+      } catch (e) {
+        setUpdatePickErr(e?.message || 'Could not add ticker to watchlist');
+      } finally {
+        setQuickAddBusyId('');
+      }
+    },
+    [beginUpdateEdit, closeManageUi, load, pendingAddSymbol]
+  );
+
   useEffect(() => {
     if (!open) return;
     const ttlMs = 2 * 60 * 1000;
@@ -490,6 +546,25 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
     }
     void load();
   }, [open, load]);
+
+  useEffect(() => {
+    function onWatchlistAddTicker(e) {
+      const symbol = String(e?.detail?.symbol || '').trim().toUpperCase();
+      if (symbol) primePendingAddSymbol(symbol);
+    }
+    window.addEventListener('watchlist:add-ticker', onWatchlistAddTicker);
+    return () => window.removeEventListener('watchlist:add-ticker', onWatchlistAddTicker);
+  }, [primePendingAddSymbol]);
+
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const pending = sessionStorage.getItem('watchlist_add_symbol');
+      if (pending) primePendingAddSymbol(pending);
+    } catch {
+      /* ignore */
+    }
+  }, [open, primePendingAddSymbol]);
 
   useEffect(() => {
     if (open) return;
@@ -899,14 +974,24 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
                 <ul className="wl-manage-list wl-manage-list--pick">
                   {userWatchlists.map((o) => (
                     <li key={o.key}>
-                      <button type="button" className="wl-manage-pick-row" onClick={() => beginUpdateEdit(o)}>
+                      <button
+                        type="button"
+                        className="wl-manage-pick-row"
+                        onClick={() => (pendingAddSymbol ? quickAddPendingTickerToWatchlist(o) : beginUpdateEdit(o))}
+                        disabled={quickAddBusyId === String(o.watchlistId || '')}
+                      >
                         <span className="wl-manage-list__name">{o.name}</span>
-                        <span className="wl-manage-muted">{o.tickers.length} ticker(s)</span>
+                        <span className="wl-manage-muted">
+                          {quickAddBusyId === String(o.watchlistId || '')
+                            ? `Adding ${pendingAddSymbol}…`
+                            : `${o.tickers.length} ticker(s)`}
+                        </span>
                       </button>
                     </li>
                   ))}
                 </ul>
               )}
+              {updatePickErr ? <p className="wl-manage-err">{updatePickErr}</p> : null}
             </div>
             <div className="wl-manage-modal__foot">
               <button type="button" className="wl-manage-btn wl-manage-btn--ghost" onClick={closeManageUi}>

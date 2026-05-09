@@ -201,7 +201,7 @@ function csvEscape(s) {
 
 /**
  * Figma-style annual returns + stats (uses `performance.annualReturns` from ticker-returns API).
- * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, resizeStorageKey?: string, resizeDefaultHeight?: number, periodMode?: 'annual' | 'quarterly' | 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, toolbarControls?: import('react').ReactNode, hideStatsSection?: boolean, enableInlineYearDropdowns?: boolean, loading?: boolean }} props
+ * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, resizeStorageKey?: string, resizeDefaultHeight?: number, periodMode?: 'annual' | 'quarterly' | 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, toolbarControls?: import('react').ReactNode, hideStatsSection?: boolean, enableInlineYearDropdowns?: boolean, defaultStartYear?: number, defaultEndYear?: number, loading?: boolean }} props
  */
 export function TickerAnnualReturnsFigma({
   symbol,
@@ -216,6 +216,8 @@ export function TickerAnnualReturnsFigma({
   toolbarControls = null,
   hideStatsSection = false,
   enableInlineYearDropdowns = false,
+  defaultStartYear,
+  defaultEndYear,
   loading = false
 }) {
   const navigate = useNavigate();
@@ -354,11 +356,15 @@ export function TickerAnnualReturnsFigma({
       setChartEndYear('');
       return;
     }
-    const minY = String(yearOptions[0]);
-    const maxY = String(yearOptions[yearOptions.length - 1]);
-    setChartStartYear((prev) => (yearOptions.some((y) => String(y) === prev) ? prev : minY));
-    setChartEndYear((prev) => (yearOptions.some((y) => String(y) === prev) ? prev : maxY));
-  }, [yearOptions]);
+    const minY = yearOptions[0];
+    const maxY = yearOptions[yearOptions.length - 1];
+    const defaultStart = Number(defaultStartYear);
+    const defaultEnd = Number(defaultEndYear);
+    const startFallback = Number.isFinite(defaultStart) && yearOptions.includes(defaultStart) ? defaultStart : minY;
+    const endFallback = Number.isFinite(defaultEnd) && yearOptions.includes(defaultEnd) ? defaultEnd : maxY;
+    setChartStartYear((prev) => (yearOptions.some((y) => String(y) === prev) ? prev : String(startFallback)));
+    setChartEndYear((prev) => (yearOptions.some((y) => String(y) === prev) ? prev : String(endFallback)));
+  }, [yearOptions, defaultStartYear, defaultEndYear]);
 
   const displayRows = useMemo(() => {
     if (!enableInlineYearDropdowns) return rows;
@@ -386,10 +392,17 @@ export function TickerAnnualReturnsFigma({
       med: median(rets)
     };
   }, [displayRows]);
+  const totalYearsInSelection = useMemo(() => {
+    const years = new Set(displayRows.map((r) => Number(r.year)).filter((y) => Number.isFinite(y)));
+    return years.size;
+  }, [displayRows]);
 
   const pn = useMemo(() => periodModeNouns(periodMode), [periodMode]);
   const dropdownYearOptions = useMemo(
-    () => yearOptions.map((y) => ({ id: String(y), label: String(y) })),
+    () =>
+      [...yearOptions]
+        .sort((a, b) => b - a)
+        .map((y) => ({ id: String(y), label: String(y) })),
     [yearOptions]
   );
 
@@ -1027,12 +1040,35 @@ export function TickerAnnualReturnsFigma({
 
       {!hideStatsSection ? (
         <div className="ticker-annual-figma__section">
-          <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--stack">
+          <div className="ticker-annual-figma__stats-head">
             <span className="ticker-annual-figma__badge">
-              {pn.statsLabel} stats — positive / negative, min max{' '}
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <g clip-path="url(#clip0_609_23954)">
+                <path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
+                </g>
+                <defs>
+                <clipPath id="clip0_609_23954">
+                <rect width="14" height="14" fill="white"/>
+                </clipPath>
+                </defs>
+              </svg>
+              <span className="ticker-annual-figma__badge-text">
+                {pn.statsLabel} stats — positive / negative, min max
+              </span>
               <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualStats} align="end" />
             </span>
+            <div className="ticker-annual-figma__stats-actions">
+              <button
+                type="button"
+                className="ticker-annual-figma__btn ticker-annual-figma__btn--primary"
+                onClick={() => setShowTable((v) => !v)}
+              >
+                <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
+              </button>
+            </div>
           </div>
+
           <div className="ticker-annual-figma__split">
             <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--donut">
               {donut}
@@ -1048,6 +1084,12 @@ export function TickerAnnualReturnsFigma({
               </div>
             </div>
             <div className="ticker-annual-figma__chart-card">{summaryBars}</div>
+          </div>
+          <div className="ticker-annual-figma__stats-total-years">
+            <span className="ticker-annual-figma__legend-item">
+              <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden />
+              Total years: {totalYearsInSelection}
+            </span>
           </div>
         </div>
       ) : null}

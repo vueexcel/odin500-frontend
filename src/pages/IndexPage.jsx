@@ -979,14 +979,8 @@ export default function IndexPage() {
   const annualReturnsRaw = returnsSym?.performance?.annualReturns;
   const quarterlyReturnsRaw = returnsSym?.performance?.quarterlyReturns;
   const monthlyReturnsRaw = returnsSym?.performance?.monthlyReturns;
-  const annualReturnsFiltered = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
-  const quarterlyReturnsCurrentRange = useMemo(() => {
-    const rows = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
-    return rows.filter((r) => {
-      const y = Number(String(r?.period || '').slice(0, 4));
-      return Number.isFinite(y) && y >= 2025 && y <= 2025;
-    });
-  }, [quarterlyReturnsRaw]);
+  const annualReturnsForChart = Array.isArray(annualReturnsRaw) ? annualReturnsRaw : [];
+  const quarterlyReturnsForChart = Array.isArray(quarterlyReturnsRaw) ? quarterlyReturnsRaw : [];
 
   const loadRelativeSeries = useCallback(
     async (option) => {
@@ -1720,21 +1714,26 @@ export default function IndexPage() {
 
           <TickerAnnualReturnsFigma
             symbol={displaySym}
-            annualReturns={annualReturnsFiltered}
+            annualReturns={annualReturnsForChart}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
             resizeDefaultHeight={260}
             enableInlineYearDropdowns
+            defaultStartYear={2017}
+            defaultEndYear={2026}
             loading={metaBusy}
             hideStatsSection
           />
           <TickerAnnualReturnsFigma
             symbol={displaySym}
-            annualReturns={quarterlyReturnsCurrentRange}
+            annualReturns={quarterlyReturnsForChart}
             asOfDate={asOfDate}
             resizeStorageKey={RESIZE_KEY_QUARTERLY_FIGMA}
             resizeDefaultHeight={260}
             periodMode="quarterly"
+            enableInlineYearDropdowns
+            defaultStartYear={2023}
+            defaultEndYear={2026}
             loading={metaBusy}
             hideStatsSection
           />
@@ -1743,6 +1742,8 @@ export default function IndexPage() {
             monthlyReturns={monthlyReturnsRaw}
             asOfDate={asOfDate}
             suppressChartDateFilter
+            useThemedYearDropdown
+            defaultToLatestYear
             loading={metaBusy}
           />
           <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>
@@ -1795,7 +1796,7 @@ export default function IndexPage() {
         </div>
 
         <aside className="ticker-page__aside">
-          <section className="ticker-card ticker-card--signal" aria-labelledby="index-odin-signal-h">
+          {/* <section className="ticker-card ticker-card--signal" aria-labelledby="index-odin-signal-h">
             <div className="ticker-signal-head">
               <span className="ticker-signal-logo" aria-hidden />
               <h2 className="ticker-card__h ticker-card__h--inline" id="index-odin-signal-h">
@@ -1832,24 +1833,24 @@ export default function IndexPage() {
             <div className="ticker-signal-foot">
               <Link to="/odin-signals" className="ticker-signal-foot__link">
                 Learn more about Odin Signals
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none">
-<g clip-path="url(#clip0_609_26680)">
-<path d="M4.71094 7.18266L11.2734 0.726562" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M11.2734 4.41609V0.726562H7.52344" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M6.05859 3.07031H1.13672C1.02794 3.07031 0.923614 3.11353 0.846694 3.19044C0.769775 3.26736 0.726562 3.37169 0.726562 3.48047V10.8633C0.726563 10.9721 0.769775 11.0764 0.846694 11.1533C0.923614 11.2302 1.02794 11.2734 1.13672 11.2734H8.51953C8.62831 11.2734 8.73264 11.2302 8.80956 11.1533C8.88647 11.0764 8.92969 10.9721 8.92969 10.8633V5.94141" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
-<defs>
-<clipPath id="clip0_609_26680">
-<rect width="12" height="12" fill="white"/>
-</clipPath>
-</defs>
-</svg>
+                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                   <g clip-path="url(#clip0_609_26680)">
+                   <path d="M4.71094 7.18266L11.2734 0.726562" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+                   <path d="M11.2734 4.41609V0.726562H7.52344" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+                   <path d="M6.05859 3.07031H1.13672C1.02794 3.07031 0.923614 3.11353 0.846694 3.19044C0.769775 3.26736 0.726562 3.37169 0.726562 3.48047V10.8633C0.726563 10.9721 0.769775 11.0764 0.846694 11.1533C0.923614 11.2302 1.02794 11.2734 1.13672 11.2734H8.51953C8.62831 11.2734 8.73264 11.2302 8.80956 11.1533C8.88647 11.0764 8.92969 10.9721 8.92969 10.8633V5.94141" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+                   </g>
+                   <defs>
+                   <clipPath id="clip0_609_26680">
+                   <rect width="12" height="12" fill="white"/>
+                   </clipPath>
+                   </defs>
+                 </svg>
               </Link>
             </div>
-          </section>
+          </section> */}
 
           <section className="ticker-card" aria-labelledby="index-key-data-h">
-            <div className="ticker-card__h-with-tip">
+            {/* <div className="ticker-card__h-with-tip">
               <h2 className="ticker-card__h ticker-card__h--flex" id="index-key-data-h">
                 Key data &amp; performance
               </h2>
@@ -1897,8 +1898,56 @@ export default function IndexPage() {
                   <dd>—</dd>
                 </div>
               </dl>
+            </div> */}
+            <div className="ticker-subh-with-tip">
+              <h3 className="ticker-subh ticker-subh--flex">{activeMeta.label} Constituents</h3>
+              <DataInfoTip align="start">
+                <p className="ticker-data-tip__p">
+                  Source: <code className="ticker-data-tip__code">POST /api/market/ticker-details</code> with period{' '}
+                  <code className="ticker-data-tip__code">last-date</code>. Return % is 1D.
+                </p>
+              </DataInfoTip>
             </div>
-            <p className="ticker-page__label ticker-kd-comp-label">Other indices</p>
+            <div className="index-constituents-card">
+              <div className="index-constituents-table-wrap">
+                <table className="index-constituents-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Close</th>
+                      <th>Return %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {indexTickersPageRows.map((row) => (
+                      <tr key={row.symbol}>
+                        <td>
+                          <button
+                            type="button"
+                            className="index-constituents-link"
+                            onClick={() => navigate(`/ticker/${encodeURIComponent(row.symbol)}?ticker=${encodeURIComponent(row.symbol)}`)}
+                          >
+                            {row.symbol}
+                          </button>
+                        </td>
+                        <td>{formatPx(row.close)}</td>
+                        <td className={pctClass(row.ret1d)}>{formatPct(row.ret1d)}</td>
+                      </tr>
+                    ))}
+                    {!indexTickersBusy && !indexTickersPageRows.length ? (
+                      <tr>
+                        <td colSpan={3} className="index-constituents-empty">No constituents found.</td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+                {indexTickersBusy ? <p className="ticker-page__news-sample-note">Loading constituents…</p> : null}
+              </div>
+              {indexTickersTotalPages > 1 ? (
+                <FigmaPagination page={indexTickersPageSafe} totalPages={indexTickersTotalPages} onPageChange={setIndexTickersPage} />
+              ) : null}
+            </div>
+            <p className="ticker-page__label ticker-kd-comp-label custom-margin" style={{ marginTop: 10 }}>Other indices</p>
             <p className="ticker-kd-comp">
               {relatedIndexLinks.length ? (
                 relatedIndexLinks.map((x) => (
@@ -1915,7 +1964,7 @@ export default function IndexPage() {
 
             <div className="ticker-subh-with-tip">
               <h3 className="ticker-subh ticker-subh--flex">
-                vs {BENCHMARK} (total return %, then difference)
+              Relative Performance (%)
               </h3>
               <DataInfoTip align="start">
                 <p className="ticker-data-tip__p">

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
@@ -145,6 +146,9 @@ function NewsList({ title, subtitle, busy, error, items }) {
 }
 
 export default function NewsPage() {
+  const [searchParams] = useSearchParams();
+  const tickerFromQuery = searchParams.get('ticker');
+
   usePageSeo({
     title: 'Market News, Index News, and Ticker News | Odin500',
     description:
@@ -166,6 +170,11 @@ export default function NewsPage() {
   const [tickerBusy, setTickerBusy] = useState(false);
   const [tickerError, setTickerError] = useState('');
   const [tickerItems, setTickerItems] = useState([]);
+
+  useEffect(() => {
+    const s = sanitizeTickerPageInput(tickerFromQuery);
+    if (s) setTicker(s);
+  }, [tickerFromQuery]);
 
   useEffect(() => {
     let cancelled = false;

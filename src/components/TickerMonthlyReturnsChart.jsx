@@ -96,7 +96,7 @@ function yForValue(v, innerTop, innerH, yMin, yMax) {
 
 /**
  * Monthly returns for one calendar year (Figma-style), with year dropdown + info tip.
- * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, useThemedYearDropdown?: boolean, hideChartDateApplyRow?: boolean, loading?: boolean }} props
+ * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, useThemedYearDropdown?: boolean, defaultToLatestYear?: boolean, hideChartDateApplyRow?: boolean, loading?: boolean }} props
  */
 export function TickerMonthlyReturnsChart({
   symbol,
@@ -106,7 +106,8 @@ export function TickerMonthlyReturnsChart({
   periodMode = 'monthly',
   suppressChartDateFilter = false,
   showOpenPeriodPageButton = false,
-  useThemedYearDropdown: _useThemedYearDropdown = false,
+  useThemedYearDropdown = false,
+  defaultToLatestYear = false,
   hideChartDateApplyRow = false,
   loading = false
 }) {
@@ -158,8 +159,12 @@ export function TickerMonthlyReturnsChart({
   useEffect(() => {
     if (!availableYears.length) return;
     if (availableYears.includes(selectedYear)) return;
+    if (defaultToLatestYear) {
+      setSelectedYear(availableYears[0]);
+      return;
+    }
     setSelectedYear(availableYears.includes(DEFAULT_YEAR) ? DEFAULT_YEAR : availableYears[0]);
-  }, [availableYears, selectedYear]);
+  }, [availableYears, selectedYear, defaultToLatestYear]);
 
   const monthValues = useMemo(() => {
     const size = periodMode === 'weekly' ? 53 : periodMode === 'daily' ? 31 : 12;
@@ -398,7 +403,7 @@ export function TickerMonthlyReturnsChart({
   }, [navigate, periodMode, symbol]);
 
   const yearToolbarDropdown =
-    !suppressChartDateFilter ? (
+    !suppressChartDateFilter || useThemedYearDropdown ? (
       <div className="ticker-monthly__select-wrap ticker-monthly__select-wrap--toolbar">
         <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-year-toolbar">
           Year

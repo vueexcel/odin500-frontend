@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createChart } from 'lightweight-charts';
+import { useSearchParams } from 'react-router-dom';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
+import { AnnualReturnBarChart } from '../components/AnnualReturnBarChart.jsx';
+import { ExcessReturnLineChart } from '../components/ExcessReturnLineChart.jsx';
+import { PeriodicReturnBarChart } from '../components/PeriodicReturnBarChart.jsx';
 import { fetchWithAuth, getAuthToken } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 import { useTickerList } from '../hooks/useTickerList.js';
+import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 import { LightweightChartAreaSkeleton } from '../components/ChartSkeletons.jsx';
 
 const INDEX_OPTIONS = ['SPY', 'QQQ', 'DIA', 'IWM'];
@@ -128,6 +133,8 @@ function fmtDate(iso) {
 }
 
 export default function RelativeStrengthTickerPage() {
+  const [searchParams] = useSearchParams();
+  const tickerFromQuery = sanitizeTickerPageInput(searchParams.get('ticker') || searchParams.get('symbol') || '');
   const tickerOptions = useTickerList();
   const docTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const isLight = docTheme === 'light';
@@ -137,7 +144,7 @@ export default function RelativeStrengthTickerPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [indexSymbol, setIndexSymbol] = useState('SPY');
-  const [tickerSymbol, setTickerSymbol] = useState('AAPL');
+  const [tickerSymbol, setTickerSymbol] = useState(tickerFromQuery || 'AAPL');
   const [mode, setMode] = useState('daily');
   const [seriesData, setSeriesData] = useState({});
   const [dailyStart, setDailyStart] = useState(() => {
@@ -166,6 +173,10 @@ export default function RelativeStrengthTickerPage() {
       setTickerSymbol(tickerDropdownOptions[0]?.id || 'AAPL');
     }
   }, [tickerDropdownOptions, tickerSymbol]);
+
+  useEffect(() => {
+    if (tickerFromQuery) setTickerSymbol(tickerFromQuery);
+  }, [tickerFromQuery]);
 
   const requestedSymbols = useMemo(() => {
     const out = [tickerSymbol, indexSymbol, 'QQQ', 'DIA'].map((s) => String(s || '').toUpperCase()).filter(Boolean);
@@ -260,6 +271,32 @@ export default function RelativeStrengthTickerPage() {
     }
     return Array.from(mapByIso.values()).sort((a, b) => String(b.period).localeCompare(String(a.period)));
   }, [seriesData, mode, compareSymbols]);
+  const comparisonRows = useMemo(() => {
+    const tickerPoints = makeTableSeries(seriesData[tickerSymbol] || [], mode);
+    const benchPoints = makeTableSeries(seriesData[indexSymbol] || [], mode);
+    if (!tickerPoints.length || !benchPoints.length) return [];
+    const byPeriodBench = new Map(benchPoints.map((r) => [String(r.period), r]));
+    const out = [];
+    for (const tRow of tickerPoints) {
+      const bRow = byPeriodBench.get(String(tRow.period));
+      if (!bRow) continue;
+      const tickerReturn = Number(tRow.cumulative);
+      const benchmarkReturn = Number(bRow.cumulative);
+      if (!Number.isFinite(tickerReturn) || !Number.isFinite(benchmarkReturn)) continue;
+      out.push({
+        period: String(tRow.period),
+        tickerReturn,
+        benchmarkReturn,
+        excessReturn: tickerReturn - benchmarkReturn
+      });
+    }
+    return out;
+  }, [seriesData, tickerSymbol, indexSymbol, mode]);
+  const modeForCmp = mode === 'annually' ? 'annual' : mode;
+  const benchmarkDropdownOptions = useMemo(
+    () => INDEX_OPTIONS.map((v) => ({ id: v, label: v })),
+    []
+  );
 
   useEffect(() => {
     const host = chartHostRef.current;
@@ -418,6 +455,38 @@ export default function RelativeStrengthTickerPage() {
             </span>
           ))}
         </div>
+      </div>
+      <div className="stats-cmp-charts">
+        <AnnualReturnBarChart
+          mode={modeForCmp}
+          ticker={tickerSymbol}
+          benchmarkIndex={indexSymbol}
+          theme={docTheme}
+          rows={comparisonRows}
+          benchmarkOptions={benchmarkDropdownOptions}
+          onBenchmarkChange={setIndexSymbol}
+          loading={loading}
+        />
+        <ExcessReturnLineChart
+          mode={modeForCmp}
+          ticker={tickerSymbol}
+          benchmarkIndex={indexSymbol}
+          theme={docTheme}
+          rows={comparisonRows}
+          benchmarkOptions={benchmarkDropdownOptions}
+          onBenchmarkChange={setIndexSymbol}
+          loading={loading}
+        />
+        <PeriodicReturnBarChart
+          mode={modeForCmp}
+          ticker={tickerSymbol}
+          benchmarkIndex={indexSymbol}
+          theme={docTheme}
+          rows={comparisonRows}
+          benchmarkOptions={benchmarkDropdownOptions}
+          onBenchmarkChange={setIndexSymbol}
+          loading={loading}
+        />
       </div>
 
       {/* <div className="relative-strength-page__table-card">

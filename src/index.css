@@ -3357,6 +3357,14 @@ a.app-right-rail__btn {
   color: #f8fafc;
 }
 
+.mkt-mini-card__row .is-up {
+  color: #4ade80;
+}
+
+.mkt-mini-card__row .is-down {
+  color: #f87171;
+}
+
 .mkt-mini-card__name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6971,7 +6979,7 @@ button:disabled {
 .ticker-page {
   --ticker-bg:linear-gradient(90deg, #061628 0%, #0B243F 50%, #061628 100%);
   --ticker-panel: #121212;
-  --ticker-border: #2a2a2a;
+  --ticker-border: #FFFFFF2E;
   --ticker-muted: #ffffff;
   --ticker-text: #f9fafb;
   --ticker-green: #00c805;
@@ -8070,7 +8078,8 @@ button:disabled {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
-  padding-top: 4px;
+  /* padding-top: 4px; */
+  margin-right: 10px;
 }
 
 .new-one {
@@ -8245,6 +8254,7 @@ button:disabled {
   font-weight: 700;
 }
 
+
 .ticker-subh-with-tip {
   display: flex;
   align-items: center;
@@ -8260,11 +8270,18 @@ button:disabled {
   margin: 0;
   padding: 0;
   border: none;
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--ticker-muted);
+  color: var(--ticker-text);
+}
+
+.ticker-subh-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .ticker-rs-controls {
@@ -8275,6 +8292,12 @@ button:disabled {
   align-items: center;
 }
 
+.ticker-rs-controls--inline {
+  margin-bottom: 0;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
 .ticker-rs-controls__select {
   min-width: 220px;
 }
@@ -8282,6 +8305,11 @@ button:disabled {
 .ticker-rs-controls .app-dropdown {
   flex: 1 1 220px;
   min-width: 220px;
+}
+
+.ticker-rs-controls--inline .app-dropdown {
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .ticker-lw-chart {
@@ -8628,6 +8656,13 @@ button:disabled {
   font-weight: 600;
 }
 
+.ticker-card--news .statistic-data__pager-figma {
+  margin: 10px auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 /* Annual returns + stats — dark panels aligned with main Lightweight chart */
 .ticker-annual-figma {
   /* margin-top: 4px; */
@@ -8661,7 +8696,7 @@ button:disabled {
 
 .ticker-annual-figma__toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: wrap; 
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -8693,7 +8728,10 @@ button:disabled {
 }
 
 .ticker-annual-figma__badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
   padding: 6px 6px;
   border-radius: 8px;
   /* background: rgba(148, 163, 184, 0.12); */
@@ -8701,6 +8739,29 @@ button:disabled {
   font-size: 14px;
   font-weight: 400;
   letter-spacing: 0.02em;
+}
+
+.ticker-annual-figma__badge svg {
+  flex: 0 0 auto;
+}
+
+.ticker-annual-figma__stats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.ticker-annual-figma__stats-actions {
+  margin-left: auto;
+}
+
+.ticker-annual-figma__stats-total-years {
+  margin-top: 8px;
+  display: flex;
+  justify-content: center;
 }
 
 .ticker-annual-figma__actions {
@@ -8714,6 +8775,7 @@ button:disabled {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  margin-right: 10px;
 }
 
 .ticker-annual-figma__range-label {
@@ -9382,6 +9444,15 @@ button:disabled {
   color: var(--ticker-muted);
 }
 
+.ticker-annual-donut__panel-total {
+  margin-top: 6px;
+  margin-bottom: 2px;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--ticker-muted);
+  font-weight: 700;
+}
+
 .ticker-annual-donut__legend-item {
   display: inline-flex;
   align-items: center;
@@ -9532,6 +9603,7 @@ button:disabled {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  margin-right: 10px;
 }
 
 .ticker-monthly__select-label {
@@ -9577,7 +9649,7 @@ button:disabled {
   padding: 0 12px;
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(15, 23, 42, 0.75);
+  /* background: rgba(15, 23, 42, 0.75); */
   color: #e2e8f0;
   font-size: 0.8rem;
   font-weight: 700;
@@ -9601,8 +9673,8 @@ button:disabled {
 }
 
 .ticker-annual__year-dd .app-dropdown__btn {
-  min-height: 30px;
-  height: 30px;
+  min-height: 40px;
+  height: 40px;
   margin-bottom: 0;
   display: flex;
   justify-content: space-between;
@@ -11315,6 +11387,14 @@ button:disabled {
 
 [data-theme="light"] .mkt-mini-card__row {
   border-top-color: #e2e8f0;
+}
+
+[data-theme="light"] .mkt-mini-card__row .is-up {
+  color: #15803d;
+}
+
+[data-theme="light"] .mkt-mini-card__row .is-down {
+  color: #b91c1c;
 }
 
 [data-theme="light"] .mkt-watch-card__row {

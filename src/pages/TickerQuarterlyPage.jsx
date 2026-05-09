@@ -22,7 +22,7 @@ const RESIZE_KEY_QTR_FIGMA = 'odin_ticker_quarterly_resize_figma';
 const RESIZE_KEY_QTR_POSNEG = 'odin_ticker_quarterly_resize_posneg';
 const RESIZE_KEY_QTR_MAIN = 'odin_ticker_quarterly_resize_main';
 const RETURNS_DEFAULT_START = '1980-01-01';
-const DEFAULT_START_YEAR = 2021;
+const DEFAULT_START_YEAR = 2023;
 const DEFAULT_END_YEAR = 2026;
 const BENCHMARK = 'SPY';
 const BENCHMARK_OPTIONS = ['SPY', 'QQQ', 'DIA'].map((v) => ({ id: v, label: v }));
@@ -528,13 +528,16 @@ export default function TickerQuarterlyPage() {
   }, [quarterYearOptions]);
 
   const quarterYearDropdownOptions = useMemo(
-    () => quarterYearOptions.map((y) => ({ id: String(y), label: String(y) })),
+    () =>
+      [...quarterYearOptions]
+        .sort((a, b) => b - a)
+        .map((y) => ({ id: String(y), label: String(y) })),
     [quarterYearOptions]
   );
 
   const chartRangeControls = (
     <div className="ticker-page__custom-range" aria-label="Quarterly chart year range">
-      <span className="ticker-page__label ticker-page__label--inline">Start year</span>
+      <span className="ticker-page__label ticker-page__label--inline">Start</span>
       <ThemedDropdown
         size="sm"
         style={{ minWidth: 96 }}
@@ -545,7 +548,7 @@ export default function TickerQuarterlyPage() {
         ariaLabelPrefix="Start year"
         labelFallback={chartStartYear}
       />
-      <span className="ticker-page__label ticker-page__label--inline">End year</span>
+      <span className="ticker-page__label ticker-page__label--inline">End</span>
       <ThemedDropdown
         size="sm"
         style={{ minWidth: 96 }}
@@ -614,7 +617,7 @@ export default function TickerQuarterlyPage() {
       <header className="ticker-page__header ticker-page__header--figma">
         <div className="ticker-page__header-top">
           <div className="ticker-page__header-identity">
-            <h1 className="ticker-page__company ticker-page__company--hero">{symU} Quarterly Returns</h1>
+            <h1 className="ticker-page__company ticker-page__company--hero">{symU} Quarterly Statistics</h1>
           </div>
           <div className="ticker-page__header-controls">
             <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId="ticker-quarterly-symbol" />
@@ -701,7 +704,7 @@ export default function TickerQuarterlyPage() {
               <h2 className="statistic-data__table-title">Quarterly Returns</h2>
               <div className="statistic-data__head-actions">
                 <div className="ticker-page__custom-range" aria-label="Quarterly table year range">
-                  <span className="ticker-page__label ticker-page__label--inline">Start year</span>
+                  <span className="ticker-page__label ticker-page__label--inline">Start</span>
                   <ThemedDropdown
                     size="sm"
                     style={{ minWidth: 96 }}
@@ -712,7 +715,7 @@ export default function TickerQuarterlyPage() {
                     ariaLabelPrefix="Start year"
                     labelFallback={tableStartYear}
                   />
-                  <span className="ticker-page__label ticker-page__label--inline">End year</span>
+                  <span className="ticker-page__label ticker-page__label--inline">End</span>
                   <ThemedDropdown
                     size="sm"
                     style={{ minWidth: 96 }}
@@ -731,10 +734,10 @@ export default function TickerQuarterlyPage() {
                 <thead>
                   <tr>
                     <th>Period</th>
-                    <th>Start</th>
-                    <th>End</th>
-                    <th>Start Close</th>
-                    <th>End Close</th>
+                    {/* <th>Start</th>
+                    <th>End</th> */}
+                    <th>Start Price</th>
+                    <th>End Price</th>
                     <th>Return</th>
                   </tr>
                 </thead>
@@ -743,8 +746,8 @@ export default function TickerQuarterlyPage() {
                     tablePageRows.map((row) => (
                       <tr key={`quarterly-table-${row.period}`}>
                         <td>{row.period}</td>
-                        <td>{row.startDate || '—'}</td>
-                        <td>{row.endDate || '—'}</td>
+                        {/* <td>{row.startDate || '—'}</td>
+                        <td>{row.endDate || '—'}</td> */}
                         <td>{Number.isFinite(Number(row.startClose)) ? Number(row.startClose).toFixed(2) : '—'}</td>
                         <td>{Number.isFinite(Number(row.endClose)) ? Number(row.endClose).toFixed(2) : '—'}</td>
                         <td className={pctTone(row.returnPct)}>{fmtPct(row.returnPct)}</td>
@@ -771,7 +774,7 @@ export default function TickerQuarterlyPage() {
           </section>
         </div>
         <aside className="ticker-page__aside">
-          <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h-q">
+          {/* <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h-q">
             <div className="ticker-signal-head">
               <span className="ticker-signal-logo" aria-hidden />
               <h2 className="ticker-card__h ticker-card__h--inline" id="odin-signal-h-q">Odin Signal</h2>
@@ -786,7 +789,7 @@ export default function TickerQuarterlyPage() {
               <IconTrendUp className="ticker-signal-foot__ico" />
               <IconTrendDown className="ticker-signal-foot__ico" />
             </div>
-          </section>
+          </section> */}
           <section className="ticker-card" aria-labelledby="key-data-h-q">
             <div className="ticker-card__h-with-tip">
               <h2 className="ticker-card__h ticker-card__h--flex" id="key-data-h-q">Key data &amp; performance</h2>
@@ -825,7 +828,7 @@ export default function TickerQuarterlyPage() {
               </span>
             </p>
             
-            <div className="ticker-subh-with-tip"><h3 className="ticker-subh ticker-subh--flex">vs {benchmarkIndex} (total return %, then difference)</h3></div>
+            <div className="ticker-subh-with-tip"><p className="ticker-subh ticker-subh--flex">Relative Performance (%) </p></div>
             <div className="ticker-compare">
               <div className="ticker-compare__head"><span /><span>{symU}</span><span>{benchmarkIndex}</span><span>Diff</span></div>
               {COMPARE_ROWS.map((row) => {

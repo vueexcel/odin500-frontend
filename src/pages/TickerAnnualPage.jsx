@@ -20,7 +20,7 @@ import { alignComparisonRows, filterRowsByYearRange, normalizePeriodReturnsRows 
 
 const RESIZE_KEY_ANNUAL_FIGMA = 'odin_ticker_annual_only_resize_annual_figma';
 const RESIZE_KEY_ANNUAL_POSNEG = 'odin_ticker_annual_only_resize_annual_posneg';
-const RETURNS_DEFAULT_START = '2018-01-01';
+const RETURNS_DEFAULT_START = '2017-01-01';
 const RETURNS_DEFAULT_END = '2026-12-31';
 const BENCHMARK = 'SPY';
 const BENCHMARK_OPTIONS = ['SPY', 'QQQ', 'DIA'].map((v) => ({ id: v, label: v }));
@@ -352,9 +352,11 @@ export default function TickerAnnualPage() {
     [navigate]
   );
 
-  const applyReturnsRange = useCallback(() => {
-    let start = String(draftStartDate || '').slice(0, 10) || RETURNS_DEFAULT_START;
-    let end = String(draftEndDate || '').slice(0, 10) || RETURNS_DEFAULT_END;
+  const applyYearRange = useCallback((startYearRaw, endYearRaw) => {
+    const startYear = String(startYearRaw || '').slice(0, 4) || String(RETURNS_DEFAULT_START).slice(0, 4);
+    const endYear = String(endYearRaw || '').slice(0, 4) || String(RETURNS_DEFAULT_END).slice(0, 4);
+    let start = `${startYear}-01-01`;
+    let end = `${endYear}-12-31`;
     if (start > end) {
       const t = start;
       start = end;
@@ -363,7 +365,7 @@ export default function TickerAnnualPage() {
     setDraftStartDate(start);
     setDraftEndDate(end);
     setAppliedRange({ start, end });
-  }, [draftStartDate, draftEndDate, todayIso]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -600,34 +602,31 @@ export default function TickerAnnualPage() {
     return years.map((y) => String(y)).map((y) => ({ id: y, label: y }));
   }, [annualReturnsRaw]);
   const annualChartRangeControls = (
-    <div className="ticker-page__custom-range" aria-label="Annual chart year range">
-      <span className="ticker-page__label ticker-page__label--inline">Start year</span>
+    <div className="ticker-page__custom-range" aria-label="Annual chart year range" style={{ marginLeft: 'auto' }}>
+      <span className="ticker-page__label ticker-page__label--inline">Start</span>
       <ThemedDropdown
         className="ticker-annual__year-dd"
         size="sm"
         style={{ minWidth: 96 }}
         value={String(draftStartDate || '').slice(0, 4)}
         options={annualYearDropdownOptions}
-        onChange={(year) => setDraftStartDate(`${String(year).slice(0, 4)}-01-01`)}
+        onChange={(year) => applyYearRange(year, String(draftEndDate || '').slice(0, 4))}
         title="Start year"
         ariaLabelPrefix="Start year"
         labelFallback={String(draftStartDate || '').slice(0, 4)}
       />
-      <span className="ticker-page__label ticker-page__label--inline">End year</span>
+      <span className="ticker-page__label ticker-page__label--inline">End</span>
       <ThemedDropdown
         className="ticker-annual__year-dd"
         size="sm"
         style={{ minWidth: 96 }}
         value={String(draftEndDate || '').slice(0, 4)}
         options={annualYearDropdownOptions}
-        onChange={(year) => setDraftEndDate(`${String(year).slice(0, 4)}-12-31`)}
+        onChange={(year) => applyYearRange(String(draftStartDate || '').slice(0, 4), year)}
         title="End year"
         ariaLabelPrefix="End year"
         labelFallback={String(draftEndDate || '').slice(0, 4)}
       />
-      <button type="button" className="ticker-outline-btn ticker-outline-btn--sm" onClick={applyReturnsRange}>
-        Submit
-      </button>
     </div>
   );
   const annualTableRows = useMemo(() => {
@@ -683,7 +682,7 @@ export default function TickerAnnualPage() {
         <div className="ticker-page__header-top">
           <div className="ticker-page__header-identity">
             <h1 className="ticker-page__company ticker-page__company--hero">
-              {titleSymbol} Annual Returns
+              {titleSymbol} Annual Statistics
             </h1>
           </div>
           <div className="ticker-page__header-controls ticker-page__header-controls--annual">
@@ -799,7 +798,7 @@ export default function TickerAnnualPage() {
           </section>
         </div>
         <aside className="ticker-page__aside">
-          <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h">
+          {/* <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h">
             <div className="ticker-signal-head">
               <span className="ticker-signal-logo" aria-hidden />
               <h2 className="ticker-card__h ticker-card__h--inline" id="odin-signal-h">
@@ -830,7 +829,7 @@ export default function TickerAnnualPage() {
               <IconTrendUp className="ticker-signal-foot__ico" />
               <IconTrendDown className="ticker-signal-foot__ico" />
             </div>
-          </section>
+          </section> */}
 
           <section className="ticker-card" aria-labelledby="key-data-h">
             <div className="ticker-card__h-with-tip">
@@ -906,7 +905,7 @@ export default function TickerAnnualPage() {
             
 
             <div className="ticker-subh-with-tip">
-              <h3 className="ticker-subh ticker-subh--flex">vs {selectedTickerKey} (total return %, then difference)</h3>
+              <p className="ticker-subh ticker-subh--flex">Relative Performance (%) </p>
             </div>
             <div className="ticker-compare">
               <div className="ticker-compare__head">

@@ -233,6 +233,17 @@ export function TickerAnnualReturnsPosNeg({
     () => (rightMode === 'positive' ? buildCounts(filteredRows, 'pos') : buildCounts(filteredRows, 'neg')),
     [filteredRows, rightMode]
   );
+  const totalYears = useMemo(() => {
+    const ys = new Set(filteredRows.map((r) => Number(r.year)).filter((y) => Number.isFinite(y)));
+    return ys.size;
+  }, [filteredRows]);
+  const rightTotalCount = useMemo(
+    () =>
+      rightMode === 'positive'
+        ? filteredRows.filter((r) => Number(r.totalReturn) > 0).length
+        : filteredRows.filter((r) => Number(r.totalReturn) < 0).length,
+    [filteredRows, rightMode]
+  );
 
   const pn = useMemo(() => periodModeNouns(periodMode), [periodMode]);
   const panelTotalTitle = `${pn.title}, total`;
@@ -389,6 +400,9 @@ export function TickerAnnualReturnsPosNeg({
                   emptyPeriodLower={pn.lower}
                 />
               </div>
+              <div className="ticker-annual-donut__panel-total">
+                Total {pn.lower}: {totalYears}
+              </div>
               <div className="ticker-annual-donut__legend">
                 {buckets.map((b) => (
                   <span key={b.key} className="ticker-annual-donut__legend-item">
@@ -444,6 +458,9 @@ export function TickerAnnualReturnsPosNeg({
                   plotHeight={plotHeight}
                   emptyPeriodLower={pn.lower}
                 />
+              </div>
+              <div className="ticker-annual-donut__panel-total">
+                Total {rightMode === 'positive' ? 'positive' : 'negative'} {pn.lower}: {rightTotalCount}
               </div>
               <div className="ticker-annual-donut__legend">
                 {buckets.map((b) => (
