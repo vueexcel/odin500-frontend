@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { FigmaDataTable } from '../components/FigmaDataTable.jsx';
 import { FigmaPagination } from '../components/FigmaPagination.jsx';
@@ -61,6 +61,58 @@ function pctTone(v) {
   return 'statistic-data__ret statistic-data__ret--flat';
 }
 
+/** @param {'key' | 'endDate'} mode */
+function displayPeriodForRow(row, mode) {
+  if (mode === 'endDate' && row.periodEndIso) return formatIsoDate(row.periodEndIso);
+  return row.period;
+}
+
+function getReturnRowSortValue(row, headerKey) {
+  if (row.__skeleton) return null;
+  switch (headerKey) {
+    case 'period': {
+      if (row.periodEndIso) return String(row.periodEndIso);
+      const p = String(row.period ?? '');
+      const m = p.match(/Last\s+(\d+)\s+years/i);
+      if (m) return Number(m[1]);
+      return p;
+    }
+    case 'startClose':
+      return Number.isFinite(Number(row.startClose)) ? Number(row.startClose) : null;
+    case 'endClose':
+      if (Number.isFinite(Number(row.endClose))) return Number(row.endClose);
+      if (row.unavailableReason) return String(row.unavailableReason);
+      return null;
+    case 'returnPct':
+      return row.returnPct != null && Number.isFinite(Number(row.returnPct)) ? Number(row.returnPct) : null;
+    default:
+      return null;
+  }
+}
+
+function compareReturnRows(a, b, headerKey, dir) {
+  const mul = dir === 'asc' ? 1 : -1;
+  const va = getReturnRowSortValue(a, headerKey);
+  const vb = getReturnRowSortValue(b, headerKey);
+  if (va == null && vb == null) return 0;
+  if (va == null) return 1;
+  if (vb == null) return -1;
+  if (typeof va === 'number' && typeof vb === 'number') {
+    if (va !== vb) return va < vb ? -mul : mul;
+    return 0;
+  }
+  const sa = String(va);
+  const sb = String(vb);
+  const cmp = sa.localeCompare(sb, undefined, { numeric: true, sensitivity: 'base' });
+  if (cmp !== 0) return cmp * mul;
+  return 0;
+}
+
+function sortReturnTableRows(rows, headerKey, dir) {
+  if (!Array.isArray(rows) || !rows.length || !headerKey) return rows;
+  return [...rows].sort((a, b) => compareReturnRows(a, b, headerKey, dir));
+}
+
 function toMiddayDate(iso) {
   return new Date(`${String(iso).slice(0, 10)}T12:00:00`);
 }
@@ -90,7 +142,7 @@ function computeGroupedReturns(rows, keyForDate, maxRows) {
     const key = keyForDate(iso);
     if (!key) continue;
     if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push({ close });
+    buckets.get(key).push({ close, iso });
   }
   const out = [];
   for (const [key, values] of buckets.entries()) {
@@ -98,7 +150,14 @@ function computeGroupedReturns(rows, keyForDate, maxRows) {
     const first = values[0];
     const last = values[values.length - 1];
     const ret = first.close === 0 ? null : ((last.close - first.close) / first.close) * 100;
-    out.push({ period: key, returnPct: ret, startClose: first.close, endClose: last.close });
+    out.push({
+      period: key,
+      periodStartIso: first.iso,
+      periodEndIso: last.iso,
+      returnPct: ret,
+      startClose: first.close,
+      endClose: last.close
+    });
   }
   out.sort((a, b) => String(b.period).localeCompare(String(a.period)));
   return Number.isFinite(maxRows) ? out.slice(0, maxRows) : out;
@@ -224,13 +283,23 @@ function ReturnTable({
   sectionKey = '',
   sectionRef = null,
   highlighted = false,
-  loading = false
+  loading = false,
+  /** `endDate`: Period column shows last trading date in the bucket (e.g. quarter). */
+  periodDisplayMode = 'key'
 }) {
   const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey) return rows;
+    return sortReturnTableRows(rows, sortKey, sortDir);
+  }, [rows, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / TABLE_PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
   const startIdx = (pageSafe - 1) * TABLE_PAGE_SIZE;
-  const pageRows = rows.slice(startIdx, startIdx + TABLE_PAGE_SIZE);
+  const pageRows = sortedRows.slice(startIdx, startIdx + TABLE_PAGE_SIZE);
   const skeletonRows = useMemo(
     () => Array.from({ length: TABLE_PAGE_SIZE }, (_, i) => ({ __skeleton: true, __index: i })),
     []
@@ -238,17 +307,31 @@ function ReturnTable({
 
   useEffect(() => {
     setPage(1);
+    setSortKey(null);
+    setSortDir('asc');
   }, [title, rangeValue]);
+
+  const onSortHeader = useCallback((key) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        return prev;
+      }
+      setSortDir('asc');
+      return key;
+    });
+    setPage(1);
+  }, []);
 
   useEffect(() => {
     setPage((prev) => Math.min(Math.max(1, prev), totalPages));
   }, [totalPages]);
 
   const onDownloadCsv = () => {
-    if (!rows.length) return;
+    if (!sortedRows.length) return;
     const header = ['Period', 'Start Close', 'End Close', 'Return'];
-    const csvRows = rows.map((row) => [
-      `"${String(row.period ?? '').replace(/"/g, '""')}"`,
+    const csvRows = sortedRows.map((row) => [
+      `"${String(displayPeriodForRow(row, periodDisplayMode) ?? '').replace(/"/g, '""')}"`,
       row.startClose != null && Number.isFinite(Number(row.startClose)) ? Number(row.startClose).toFixed(4) : '',
       row.endClose != null && Number.isFinite(Number(row.endClose))
         ? Number(row.endClose).toFixed(4)
@@ -289,7 +372,7 @@ function ReturnTable({
               />
             </label>
           ) : null}
-          <button type="button" className="statistic-data__csv-btn" onClick={onDownloadCsv} disabled={!rows.length || loading}>
+          <button type="button" className="statistic-data__csv-btn" onClick={onDownloadCsv} disabled={!sortedRows.length || loading}>
             Download CSV
           </button>
         </div>
@@ -297,6 +380,9 @@ function ReturnTable({
       <FigmaDataTable
         headers={RETURN_TABLE_HEADERS}
         rows={loading ? skeletonRows : pageRows}
+        sortKey={loading ? null : sortKey}
+        sortDir={sortDir}
+        onSortHeader={loading ? undefined : onSortHeader}
         getRowKey={(row) => (row.__skeleton ? `${title}-skel-${row.__index}` : `${title}-${row.period}`)}
         getRowClassName={(row) => (row.__skeleton ? 'statistic-data__tr--skeleton' : '')}
         wrapClassName={'statistic-data__table-wrap' + (loading ? ' statistic-data__table-wrap--loading-skel' : '')}
@@ -317,7 +403,7 @@ function ReturnTable({
             }
             return <span className="statistic-data__skel-cell" style={{ maxWidth: '56%', animationDelay: `${i * 0.04 + 0.06}s` }} />;
           }
-          if (header.key === 'period') return row.period;
+          if (header.key === 'period') return displayPeriodForRow(row, periodDisplayMode);
           if (header.key === 'startClose') return Number.isFinite(row.startClose) ? row.startClose.toFixed(2) : '—';
           if (header.key === 'endClose') {
             return Number.isFinite(row.endClose) ? row.endClose.toFixed(2) : row.unavailableReason ? row.unavailableReason : '—';
@@ -338,7 +424,7 @@ function ReturnTable({
               ariaLabel="Table pagination"
             />
             <span className="statistic-data__pager-meta">
-              Page {pageSafe} of {totalPages} ({rows.length} rows)
+              Page {pageSafe} of {totalPages} ({sortedRows.length} rows)
             </span>
           </>
         ) : null
@@ -565,6 +651,7 @@ export default function StatisticDataPage() {
           sectionRef={weeklyRef}
           highlighted={activeSection === 'weekly'}
           loading={loading}
+          periodDisplayMode="endDate"
         />
         <ReturnTable
           title="Monthly Returns"
@@ -585,6 +672,7 @@ export default function StatisticDataPage() {
           sectionRef={quarterlyRef}
           highlighted={activeSection === 'quarterly'}
           loading={loading}
+          periodDisplayMode="endDate"
         />
         <ReturnTable
           title="Annual Returns"

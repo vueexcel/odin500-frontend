@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
+import html2canvas from 'html2canvas';
 import { createChart, PriceScaleMode } from 'lightweight-charts';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import TradingChartLoader from './TradingChartLoader.jsx';
 import { fetchWithAuth, getAuthToken } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
-import { META_BY_KEY, TICKER_BY_KEY } from './marketSeriesRegistry.js';
+import { DEFAULT_SELECTED_KEYS, META_BY_KEY, TICKER_BY_KEY } from './marketSeriesRegistry.js';
 import { TF_OPTIONS, tfRange, normalizeRows } from '../utils/marketCalculations.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 
@@ -62,6 +64,116 @@ function layoutBadgeTopsPx(keys, getRawY, containerHeight, minGap = 22, pad = 10
   return out;
 }
 
+const DEFAULT_NP_TIMEFRAME = '6M';
+
+/**
+ * html2canvas onclone: export-friendly layout + axis badge position fix.
+ * html2canvas walks the cloned DOM and paints to a canvas; it often mis-measures
+ * flex + bold text + tight line-heights, so glyphs look vertically clipped. We inject
+ * looser line-heights / padding only on the clone (live UI unchanged) and avoid
+ * translateY(-50%) by converting "center Y" to a top edge using measured height.
+ */
+function applyNpSnapshotCloneFixes(clonedDoc, clonedRoot) {
+  if (!(clonedRoot instanceof HTMLElement)) return;
+
+  const snapStyle = clonedDoc.createElement('style');
+  snapStyle.setAttribute('data-np-export-snapshot', '1');
+  snapStyle.textContent = `
+    .np-card__head { display: none !important; }
+    .np-card__chip-x { display: none !important; }
+    .np-card__chip {
+      overflow: visible !important;
+      min-height: 44px !important;
+    }
+    .np-card__chip-main {
+      flex: 0 1 auto !important;
+      min-height: 40px !important;
+      min-width: 0 !important;
+      max-height: none !important;
+      overflow: visible !important;
+      padding: 10px 12px 8px !important;
+      box-sizing: border-box !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: flex-start !important;
+    }
+    .np-card__chip-label {
+      flex: 0 1 auto !important;
+      min-width: 0 !important;
+      line-height: 1.5 !important;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      white-space: nowrap !important;
+      display: flex !important;
+      align-items: center !important;
+      padding: 2px 0 6px 0 !important;
+      -webkit-font-smoothing: antialiased !important;
+    }
+    .np-chart-axis-badge {
+      display: flex !important;
+      align-items: center !important;
+      line-height: 1.45 !important;
+      padding: 11px 12px 11px 15px !important;
+      box-sizing: border-box !important;
+      -webkit-font-smoothing: antialiased !important;
+    }
+    .np-chart-axis-badge__body {
+      display: flex !important;
+      align-items: center !important;
+      align-self: center !important;
+      line-height: 1.45 !important;
+      overflow: visible !important;
+      min-height: 1.45em !important;
+    }
+    .np-chart-axis-badge__sym,
+    .np-chart-axis-badge__val {
+      line-height: 1.45 !important;
+      padding: 3px 0 !important;
+    }
+  `;
+  clonedDoc.head.appendChild(snapStyle);
+
+  void clonedRoot.offsetHeight;
+
+  clonedRoot.querySelectorAll('.np-chart-axis-badge').forEach((node) => {
+    if (!(node instanceof HTMLElement)) return;
+    const op = clonedDoc.defaultView?.getComputedStyle(node).opacity ?? '1';
+    if (parseFloat(op) < 0.01) {
+      node.remove();
+      return;
+    }
+    const topStr = node.style.top;
+    const centerY = parseFloat(topStr);
+    if (Number.isFinite(centerY) && centerY > -9000) {
+      node.dataset.npCenterY = String(centerY);
+    }
+  });
+
+  const placeBadges = () => {
+    clonedRoot.querySelectorAll('.np-chart-axis-badge').forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      const centerStr = node.dataset.npCenterY;
+      const centerY = centerStr != null ? parseFloat(centerStr) : NaN;
+      if (!Number.isFinite(centerY)) return;
+      void node.offsetHeight;
+      const h = node.offsetHeight;
+      if (!(h > 0)) return;
+      node.style.setProperty('transform', 'none', 'important');
+      node.style.setProperty('top', `${Math.round(centerY - h / 2)}px`, 'important');
+    });
+  };
+
+  placeBadges();
+  void clonedRoot.offsetHeight;
+  placeBadges();
+}
+
+async function dataUrlToPngFile(dataUrl, filename) {
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  return new File([blob], filename, { type: 'image/png' });
+}
+
 export function NormalizedPerformanceCard({
   selectedKeys,
   onSelectedKeysChange,
@@ -71,13 +183,22 @@ export function NormalizedPerformanceCard({
   refreshMs = 0,
   loadSeriesRows = null
 }) {
-  const [tfLocal, setTfLocal] = useState('6M');
-  const [activeKeysLocal, setActiveKeysLocal] = useState(['INDU', 'SPX', 'NDX', 'XLK']);
+  const [tfLocal, setTfLocal] = useState(DEFAULT_NP_TIMEFRAME);
+  const [activeKeysLocal, setActiveKeysLocal] = useState(() => [...DEFAULT_SELECTED_KEYS]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [series, setSeries] = useState({});
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [exportingSnapshot, setExportingSnapshot] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportModalStatus, setExportModalStatus] = useState('idle');
+  const [exportPreviewUrl, setExportPreviewUrl] = useState(null);
+  const [exportFilename, setExportFilename] = useState('');
+  const [exportPageUrl, setExportPageUrl] = useState('');
+  const [exportModalError, setExportModalError] = useState('');
+  const [exportShareHint, setExportShareHint] = useState('');
   const cardRef = useRef(null);
+  const snapshotExportRef = useRef(null);
   const chartHostRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRefs = useRef(new Map());
@@ -367,6 +488,23 @@ export function NormalizedPerformanceCard({
     });
   }, [series, activeKeys, axisMode, loading, chartTheme, updateAxisBadgePositions]);
 
+  const handleResetView = useCallback(() => {
+    setActiveKeys([...DEFAULT_SELECTED_KEYS]);
+    setTf(DEFAULT_NP_TIMEFRAME);
+    const chart = chartRef.current;
+    if (chart) {
+      try {
+        chart.timeScale().fitContent();
+        chart.priceScale('right').applyOptions({ autoScale: true });
+      } catch {
+        /* ignore */
+      }
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => updateAxisBadgePositions());
+    });
+  }, [setActiveKeys, setTf, updateAxisBadgePositions]);
+
   const toggleFullscreen = useCallback(async () => {
     const el = cardRef.current;
     if (!el) return;
@@ -388,29 +526,213 @@ export function NormalizedPerformanceCard({
     }
   }, []);
 
-  const downloadSnapshot = useCallback(() => {
-    const chart = chartRef.current;
-    const host = chartHostRef.current;
-    if (!host) return;
-    let canvas = null;
-    if (chart && typeof chart.takeScreenshot === 'function') {
-      try {
-        canvas = chart.takeScreenshot();
-      } catch {
-        canvas = null;
-      }
-    }
-    if (!canvas) {
-      canvas = host.querySelector('canvas');
-    }
-    if (!canvas) return;
+  const closeExportModal = useCallback(() => {
+    setExportModalOpen(false);
+    setExportModalStatus('idle');
+    setExportPreviewUrl(null);
+    setExportFilename('');
+    setExportPageUrl('');
+    setExportModalError('');
+    setExportShareHint('');
+  }, []);
+
+  const downloadFromExportModal = useCallback(() => {
+    if (!exportPreviewUrl || !exportFilename) return;
     const link = document.createElement('a');
+    link.href = exportPreviewUrl;
+    link.download = exportFilename;
+    link.click();
+  }, [exportPreviewUrl, exportFilename]);
+
+  const openExportModal = useCallback(async () => {
+    const root = snapshotExportRef.current;
+    const host = chartHostRef.current;
+    const chart = chartRef.current;
+    if (!host || loading) return;
+
     const datePart = new Date().toISOString().slice(0, 10);
     const tfPart = String(tf || 'range').toLowerCase();
-    link.href = canvas.toDataURL('image/png');
-    link.download = `normalized-performance-${tfPart}-${datePart}.png`;
-    link.click();
-  }, [tf]);
+    const filename = `normalized-performance-${tfPart}-${datePart}.png`;
+    const pageUrl = typeof window !== 'undefined' ? window.location.href : '';
+
+    setExportModalOpen(true);
+    setExportModalStatus('capturing');
+    setExportPreviewUrl(null);
+    setExportFilename(filename);
+    setExportPageUrl(pageUrl);
+    setExportModalError('');
+    setExportShareHint('');
+
+    const fallbackCanvas = () => {
+      let canvas = null;
+      if (chart && typeof chart.takeScreenshot === 'function') {
+        try {
+          canvas = chart.takeScreenshot();
+        } catch {
+          canvas = null;
+        }
+      }
+      if (!canvas) canvas = host.querySelector('canvas');
+      return canvas;
+    };
+
+    setExportingSnapshot(true);
+    try {
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      });
+
+      let canvas = null;
+      if (root) {
+        const isLight = chartTheme === 'light';
+        let exportBg = getNpChartBgColor(isLight);
+        if (typeof window !== 'undefined' && root) {
+          const c = window.getComputedStyle(root).backgroundColor;
+          if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') exportBg = c;
+        }
+        /* scale 1 avoids subpixel text clipping html2canvas often shows at DPR 2+ */
+        const scale = 1;
+        try {
+          canvas = await html2canvas(root, {
+            backgroundColor: exportBg,
+            scale,
+            useCORS: true,
+            allowTaint: false,
+            logging: false,
+            foreignObjectRendering: false,
+            imageTimeout: 20000,
+            onclone: (clonedDoc, clonedRoot) => {
+              applyNpSnapshotCloneFixes(clonedDoc, clonedRoot);
+            }
+          });
+        } catch (e) {
+          console.warn('[NormalizedPerformanceCard] html2canvas export failed', e);
+          canvas = null;
+        }
+      }
+
+      if (!canvas || canvas.width < 8 || canvas.height < 8) {
+        canvas = fallbackCanvas();
+      }
+      if (!canvas || canvas.width < 8 || canvas.height < 8) {
+        setExportModalError('Could not capture the chart. Try again after the chart finishes loading.');
+        setExportModalStatus('error');
+        return;
+      }
+
+      setExportPreviewUrl(canvas.toDataURL('image/png'));
+      setExportModalStatus('ready');
+    } catch (e) {
+      console.warn('[NormalizedPerformanceCard] export capture failed', e);
+      setExportModalError(e?.message || 'Capture failed.');
+      setExportModalStatus('error');
+    } finally {
+      setExportingSnapshot(false);
+    }
+  }, [chartTheme, loading, tf]);
+
+  const exportShareText = useMemo(
+    () => `Normalized performance chart (${tf}) — Odin500`,
+    [tf]
+  );
+
+  const openShareUrl = useCallback((url) => {
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const shareTwitter = useCallback(() => {
+    const u = new URL('https://twitter.com/intent/tweet');
+    u.searchParams.set('text', exportShareText);
+    if (exportPageUrl) u.searchParams.set('url', exportPageUrl);
+    openShareUrl(u.toString());
+  }, [exportShareText, exportPageUrl, openShareUrl]);
+
+  const shareFacebook = useCallback(() => {
+    if (!exportPageUrl) return;
+    const u = new URL('https://www.facebook.com/sharer/sharer.php');
+    u.searchParams.set('u', exportPageUrl);
+    openShareUrl(u.toString());
+  }, [exportPageUrl, openShareUrl]);
+
+  const shareLinkedIn = useCallback(() => {
+    if (!exportPageUrl) return;
+    const u = new URL('https://www.linkedin.com/sharing/share-offsite/');
+    u.searchParams.set('url', exportPageUrl);
+    openShareUrl(u.toString());
+  }, [exportPageUrl, openShareUrl]);
+
+  const shareReddit = useCallback(() => {
+    if (!exportPageUrl) return;
+    const u = new URL('https://www.reddit.com/submit');
+    u.searchParams.set('url', exportPageUrl);
+    u.searchParams.set('title', exportShareText);
+    openShareUrl(u.toString());
+  }, [exportPageUrl, exportShareText, openShareUrl]);
+
+  const copyPageLink = useCallback(async () => {
+    if (!exportPageUrl) return;
+    try {
+      await navigator.clipboard.writeText(exportPageUrl);
+      setExportShareHint('Link copied to clipboard.');
+    } catch {
+      setExportShareHint('Could not copy link.');
+    }
+  }, [exportPageUrl]);
+
+  const copyChartImage = useCallback(async () => {
+    if (!exportPreviewUrl || !exportFilename) return;
+    try {
+      if (!navigator.clipboard?.write) {
+        setExportShareHint('Image copy is not supported in this browser.');
+        return;
+      }
+      const file = await dataUrlToPngFile(exportPreviewUrl, exportFilename);
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': file })]);
+      setExportShareHint('Image copied. Paste it into a message or document.');
+    } catch {
+      setExportShareHint('Could not copy image. Use Download instead.');
+    }
+  }, [exportPreviewUrl, exportFilename]);
+
+  const nativeShareImage = useCallback(async () => {
+    if (!exportPreviewUrl || !exportFilename) return;
+    try {
+      const file = await dataUrlToPngFile(exportPreviewUrl, exportFilename);
+      const shareData = { files: [file], title: 'Normalized performance', text: exportShareText };
+      if (!navigator.share) {
+        setExportShareHint('System share is not available in this browser.');
+        return;
+      }
+      if (typeof navigator.canShare === 'function' && !navigator.canShare(shareData)) {
+        setExportShareHint('Sharing this image is not supported here. Try Copy image or Download.');
+        return;
+      }
+      await navigator.share(shareData);
+      setExportShareHint('');
+    } catch (e) {
+      if (e && /** @type {{ name?: string }} */ (e).name === 'AbortError') return;
+      setExportShareHint('Share was cancelled or failed.');
+    }
+  }, [exportPreviewUrl, exportFilename, exportShareText]);
+
+  useEffect(() => {
+    if (!exportModalOpen) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') closeExportModal();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [exportModalOpen, closeExportModal]);
+
+  useEffect(() => {
+    if (!exportModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [exportModalOpen]);
 
   useEffect(() => {
     const onFsChange = () => {
@@ -429,15 +751,32 @@ export function NormalizedPerformanceCard({
     };
   }, []);
 
+  const assignCardRefs = useCallback((node) => {
+    cardRef.current = node;
+    snapshotExportRef.current = node;
+  }, []);
+
+  const showNativeShare =
+    typeof navigator !== 'undefined' &&
+    typeof navigator.share === 'function' &&
+    exportModalStatus === 'ready' &&
+    Boolean(exportPreviewUrl);
+
   return (
-    <section ref={cardRef} className="np-card" aria-label="Normalized performance">
+    <>
+      <section ref={assignCardRefs} className="np-card" aria-label="Normalized performance">
       <header className="np-card__head">
         <h2 className="np-card__title">
           Normalized Performance <ChartInfoTip tip={CHART_INFO_TIPS.normalizedPerformance} align="start" />
         </h2>
         <div className="np-card__head-actions">
-          <button type="button" className="np-card__linkbtn" onClick={downloadSnapshot} disabled={loading}>
-            Export
+          <button
+            type="button"
+            className="np-card__linkbtn"
+            onClick={openExportModal}
+            disabled={loading || exportingSnapshot}
+          >
+            {exportingSnapshot ? 'Exporting…' : 'Export'}
           </button>
           <button
             type="button"
@@ -451,86 +790,223 @@ export function NormalizedPerformanceCard({
       </header>
 
       <div className="np-card__tf-row">
-        {TF_OPTIONS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            className={'np-card__tf' + (tf === id ? ' np-card__tf--active' : '')}
-            onClick={() => setTf(id)}
-          >
-            {id}
-          </button>
-        ))}
-      </div>
-
-      <div className="np-card__chips">
-        {activeKeys.map((k) => {
-          const s = META_BY_KEY[k];
-          if (!s) return null;
-          return (
-          <div key={s.key} className="np-card__chip">
-            <span className="np-card__chip-bar" style={{ background: s.color }} />
-            {s.label}
+          {TF_OPTIONS.map((id) => (
             <button
+              key={id}
               type="button"
-              className="np-card__chip-x"
-              aria-label={`Remove ${s.label}`}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setActiveKeys((prev) => (prev.length <= 1 ? prev : prev.filter((x) => x !== s.key)));
-              }}
+              className={'np-card__tf' + (tf === id ? ' np-card__tf--active' : '')}
+              onClick={() => setTf(id)}
             >
-              ×
+              {id}
             </button>
-          </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
 
-      <div className="np-chart-wrap">
-        {error ? <div className="np-card__status np-card__status--error">{error}</div> : null}
-        {loading ? (
-          <div className="chart-viz-loading-wrap" style={{ minHeight: 390 }}>
-            <TradingChartLoader label="Loading chart…" sublabel="Normalized performance" />
-          </div>
-        ) : (
-          <div className="np-chart-stack">
-            <div
-              ref={chartHostRef}
-              className="np-chart np-chart--interactive"
-              role="img"
-              aria-label="Normalized performance chart. Drag to pan, wheel or pinch to zoom."
-            />
-            <div className="np-chart-axis-tags" aria-hidden="true">
-              {activeKeys.map((k) => {
-                const s = META_BY_KEY[k];
-                if (!s) return null;
-                const top = axisBadgeTops[k];
-                const bg = s.color;
-                const fg = textColorOnHex(bg);
-                return (
-                  <div
-                    key={s.key}
-                    className="np-chart-axis-badge"
-                    style={{
-                      top: top == null ? -9999 : top,
-                      opacity: top == null ? 0 : 1,
-                      background: bg,
-                      color: fg
-                    }}
-                  >
-                    <span className="np-chart-axis-badge__tick" style={{ borderRightColor: bg }} />
-                    <span className="np-chart-axis-badge__sym">{s.key}</span>
-                    <span className="np-chart-axis-badge__val">{fmtPct(last[s.key])}</span>
+        <div className="np-card__chips-row">
+          <div className="np-card__chips">
+            {activeKeys.map((k) => {
+              const s = META_BY_KEY[k];
+              if (!s) return null;
+              return (
+                <div key={s.key} className="np-card__chip">
+                  <div className="np-card__chip-main">
+                    <span className="np-card__chip-label">{s.label}</span>
+                    <button
+                      type="button"
+                      className="np-card__chip-x"
+                      aria-label={`Remove ${s.label}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setActiveKeys((prev) => (prev.length <= 1 ? prev : prev.filter((x) => x !== s.key)));
+                      }}
+                    >
+                      ×
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                  <span className="np-card__chip-bar" style={{ background: s.color }} aria-hidden />
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
+          <button
+            type="button"
+            className="np-card__reset"
+            onClick={handleResetView}
+            disabled={loading}
+            title="Restore default series, 6M range, and chart zoom"
+            aria-label="Reset chart to default series, timeframe, and zoom"
+          >
+            Reset
+          </button>
+        </div>
+
+        <div className="np-chart-wrap">
+          {error ? <div className="np-card__status np-card__status--error">{error}</div> : null}
+          {loading ? (
+            <div className="chart-viz-loading-wrap" style={{ minHeight: 390 }}>
+              <TradingChartLoader label="Loading chart…" sublabel="Normalized performance" />
+            </div>
+          ) : (
+            <div className="np-chart-stack">
+              <div
+                ref={chartHostRef}
+                className="np-chart np-chart--interactive"
+                role="img"
+                aria-label="Normalized performance chart. Drag to pan, wheel or pinch to zoom."
+              />
+              <div className="np-chart-axis-tags" aria-hidden="true">
+                {activeKeys.map((k) => {
+                  const s = META_BY_KEY[k];
+                  if (!s) return null;
+                  const top = axisBadgeTops[k];
+                  const bg = s.color;
+                  const fg = textColorOnHex(bg);
+                  return (
+                    <div
+                      key={s.key}
+                      className="np-chart-axis-badge"
+                      style={{
+                        top: top == null ? -9999 : top,
+                        opacity: top == null ? 0 : 1,
+                        background: bg,
+                        color: fg
+                      }}
+                    >
+                      <span className="np-chart-axis-badge__tick" style={{ borderRightColor: bg }} />
+                      <div className="np-chart-axis-badge__body">
+                        <span className="np-chart-axis-badge__sym">{s.key}</span>
+                        <span className="np-chart-axis-badge__val">{fmtPct(last[s.key])}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
     </section>
+
+      {exportModalOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="np-export-overlay"
+            role="presentation"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) closeExportModal();
+            }}
+          >
+            <div
+              className="np-export-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="np-export-modal-title"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="np-export-modal__head">
+                <h2 id="np-export-modal-title" className="np-export-modal__title">
+                  Export chart
+                </h2>
+                <button
+                  type="button"
+                  className="np-export-modal__close"
+                  onClick={closeExportModal}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="np-export-modal__body">
+                {exportModalStatus === 'capturing' ? (
+                  <div className="np-export-modal__status">Generating preview…</div>
+                ) : null}
+                {exportModalStatus === 'error' ? (
+                  <div className="np-export-modal__status np-export-modal__status--error" role="alert">
+                    {exportModalError || 'Something went wrong.'}
+                  </div>
+                ) : null}
+                {exportPreviewUrl ? (
+                  <div className="np-export-modal__preview-wrap">
+                    <img
+                      src={exportPreviewUrl}
+                      alt="Exported normalized performance chart"
+                      className="np-export-modal__preview"
+                    />
+                  </div>
+                ) : null}
+                {/* {exportModalStatus === 'ready' && exportPreviewUrl ? (
+                  <div className="np-export-modal__share">
+                    <p className="np-export-modal__share-label">Share</p>
+                    <p className="np-export-modal__share-note">
+                      Social buttons share this page link. Copy image to paste the screenshot elsewhere.
+                    </p>
+                    <div className="np-export-modal__share-grid">
+                      {showNativeShare ? (
+                        <button type="button" className="np-export-modal__share-btn" onClick={nativeShareImage}>
+                          Share…
+                        </button>
+                      ) : null}
+                      <button type="button" className="np-export-modal__share-btn" onClick={shareTwitter}>
+                        X
+                      </button>
+                      <button
+                        type="button"
+                        className="np-export-modal__share-btn"
+                        onClick={shareFacebook}
+                        disabled={!exportPageUrl}
+                      >
+                        Facebook
+                      </button>
+                      <button
+                        type="button"
+                        className="np-export-modal__share-btn"
+                        onClick={shareLinkedIn}
+                        disabled={!exportPageUrl}
+                      >
+                        LinkedIn
+                      </button>
+                      <button
+                        type="button"
+                        className="np-export-modal__share-btn"
+                        onClick={shareReddit}
+                        disabled={!exportPageUrl}
+                      >
+                        Reddit
+                      </button>
+                      <button type="button" className="np-export-modal__share-btn" onClick={copyPageLink}>
+                        Copy link
+                      </button>
+                      <button type="button" className="np-export-modal__share-btn" onClick={copyChartImage}>
+                        Copy image
+                      </button>
+                    </div>
+                    {exportShareHint ? (
+                      <p className="np-export-modal__share-hint" role="status">
+                        {exportShareHint}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null} */}
+              </div>
+              <div className="np-export-modal__foot">
+                <button type="button" className="np-export-modal__btn np-export-modal__btn--ghost" onClick={closeExportModal}>
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="np-export-modal__btn np-export-modal__btn--primary"
+                  onClick={downloadFromExportModal}
+                  disabled={!exportPreviewUrl}
+                >
+                  Download
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 

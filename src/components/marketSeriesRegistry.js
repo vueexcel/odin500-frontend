@@ -1,7 +1,8 @@
 export const MARKET_SERIES = [
-  { key: 'NDX', label: 'Nasdaq 100', ticker: 'QQQ', color: '#7a2fff', badge: '#5b21b6', tone: 'purple', group: 'us' },
-  { key: 'INDU', label: 'Dow Jones', ticker: 'DIA', color: '#ff6b00', badge: '#9a3412', tone: 'orange', group: 'us' },
-  { key: 'SPX', label: 'S&P 500', ticker: 'SPY', color: '#56208E', badge: '#1e40af', tone: 'blue', group: 'us' },
+  /** `symbol` = short label in UI (e.g. DJI); `ticker` = OHLC / API symbol (e.g. DIA). */
+  { key: 'NDX', label: 'Nasdaq 100', ticker: 'QQQ', symbol: 'NDX', color: '#7a2fff', badge: '#5b21b6', tone: 'purple', group: 'us' },
+  { key: 'INDU', label: 'Dow Jones', ticker: 'DIA', symbol: 'DJI', color: '#ff6b00', badge: '#9a3412', tone: 'orange', group: 'us' },
+  { key: 'SPX', label: 'S&P 500', ticker: 'SPY', symbol: 'SPX', color: '#56208E', badge: '#1e40af', tone: 'blue', group: 'us' },
 
   { key: 'XLB', label: 'Materials', ticker: 'XLB', color: '#6b7280', badge: '#374151', tone: 'gray', group: 'sector' },
   { key: 'XLK', label: 'Technology', ticker: 'XLK', color: '#00b894', badge: '#065f46', tone: 'teal', group: 'sector' },

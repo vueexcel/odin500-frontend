@@ -203,7 +203,7 @@ export function MonthlyReturnsChartSkeleton({ periodMode = 'monthly' }) {
       <div className="ticker-annual-figma__section">
         <div className="ticker-monthly__head">
           <div className="ticker-monthly__title-block">
-            <span className="ticker-monthly__title">{title}</span>
+            <span className="ticker-monthly__title uppercase">{title}</span>
           </div>
           <div className="ticker-annual-figma__actions ticker-annual-figma__actions--skeleton">
             <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--dd" />
@@ -249,6 +249,47 @@ export function MonthlyReturnsChartSkeleton({ periodMode = 'monthly' }) {
   );
 }
 
+/** Pie icon + “Quarterly returns” (matches TickerAnnualReturnsFigma toolbar badge). */
+export function QuarterlyReturnsToolbarBadge() {
+  const clipId = useId().replace(/:/g, '');
+  return (
+    <div className="inline-flex shrink-0 items-center">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 14 14"
+        fill="none"
+        className="shrink-0"
+        aria-hidden
+      >
+        <g clipPath={`url(#${clipId})`}>
+          <path
+            d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z"
+            stroke="white"
+            strokeWidth="0.875"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z"
+            stroke="white"
+            strokeWidth="0.875"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </g>
+        <defs>
+          <clipPath id={clipId}>
+            <rect width="14" height="14" fill="white" />
+          </clipPath>
+        </defs>
+      </svg>
+      <span className="ticker-annual-figma__badge uppercase">Quarterly returns</span>
+    </div>
+  );
+}
+
 /** Two-panel quarterly charts. */
 export function QuarterlyDualPanelChartSkeleton({ toolbarControls = null }) {
   const panel = (key) => (
@@ -281,7 +322,7 @@ export function QuarterlyDualPanelChartSkeleton({ toolbarControls = null }) {
     <div className="ticker-quarterly ticker-quarterly--skeleton">
       <div className="ticker-annual-figma__section">
         <div className="ticker-annual-figma__toolbar">
-          <span className="ticker-annual-figma__badge">Quarterly returns</span>
+          <QuarterlyReturnsToolbarBadge />
           <div className="ticker-annual-figma__actions ticker-annual-figma__actions--skeleton">
             <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--btn" />
             <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--btn-wide" />
@@ -308,7 +349,7 @@ export function WaterfallDonutChartSkeleton({ periodMode = 'monthly' }) {
     <div className="ticker-monthly-adv ticker-monthly-adv--skeleton">
       <div className="ticker-annual-figma__section">
         <div className="ticker-annual-figma__toolbar">
-          <span className="ticker-annual-figma__badge">{badge}</span>
+          <span className="ticker-annual-figma__badge uppercase">{badge}</span>
           <div className="ticker-annual-figma__actions ticker-annual-figma__actions--skeleton">
             <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--dd" />
             <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--btn-wide" />

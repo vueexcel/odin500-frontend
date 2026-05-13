@@ -45,7 +45,7 @@ const COMPARE_ROWS = [
   { key: '20Y', period: 'Last 20 years' }
 ];
 const TABLE_RANGE_YEARS = { '1Y': 1, '3Y': 3, '5Y': 5, '10Y': 10, '15Y': 15, '20Y': 20 };
-const DEFAULT_TABLE_RANGE_PRESET = '20Y';
+const DEFAULT_TABLE_RANGE_PRESET = '5Y';
 const TABLE_RANGE_DROPDOWN_OPTIONS = [
   { id: '1Y', label: '1Y' },
   { id: '3Y', label: '3Y' },
@@ -53,7 +53,6 @@ const TABLE_RANGE_DROPDOWN_OPTIONS = [
   { id: '10Y', label: '10Y' },
   { id: '15Y', label: '15Y' },
   { id: '20Y', label: '20Y' },
-  { id: 'MAX', label: 'MAX' }
 ];
 const TABLE_PAGE_SIZE = 30;
 const PAGER_SIBLING_COUNT = 1;
@@ -734,6 +733,22 @@ export default function TickerAnnualPage() {
     setAnnualTablePage((prev) => Math.min(Math.max(1, prev), annualTableTotalPages));
   }, [annualTableTotalPages]);
 
+  const annualReturnsTableRangeControl = (
+    <label className="statistic-data__range">
+      <span>Range</span>
+      <ThemedDropdown
+        size="sm"
+        style={{ minWidth: 86 }}
+        value={annualRange}
+        options={TABLE_RANGE_DROPDOWN_OPTIONS}
+        onChange={setAnnualRange}
+        title="Table range"
+        ariaLabelPrefix="Range"
+        labelFallback={TABLE_RANGE_DROPDOWN_OPTIONS.find((o) => o.id === annualRange)?.label ?? annualRange}
+      />
+    </label>
+  );
+
   return (
     <div className="ticker-page">
       {error ? (
@@ -743,15 +758,15 @@ export default function TickerAnnualPage() {
       ) : null}
 
       <header className="ticker-page__header ticker-page__header--figma">
-        <div className="ticker-page__header-top">
-          <div className="ticker-page__header-identity">
+        <div className="flex flex-wrap items-center justify-start gap-[10px]">
+          <div className="ticker-page__header-controls ticker-page__header-controls--annual !ml-0 inline-flex flex-wrap items-center gap-[10px]">
+            <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId="ticker-annual-symbol" />
+            {loading ? (<span className="ticker-page__loading-pill">Loading quarterly data…</span>) : null}
+          </div>
+          <div className="ticker-page__header-identity min-w-0">
             <h1 className="ticker-page__company ticker-page__company--hero">
               {titleSymbol} Annual Statistics
             </h1>
-          </div>
-          <div className="ticker-page__header-controls ticker-page__header-controls--annual">
-            <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId="ticker-annual-symbol" />
-            {loading ? (<span className="ticker-page__loading-pill">Loading quarterly data…</span>) : null}
           </div>
         </div>
       </header>
@@ -776,66 +791,12 @@ export default function TickerAnnualPage() {
               loading={loading}
             />
           </TickerChartResizeScope>
-          <div className="stats-cmp-charts">
-            <AnnualReturnBarChart
-              mode="annual"
-              ticker={titleSymbol}
-              benchmarkIndex={benchmarkIndex}
-              startYear={Number(String(appliedRange.start || '').slice(0, 4))}
-              endYear={Number(String(appliedRange.end || '').slice(0, 4))}
-              theme={chartTheme}
-              rows={annualComparisonRows}
-              benchmarkOptions={BENCHMARK_OPTIONS}
-              onBenchmarkChange={setBenchmarkIndex}
-              controls={annualChartRangeControls}
-              loading={loading}
-            />
-            <ExcessReturnLineChart
-              mode="annual"
-              ticker={titleSymbol}
-              benchmarkIndex={benchmarkIndex}
-              startYear={Number(String(appliedRange.start || '').slice(0, 4))}
-              endYear={Number(String(appliedRange.end || '').slice(0, 4))}
-              theme={chartTheme}
-              rows={annualComparisonRows}
-              benchmarkOptions={BENCHMARK_OPTIONS}
-              onBenchmarkChange={setBenchmarkIndex}
-              controls={annualChartRangeControls}
-              loading={loading}
-            />
-            <PeriodicReturnBarChart
-              mode="annual"
-              ticker={titleSymbol}
-              benchmarkIndex={benchmarkIndex}
-              startYear={Number(String(appliedRange.start || '').slice(0, 4))}
-              endYear={Number(String(appliedRange.end || '').slice(0, 4))}
-              theme={chartTheme}
-              rows={annualComparisonRows}
-              benchmarkOptions={BENCHMARK_OPTIONS}
-              onBenchmarkChange={setBenchmarkIndex}
-              controls={annualChartRangeControls}
-              loading={loading}
-            />
-          </div>
+          
 
           <section className="statistic-data__card">
             <div className="statistic-data__table-head">
               <h2 className="statistic-data__table-title">Annual Returns</h2>
-              <div className="statistic-data__head-actions">
-                <label className="statistic-data__range">
-                  <span>Range</span>
-                  <ThemedDropdown
-                    size="sm"
-                    style={{ minWidth: 86 }}
-                    value={annualRange}
-                    options={TABLE_RANGE_DROPDOWN_OPTIONS}
-                    onChange={setAnnualRange}
-                    title="Table range"
-                    ariaLabelPrefix="Range"
-                    labelFallback={TABLE_RANGE_DROPDOWN_OPTIONS.find((o) => o.id === annualRange)?.label ?? annualRange}
-                  />
-                </label>
-              </div>
+              <div className="statistic-data__head-actions">{annualReturnsTableRangeControl}</div>
             </div>
             <div className="statistic-data__table-wrap">
               <table className="statistic-data__table">
@@ -957,7 +918,7 @@ export default function TickerAnnualPage() {
             ) : null}
           </section>
         </div>
-        <aside className="ticker-page__aside">
+        <aside className="ticker-page__aside ticker-page__aside-stack">
           {/* <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h">
             <div className="ticker-signal-head">
               <span className="ticker-signal-logo" aria-hidden />
@@ -991,117 +952,126 @@ export default function TickerAnnualPage() {
             </div>
           </section> */}
 
-          <section className="ticker-card" aria-labelledby="key-data-h">
-            <div className="ticker-card__h-with-tip">
-              <h2 className="ticker-card__h ticker-card__h--flex" id="key-data-h">
+          <section className="mkt-mini-card ticker-aside-mini" aria-labelledby="key-data-h">
+            <header className="mkt-mini-card__head">
+              <h2 className="mkt-mini-card__k" id="key-data-h">
                 Key data &amp; performance
               </h2>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">52w range, avg volume, and volatility come from last ~1y OHLC rows.</p>
-              </DataInfoTip>
-            </div>
-            <div className="ticker-kd-grid">
-              <dl className="ticker-kd-dl">
-                <div className="ticker-kd-row">
-                  <dt>Dividend yield</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>52-week range</dt>
-                  <dd>{hi52 != null && lo52 != null ? `${formatPx(lo52)} – ${formatPx(hi52)}` : '—'}</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>Beta</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>Volatility (ann.)</dt>
-                  <dd>{vola != null ? `${vola}%` : '—'}</dd>
-                </div>
-              </dl>
-              <dl className="ticker-kd-dl">
-                <div className="ticker-kd-row">
-                  <dt>Avg volume (1y)</dt>
-                  <dd>{formatVolLong(avgVol)}</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>Market cap</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>P/E (TTM)</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>EPS (TTM)</dt>
-                  <dd>—</dd>
-                </div>
-              </dl>
-            </div>
-            <p className="ticker-page__label ticker-kd-comp-label">
-              <span>INDICES</span>
-              <span className="ticker-kd-comp-label__links">
-                {RELATED_INDEX_LINKS.map((idx) => (
-                  <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">
-                    {idx.label}
-                  </Link>
-                ))}
+              <span className="mkt-mini-card__head-actions">
+                <DataInfoTip align="start">
+                  <p className="ticker-data-tip__p">52w range, avg volume, and volatility come from last ~1y OHLC rows.</p>
+                </DataInfoTip>
               </span>
-            </p>
-            <p className="ticker-page__label ticker-kd-comp-label">
-            <span>RELATED TICKERS</span>
-            <span className="ticker-kd-comp-label__links">
-              {competitors.length ? (
-                competitors.map((t) => (
-                  <Link key={t} to={`/ticker/${encodeURIComponent(t)}`} className="ticker-kd-comp__a">
-                    {t}
-                  </Link>
-                ))
-              ) : (
-                <span className="ticker-page__muted">—</span>
-              )}</span>
-            </p>
-
-            
-
-            <div className="ticker-subh-with-tip">
-              <p className="ticker-subh ticker-subh--flex">Relative Performance (%) </p>
-            </div>
-            <div className="ticker-compare">
-              <div className="ticker-compare__head">
-                <span />
-                <span>{selectedIndexLabel}</span>
-                <span>{selectedTickerKey}</span>
-                <span>Diff</span>
-              </div>
-              {COMPARE_ROWS.map((row) => {
-                const symPct = row.period
-                  ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period)
-                  : row.mtd
-                    ? selectedIndexSeries.mtd
-                    : row.qtd
-                      ? selectedIndexSeries.qtd
-                      : null;
-                const spyPct = row.period
-                  ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period)
-                  : row.mtd
-                    ? selectedTickerSeries.mtd
-                    : row.qtd
-                      ? selectedTickerSeries.qtd
-                      : null;
-                const diff =
-                  symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct)
-                    ? symPct - spyPct
-                    : null;
-                return (
-                  <div key={row.key} className="ticker-compare__row">
-                    <span className="ticker-compare__tf">{row.key}</span>
-                    <span className={'ticker-compare__cell ' + pctClass(symPct)}>{formatPct(symPct)}</span>
-                    <span className={'ticker-compare__cell ' + pctClass(spyPct)}>{formatPct(spyPct)}</span>
-                    <span className={'ticker-compare__cell ' + pctClass(diff)}>{formatPct(diff)}</span>
+            </header>
+            <div className="ticker-aside-mini__body">
+              <div className="ticker-kd-grid">
+                <dl className="ticker-kd-dl">
+                  <div className="ticker-kd-row">
+                    <dt>Dividend yield</dt>
+                    <dd>—</dd>
                   </div>
-                );
-              })}
+                  <div className="ticker-kd-row">
+                    <dt>52-week range</dt>
+                    <dd>{hi52 != null && lo52 != null ? `${formatPx(lo52)} – ${formatPx(hi52)}` : '—'}</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>Beta</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>Volatility (ann.)</dt>
+                    <dd>{vola != null ? `${vola}%` : '—'}</dd>
+                  </div>
+                </dl>
+                <dl className="ticker-kd-dl">
+                  <div className="ticker-kd-row">
+                    <dt>Avg volume (1y)</dt>
+                    <dd>{formatVolLong(avgVol)}</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>Market cap</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>P/E (TTM)</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>EPS (TTM)</dt>
+                    <dd>—</dd>
+                  </div>
+                </dl>
+              </div>
+              <p className="ticker-page__label ticker-kd-comp-label">
+                <span>INDICES</span>
+                <span className="ticker-kd-comp-label__links">
+                  {RELATED_INDEX_LINKS.map((idx) => (
+                    <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">
+                      {idx.label}
+                    </Link>
+                  ))}
+                </span>
+              </p>
+              <p className="ticker-page__label ticker-kd-comp-label">
+                <span>RELATED TICKERS</span>
+                <span className="ticker-kd-comp-label__links">
+                  {competitors.length ? (
+                    competitors.map((t) => (
+                      <Link key={t} to={`/ticker/${encodeURIComponent(t)}`} className="ticker-kd-comp__a">
+                        {t}
+                      </Link>
+                    ))
+                  ) : (
+                    <span className="ticker-page__muted">—</span>
+                  )}
+                </span>
+              </p>
+            </div>
+          </section>
+
+          <section className="mkt-mini-card ticker-aside-mini" aria-labelledby="ticker-annual-rel-perf-h">
+            <header className="mkt-mini-card__head">
+              <span className="mkt-mini-card__k" id="ticker-annual-rel-perf-h">
+                Relative performance (%)
+              </span>
+            </header>
+            <div className="ticker-aside-mini__body">
+              <div className="ticker-compare">
+                <div className="ticker-compare__head">
+                  <span />
+                  <span>{selectedIndexLabel}</span>
+                  <span>{selectedTickerKey}</span>
+                  <span>Diff</span>
+                </div>
+                {COMPARE_ROWS.map((row) => {
+                  const symPct = row.period
+                    ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period)
+                    : row.mtd
+                      ? selectedIndexSeries.mtd
+                      : row.qtd
+                        ? selectedIndexSeries.qtd
+                        : null;
+                  const spyPct = row.period
+                    ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period)
+                    : row.mtd
+                      ? selectedTickerSeries.mtd
+                      : row.qtd
+                        ? selectedTickerSeries.qtd
+                        : null;
+                  const diff =
+                    symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct)
+                      ? symPct - spyPct
+                      : null;
+                  return (
+                    <div key={row.key} className="ticker-compare__row">
+                      <span className="ticker-compare__tf">{row.key}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(symPct)}>{formatPct(symPct)}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(spyPct)}>{formatPct(spyPct)}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(diff)}>{formatPct(diff)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </section>
         </aside>

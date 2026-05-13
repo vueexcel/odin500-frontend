@@ -1,5 +1,6 @@
 import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { StatsCmpChartSkeleton } from './ChartSkeletons.jsx';
+import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
 function fmtPct(v) {
   const n = Number(v);
@@ -21,11 +22,13 @@ export function PeriodicReturnBarChart({
   benchmarkOptions = [],
   onBenchmarkChange = () => {},
   controls = null,
-  loading = false
+  loading = false,
+  /** When set by `TickerChartResizeScope` via cloneElement. */
+  plotHeight = null
 }) {
   const W = 1020;
   const H = 300;
-  const padL = 52;
+  const padL = 58;
   const padR = 18;
   const padT = 16;
   const padB = 48;
@@ -43,8 +46,13 @@ export function PeriodicReturnBarChart({
   const groupW = iw / n;
   const barW = Math.max(4, Math.min(16, groupW * 0.32));
 
+  const resizeChrome = plotHeight != null && Number.isFinite(Number(plotHeight));
+  const hPx = resizeChrome ? Math.round(Number(plotHeight)) : null;
+  const svgPlotStyle = resizeChrome && hPx != null ? tickerSvgPlotStyle(hPx) : undefined;
+  const rootClass = ['stats-cmp-chart', resizeChrome ? 'stats-cmp-chart--plot-resize' : ''].filter(Boolean).join(' ');
+
   return (
-    <section className="stats-cmp-chart">
+    <section className={rootClass}>
       <div className="stats-cmp-chart__head">
         <div className="stats-cmp-chart__controls">{controls}</div>
         <ThemedDropdown
@@ -69,11 +77,23 @@ export function PeriodicReturnBarChart({
             <span><i className="stats-cmp-chart__sw stats-cmp-chart__sw--ticker" /> {ticker}</span>
             <span><i className="stats-cmp-chart__sw stats-cmp-chart__sw--bench2" /> {benchmarkIndex}</span>
           </div>
-          <svg viewBox={`0 0 ${W} ${H}`} className="stats-cmp-chart__svg" preserveAspectRatio="xMidYMid meet">
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="stats-cmp-chart__svg"
+            preserveAspectRatio="xMidYMid meet"
+            style={svgPlotStyle}
+          >
             {[0, 0.25, 0.5, 0.75, 1].map((k) => {
               const t = yMin + (yMax - yMin) * k;
               const yy = y(t);
-              return <line key={k} x1={padL} y1={yy} x2={W - padR} y2={yy} className="stats-cmp-chart__grid" />;
+              return (
+                <g key={`yg-${k}`}>
+                  <line x1={padL} y1={yy} x2={W - padR} y2={yy} className="stats-cmp-chart__grid" />
+                  <text x={padL - 8} y={yy} textAnchor="end" dominantBaseline="middle" className="stats-cmp-chart__y-axis">
+                    {fmtPct(t)}
+                  </text>
+                </g>
+              );
             })}
             <line x1={padL} y1={zeroY} x2={W - padR} y2={zeroY} className="stats-cmp-chart__zero" />
             {rows.map((r, i) => {

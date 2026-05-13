@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FigmaDataTable } from '../components/FigmaDataTable.jsx';
+import { FigmaPagination } from '../components/FigmaPagination.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
@@ -10,6 +11,8 @@ import { usePageSeo } from '../seo/usePageSeo.js';
 const PAGE_SIZE = 50;
 const TABLE_SKELETON_ROWS = 24;
 const DEFAULT_TICKER = 'AAPL';
+/** Daily OHLC requests are limited to this many calendar years before the end date. */
+const DAILY_MAX_HISTORY_YEARS = 3;
 
 /** @typedef {'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual'} OhlcFrequency */
 
@@ -33,6 +36,22 @@ function defaultStartDate() {
 
 function todayIsoDate() {
   return toIsoDate(new Date());
+}
+
+function isoAddCalendarYears(iso, deltaYears) {
+  if (!iso) return iso;
+  const d = new Date(`${iso}T12:00:00`);
+  d.setFullYear(d.getFullYear() + deltaYears);
+  return toIsoDate(d);
+}
+
+function clampDailyStartDate(startIso, endIso) {
+  if (!endIso) return startIso || '';
+  const minStart = isoAddCalendarYears(endIso, -DAILY_MAX_HISTORY_YEARS);
+  let s = startIso || minStart;
+  if (s < minStart) s = minStart;
+  if (s > endIso) s = endIso;
+  return s;
 }
 
 function pickNum(row, keys) {
@@ -268,6 +287,48 @@ function aggregateMonthlyToQuarterly(monthlyOHLC) {
   );
 }
 
+function getHistoricalSortValue(row, headerKey) {
+  if (row.__skeleton) return null;
+  switch (headerKey) {
+    case 'period':
+      return row.sortKey != null && row.sortKey !== '' ? String(row.sortKey) : String(row.period ?? '');
+    case 'open':
+    case 'high':
+    case 'low':
+    case 'close': {
+      const n = row[headerKey];
+      return n != null && Number.isFinite(Number(n)) ? Number(n) : null;
+    }
+    case 'returnPct':
+      return row.returnPct != null && Number.isFinite(Number(row.returnPct)) ? Number(row.returnPct) : null;
+    default:
+      return null;
+  }
+}
+
+function compareHistoricalRows(a, b, headerKey, dir) {
+  const mul = dir === 'asc' ? 1 : -1;
+  const va = getHistoricalSortValue(a, headerKey);
+  const vb = getHistoricalSortValue(b, headerKey);
+  if (va == null && vb == null) return 0;
+  if (va == null) return 1;
+  if (vb == null) return -1;
+  if (typeof va === 'number' && typeof vb === 'number') {
+    if (va !== vb) return va < vb ? -mul : mul;
+    return 0;
+  }
+  const sa = String(va);
+  const sb = String(vb);
+  if (sa < sb) return -mul;
+  if (sa > sb) return mul;
+  return 0;
+}
+
+function sortHistoricalRows(rows, headerKey, dir) {
+  if (!Array.isArray(rows) || !rows.length) return rows;
+  return [...rows].sort((a, b) => compareHistoricalRows(a, b, headerKey, dir));
+}
+
 export default function HistoricalDataPage() {
   usePageSeo({
     title: 'Historical OHLC Data and CSV Export | Odin500',
@@ -284,6 +345,16 @@ export default function HistoricalDataPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState('period');
+  const [sortDir, setSortDir] = useState('desc');
+
+  const displayTicker = sanitizeTickerPageInput(ticker) || DEFAULT_TICKER;
+  const dailyMinStart = frequency === 'daily' ? isoAddCalendarYears(endDate, -DAILY_MAX_HISTORY_YEARS) : '';
+
+  useEffect(() => {
+    if (frequency !== 'daily') return;
+    setStartDate((s) => clampDailyStartDate(s, endDate));
+  }, [frequency, endDate]);
 
   const runQuery = useCallback(async () => {
     const sym = sanitizeTickerPageInput(ticker) || DEFAULT_TICKER;
@@ -296,6 +367,7 @@ export default function HistoricalDataPage() {
       setError('Pick both start and end date.');
       return;
     }
+    const startForRequest = frequency === 'daily' ? clampDailyStartDate(startDate, endDate) : startDate;
     setBusy(true);
     setError('');
     try {
@@ -303,18 +375,19 @@ export default function HistoricalDataPage() {
         const res = await fetchJsonCached({
           path:
             `/api/market/ohlc?symbol=${encodeURIComponent(sym)}` +
-            `&start_date=${encodeURIComponent(startDate)}` +
+            `&start_date=${encodeURIComponent(startForRequest)}` +
             `&end_date=${encodeURIComponent(endDate)}`,
           method: 'GET',
           ttlMs: 5 * 60 * 1000
         });
         const list = Array.isArray(res?.data?.data) ? res.data.data : Array.isArray(res?.data) ? res.data : [];
-        setRows(normalizeDailyRows(list));
+        const normalized = normalizeDailyRows(list);
+        setRows(normalized.filter((r) => !r.sortKey || String(r.sortKey) >= startForRequest));
       } else if (frequency === 'weekly') {
         const res = await fetchJsonCached({
           path: '/api/market/weekly-ohlc',
           method: 'POST',
-          body: { ticker: sym, start_date: startDate, end_date: endDate },
+          body: { ticker: sym, start_date: startForRequest, end_date: endDate },
           ttlMs: 5 * 60 * 1000
         });
         const weekly = res?.data?.weeklyOHLC;
@@ -323,7 +396,7 @@ export default function HistoricalDataPage() {
         const res = await fetchJsonCached({
           path: '/api/market/monthly-ohlc',
           method: 'POST',
-          body: { ticker: sym, start_date: startDate, end_date: endDate },
+          body: { ticker: sym, start_date: startForRequest, end_date: endDate },
           ttlMs: 5 * 60 * 1000
         });
         const monthly = res?.data?.monthlyOHLC;
@@ -332,7 +405,7 @@ export default function HistoricalDataPage() {
         const res = await fetchJsonCached({
           path: '/api/market/monthly-ohlc',
           method: 'POST',
-          body: { ticker: sym, start_date: startDate, end_date: endDate },
+          body: { ticker: sym, start_date: startForRequest, end_date: endDate },
           ttlMs: 5 * 60 * 1000
         });
         const monthly = res?.data?.monthlyOHLC;
@@ -341,13 +414,15 @@ export default function HistoricalDataPage() {
         const res = await fetchJsonCached({
           path: '/api/market/monthly-ohlc',
           method: 'POST',
-          body: { ticker: sym, start_date: startDate, end_date: endDate },
+          body: { ticker: sym, start_date: startForRequest, end_date: endDate },
           ttlMs: 5 * 60 * 1000
         });
         const monthly = res?.data?.monthlyOHLC;
         setRows(aggregateMonthlyToAnnual(monthly));
       }
       setPage(1);
+      setSortKey('period');
+      setSortDir('desc');
     } catch (e) {
       setError(e.message || 'Failed to load historical data');
       setRows([]);
@@ -360,12 +435,28 @@ export default function HistoricalDataPage() {
     void runQuery();
   }, [runQuery]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(rows.length / PAGE_SIZE)), [rows.length]);
+  const sortedRows = useMemo(
+    () => sortHistoricalRows(rows, sortKey, sortDir),
+    [rows, sortKey, sortDir]
+  );
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE)), [sortedRows.length]);
   const pageSafe = Math.min(Math.max(1, page), totalPages);
   const pageRows = useMemo(() => {
     const start = (pageSafe - 1) * PAGE_SIZE;
-    return rows.slice(start, start + PAGE_SIZE);
-  }, [rows, pageSafe]);
+    return sortedRows.slice(start, start + PAGE_SIZE);
+  }, [sortedRows, pageSafe]);
+
+  const onSortHeader = useCallback((key) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        return prev;
+      }
+      setSortDir(key === 'period' ? 'desc' : 'asc');
+      return key;
+    });
+    setPage(1);
+  }, []);
 
   const periodColumnLabel = frequency === 'daily' ? 'Date' : 'Period';
 
@@ -385,11 +476,11 @@ export default function HistoricalDataPage() {
   }, [frequency]);
 
   const onDownloadCsv = useCallback(() => {
-    if (!rows.length) return;
+    if (!sortedRows.length) return;
     const headers = [periodColumnLabel, 'Open', 'High', 'Low', 'Close', 'Return %'];
     const lines = [
       headers.join(','),
-      ...rows.map((r) =>
+      ...sortedRows.map((r) =>
         [
           csvEscape(r.period),
           csvEscape(r.open ?? ''),
@@ -404,16 +495,23 @@ export default function HistoricalDataPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `historical-data-${sanitizeTickerPageInput(ticker) || DEFAULT_TICKER}-${frequency}-${startDate}-${endDate}.csv`;
+    a.download = `historical-data-${sanitizeTickerPageInput(ticker) || DEFAULT_TICKER}-${frequency}-${
+      frequency === 'daily' ? clampDailyStartDate(startDate, endDate) : startDate
+    }-${endDate}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [rows, ticker, startDate, endDate, frequency, periodColumnLabel]);
+  }, [sortedRows, ticker, startDate, endDate, frequency, periodColumnLabel]);
 
   return (
     <div className="historical-data-page">
       <header className="historical-data__head">
-        <h1>Historical Data</h1>
-        <p>OHLC by ticker and date range — daily from raw bars; weekly and monthly from aggregated APIs; quarterly and annually rolled up from monthly.</p>
+        <h1 className="historical-data__head-title">
+          <span className="historical-data__head-ticker">{displayTicker}</span>
+          <span className="historical-data__head-sep" aria-hidden="true">
+            ·
+          </span>
+          <span className="historical-data__head-label">Historical Data</span>
+        </h1>
       </header>
 
       <section className="historical-data__controls">
@@ -426,52 +524,49 @@ export default function HistoricalDataPage() {
             placeholder="Search ticker (e.g. NVDA)"
           />
         </div>
-        <div className="historical-data__frequency">
-          <label htmlFor="historical-data-frequency">Frequency</label>
-          <ThemedDropdown
-            buttonId="historical-data-frequency"
-            className="historical-data__select-dd"
-            style={{ width: '100%' }}
-            value={frequency}
-            options={FREQUENCY_OPTIONS.map((opt) => ({ id: opt.value, label: opt.label }))}
-            onChange={(v) => setFrequency(/** @type {OhlcFrequency} */ (v))}
-            title="OHLC frequency"
-            ariaLabelPrefix="Frequency"
-            wideLabel
-          />
-        </div>
-        <div className="historical-data__dates">
-          <label htmlFor="historical-data-start">Start date</label>
-          <input
-            id="historical-data-start"
-            type="date"
-            className="historical-data__date-input"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            max={endDate}
-          />
-        </div>
-        <div className="historical-data__dates">
-          <label htmlFor="historical-data-end">End date</label>
-          <input
-            id="historical-data-end"
-            type="date"
-            className="historical-data__date-input"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            min={startDate}
-          />
-        </div>
-        <div className="historical-data__actions">
-          <button type="button" className="historical-data__btn" onClick={runQuery} disabled={busy}>
-            Search Ticker
-          </button>
-          <button type="button" className="historical-data__btn historical-data__btn--primary" onClick={runQuery} disabled={busy}>
-            Submit
-          </button>
-          <button type="button" className="historical-data__btn" onClick={onDownloadCsv} disabled={!rows.length}>
-            Download CSV
-          </button>
+        <div className="historical-data__controls-right" aria-label="Filters and export">
+          <div className="historical-data__frequency">
+            <label htmlFor="historical-data-frequency">Frequency</label>
+            <ThemedDropdown
+              buttonId="historical-data-frequency"
+              className="historical-data__select-dd"
+              style={{ width: '100%' }}
+              value={frequency}
+              options={FREQUENCY_OPTIONS.map((opt) => ({ id: opt.value, label: opt.label }))}
+              onChange={(v) => setFrequency(/** @type {OhlcFrequency} */ (v))}
+              title="OHLC frequency"
+              ariaLabelPrefix="Frequency"
+              wideLabel
+            />
+          </div>
+          <div className="historical-data__dates">
+            <label htmlFor="historical-data-start">Start date</label>
+            <input
+              id="historical-data-start"
+              type="date"
+              className="historical-data__date-input"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              min={frequency === 'daily' ? dailyMinStart : undefined}
+              max={endDate}
+            />
+          </div>
+          <div className="historical-data__dates">
+            <label htmlFor="historical-data-end">End date</label>
+            <input
+              id="historical-data-end"
+              type="date"
+              className="historical-data__date-input"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              min={startDate}
+            />
+          </div>
+          <div className="historical-data__actions">
+            <button type="button" className="historical-data__btn" onClick={onDownloadCsv} disabled={!sortedRows.length}>
+              Download CSV
+            </button>
+          </div>
         </div>
       </section>
 
@@ -487,6 +582,9 @@ export default function HistoricalDataPage() {
             { key: 'close', label: 'Close' },
             { key: 'returnPct', label: 'Return %' }
           ]}
+          sortKey={busy ? null : sortKey}
+          sortDir={sortDir}
+          onSortHeader={busy ? undefined : onSortHeader}
           rows={
             busy
               ? Array.from({ length: TABLE_SKELETON_ROWS }, (_, i) => ({ __skeleton: true, __index: i }))
@@ -497,7 +595,7 @@ export default function HistoricalDataPage() {
           wrapClassName={'historical-data__table-wrap' + (busy ? ' historical-data__table-wrap--loading' : '')}
           tableAriaBusy={busy}
           tableAriaLabel={busy ? loadingLabel : undefined}
-          emptyText="No rows yet. Select ticker, frequency, date range, and submit."
+          emptyText="No rows for this selection. Adjust ticker, frequency, or date range."
           emptyColSpan={6}
           renderCell={({ header, row }) => {
             if (row.__skeleton) {
@@ -526,23 +624,17 @@ export default function HistoricalDataPage() {
             <span className="historical-data__pager-loading">{loadingLabel}</span>
           ) : totalPages > 1 ? (
             <>
-              <button type="button" className="historical-data__btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={pageSafe <= 1}>
-                Previous
-              </button>
-              <span>
-                Page {pageSafe} / {totalPages} ({rows.length} rows)
+              <FigmaPagination
+                page={pageSafe}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                ariaLabel="Historical data table pagination"
+              />
+              <span className="historical-data__pager-meta">
+                Page {pageSafe} of {totalPages} ({sortedRows.length} rows)
               </span>
-              <button
-                type="button"
-                className="historical-data__btn"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={pageSafe >= totalPages}
-              >
-                Next
-              </button>
             </>
-          ) : null
-          }
+          ) : null}
         </div>
       </section>
     </div>

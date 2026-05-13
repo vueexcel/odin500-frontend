@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
+import { getReturnsChartViewMoreHref } from '../utils/returnsViewMoreNavigation.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
 import { WaterfallDonutChartSkeleton } from './ChartSkeletons.jsx';
 
@@ -108,6 +109,7 @@ export function TickerMonthlyReturnsWaterfallDonut({
   loading = false
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const isMonthlyMode = periodMode === 'monthly';
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const [showTable, setShowTable] = useState(false);
@@ -408,28 +410,17 @@ export function TickerMonthlyReturnsWaterfallDonut({
     URL.revokeObjectURL(url);
   }, [selectedYearRows, selectedYear, symU, periodMode]);
   const onViewMore = useCallback(() => {
-    const section = periodMode === 'weekly' ? 'weekly' : 'monthly';
-    const params = new URLSearchParams({ section });
-    const sym = String(symbol || '').trim().toUpperCase();
-    if (sym) params.set('symbol', sym);
-    console.info('[view-more] waterfall click', {
+    const to = getReturnsChartViewMoreHref({
+      pathname: location.pathname,
+      search: location.search,
       periodMode,
-      fromPath: window.location.pathname,
-      fromSearch: window.location.search,
-      to: `/statistic-data?${params.toString()}`
+      symbol
     });
-    navigate(`/statistic-data?${params.toString()}`);
+    navigate(to);
     queueMicrotask(() => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    setTimeout(() => {
-      console.info('[view-more] waterfall post-nav check', {
-        periodMode,
-        currentPath: window.location.pathname,
-        currentSearch: window.location.search
-      });
-    }, 150);
-  }, [navigate, periodMode, symbol]);
+  }, [navigate, location.pathname, location.search, periodMode, symbol]);
   const onOpenPeriodPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
     const suffix = '/' + encodeURIComponent(symPart);
@@ -452,7 +443,7 @@ export function TickerMonthlyReturnsWaterfallDonut({
       
       <div className="ticker-annual-figma__section">
         <div className="ticker-annual-figma__toolbar">
-          <span className="ticker-annual-figma__badge">Monthly returns — waterfall &amp; month mix</span>
+          <span className="ticker-annual-figma__badge uppercase">Monthly returns — waterfall &amp; month mix</span>
         </div>
 
         <div className="ticker-monthly-adv__split">

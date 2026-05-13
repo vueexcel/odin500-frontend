@@ -13,9 +13,9 @@ const MAX_HEADLINES = 24;
 
 /**
  * Slide-out panel (same shell as watchlist) with scrollable general trading news from Finnhub.
- * @param {{ open: boolean, onClose: () => void }} props
+ * @param {{ open: boolean, onClose: () => void, docked?: boolean }} props
  */
-export function NewsRailFlyout({ open, onClose }) {
+export function NewsRailFlyout({ open, onClose, docked = false }) {
   const { busy, error, items } = useGeneralNewsFeed();
 
   const headlines = useMemo(() => items.slice(0, MAX_HEADLINES), [items]);
@@ -33,11 +33,11 @@ export function NewsRailFlyout({ open, onClose }) {
 
   return (
     <>
-      <div className="wl-flyout__backdrop" aria-hidden onClick={onClose} />
+      {docked ? null : <div className="wl-flyout__backdrop" aria-hidden onClick={onClose} />}
       <div
-        className="wl-flyout rail-news-flyout"
-        role="dialog"
-        aria-modal="true"
+        className={'wl-flyout rail-news-flyout' + (docked ? ' wl-flyout--docked' : '')}
+        role={docked ? 'complementary' : 'dialog'}
+        aria-modal={docked ? undefined : 'true'}
         aria-labelledby="rail-news-flyout-title"
       >
         <div className="wl-flyout__head">

@@ -11,28 +11,99 @@ import { usePageSeo } from '../seo/usePageSeo.js';
 
 /** `apiIndex` must match `market_groups.name` from Supabase (see GET /api/market/indices). */
 const INDEX_MENU = [
-  { id: 'sp500', apiIndex: 'SP500', label: 'S&P 500' },
   { id: 'dow', apiIndex: 'Dow Jones', label: 'Dow Jones' },
+  { id: 'sp500', apiIndex: 'SP500', label: 'S&P 500' },
   { id: 'nasdaq', apiIndex: 'Nasdaq 100', label: 'Nasdaq 100' },
   { id: 'etf', apiIndex: 'ETF', label: 'ETF' },
-  { id: 'other', apiIndex: 'Other', label: 'Other' },
-  { id: 'all', apiIndex: 'SP500', label: 'All Stocks' }
+  // { id: 'all', apiIndex: 'SP500', label: 'All Stocks' }
 ];
 
 const PERIOD_LABEL_OVERRIDES = {
-  'last-date': '1 day performance',
-  week: '1 week performance',
-  'last-month': '1 month performance',
-  'last-3-months': '3 month performance',
-  'last-6-months': '6 month performance',
+  'last-date': '1 day',
+  week: '1 week',
+  'last-month': '1 month',
+  'last-3-months': '3 month',
+  'last-6-months': '6 month',
   ytd: 'Year to date',
-  'last-1-year': '1 year performance',
-  'last-2-years': '2 year performance',
-  'last-3-years': '3 year performance',
-  'last-5-years': '5 year performance',
-  'last-10-years': '10 year performance'
+  'last-1-year': '1 year',
+  'last-2-years': '2 year',
+  'last-3-years': '3 year',
+  'last-5-years': '5 year',
+  'last-10-years': '10 year'
 };
 const HEATMAP_TABLE_PAGE_SIZE = 30;
+const BOTTOM_SORT_ABS = 'absChange';
+
+function cmpStr(a, b) {
+  return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' });
+}
+
+function cmpNumNullable(a, b) {
+  const na = Number.isFinite(a) ? a : null;
+  const nb = Number.isFinite(b) ? b : null;
+  if (na == null && nb == null) return 0;
+  if (na == null) return 1;
+  if (nb == null) return -1;
+  return na - nb;
+}
+
+function tileSizeForSort(row) {
+  const n = Number(row?.__tmw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function sortBottomTableRows(rows, sortKey, sortDir) {
+  const copy = [...rows];
+  const mul = sortDir === 'asc' ? 1 : -1;
+  copy.sort((a, b) => {
+    if (sortKey === BOTTOM_SORT_ABS) {
+      const da = Math.abs(parsePct(a.totalReturnPercentage) || 0);
+      const db = Math.abs(parsePct(b.totalReturnPercentage) || 0);
+      const c = da - db;
+      return sortDir === 'desc' ? -c : c;
+    }
+    let c = 0;
+    switch (sortKey) {
+      case 'symbol':
+        c = cmpStr(a.symbol, b.symbol);
+        break;
+      case 'company':
+        c = cmpStr(a.security, b.security);
+        break;
+      case 'sector':
+        c = cmpStr(a.sector, b.sector);
+        break;
+      case 'industry':
+        c = cmpStr(a.industry, b.industry);
+        break;
+      case 'price':
+        c = cmpNumNullable(
+          a.price != null ? Number(a.price) : null,
+          b.price != null ? Number(b.price) : null
+        );
+        break;
+      case 'changePct':
+        c = cmpNumNullable(parsePct(a.totalReturnPercentage), parsePct(b.totalReturnPercentage));
+        break;
+      case 'signal':
+        c = cmpStr(a.signal, b.signal);
+        break;
+      case 'weight':
+        c = cmpNumNullable(tileSizeForSort(a), tileSizeForSort(b));
+        break;
+      default:
+        c = 0;
+    }
+    return c * mul;
+  });
+  return copy;
+}
+
+function csvEscape(v) {
+  const s = String(v ?? '');
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
 
 function norm(s) {
   return String(s || '')
@@ -115,7 +186,7 @@ export default function MarketHeatmapPage() {
   });
   const [apiIndices, setApiIndices] = useState([]);
   const [periodOptions, setPeriodOptions] = useState([]);
-  const [indexMenuId, setIndexMenuId] = useState('sp500');
+  const [indexMenuId, setIndexMenuId] = useState('dow');
   const [periodValue, setPeriodValue] = useState('last-date');
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -124,12 +195,14 @@ export default function MarketHeatmapPage() {
   const [hoverSymbol, setHoverSymbol] = useState('');
   const [scaleSpan, setScaleSpan] = useState(3);
   const [colorFade, setColorFade] = useState({
-    negFade: 45,
-    neutralFade: 0,
-    posFade: 42
+    negFade: 100,
+    neutralFade: 100,
+    posFade: 100
   });
   const [zoom, setZoom] = useState(1);
   const [tablePage, setTablePage] = useState(1);
+  const [bottomSortKey, setBottomSortKey] = useState(BOTTOM_SORT_ABS);
+  const [bottomSortDir, setBottomSortDir] = useState('desc');
   const mainRef = useRef(null);
   const treemapHostRef = useRef(null);
   const indicesInitRef = useRef(false);
@@ -240,15 +313,21 @@ export default function MarketHeatmapPage() {
   }, [filteredRows]);
   const leftTableRows = useMemo(() => sortedRows.slice(0, 80), [sortedRows]);
 
+  const bottomBaseRows = useMemo(() => resolveTreemapRows(filteredRows), [filteredRows]);
+  const bottomSortedRows = useMemo(
+    () => sortBottomTableRows(bottomBaseRows, bottomSortKey, bottomSortDir),
+    [bottomBaseRows, bottomSortKey, bottomSortDir]
+  );
+
   const tableTotalPages = useMemo(
-    () => Math.max(1, Math.ceil(sortedRows.length / HEATMAP_TABLE_PAGE_SIZE)),
-    [sortedRows.length]
+    () => Math.max(1, Math.ceil(bottomSortedRows.length / HEATMAP_TABLE_PAGE_SIZE)),
+    [bottomSortedRows.length]
   );
   const tablePageSafe = Math.min(Math.max(1, tablePage), tableTotalPages);
   const tableRows = useMemo(() => {
     const start = (tablePageSafe - 1) * HEATMAP_TABLE_PAGE_SIZE;
-    return sortedRows.slice(start, start + HEATMAP_TABLE_PAGE_SIZE);
-  }, [sortedRows, tablePageSafe]);
+    return bottomSortedRows.slice(start, start + HEATMAP_TABLE_PAGE_SIZE);
+  }, [bottomSortedRows, tablePageSafe]);
   const tablePageButtons = useMemo(() => {
     if (tableTotalPages <= 1) return [1];
     if (tableTotalPages <= 5) return Array.from({ length: tableTotalPages }, (_, i) => i + 1);
@@ -275,8 +354,52 @@ export default function MarketHeatmapPage() {
   }, [periodSelectOptions, periodValue]);
 
   useEffect(() => {
+    setBottomSortKey(BOTTOM_SORT_ABS);
+    setBottomSortDir('desc');
     setTablePage(1);
-  }, [indexMenuId, periodValue, searchQuery, sortedRows.length]);
+  }, [indexMenuId, periodValue, searchQuery]);
+
+  useEffect(() => {
+    setTablePage(1);
+  }, [bottomSortKey, bottomSortDir]);
+
+  const handleBottomSortClick = useCallback(
+    (key) => {
+      if (key === 'changePct' && bottomSortKey === BOTTOM_SORT_ABS) {
+        setBottomSortKey('changePct');
+        setBottomSortDir('desc');
+        return;
+      }
+      if (key === bottomSortKey) {
+        setBottomSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+      } else {
+        setBottomSortKey(key);
+        if (['price', 'changePct', 'weight'].includes(key)) setBottomSortDir('desc');
+        else setBottomSortDir('asc');
+      }
+    },
+    [bottomSortKey]
+  );
+
+  const bottomThAriaSort = useCallback(
+    (key) => {
+      const active =
+        bottomSortKey === key || (key === 'changePct' && bottomSortKey === BOTTOM_SORT_ABS);
+      if (!active) return undefined;
+      return bottomSortDir === 'asc' ? 'ascending' : 'descending';
+    },
+    [bottomSortKey, bottomSortDir]
+  );
+
+  const isBottomSortColumnActive = useCallback(
+    (key) => {
+      if (key === 'changePct') {
+        return bottomSortKey === BOTTOM_SORT_ABS || bottomSortKey === 'changePct';
+      }
+      return bottomSortKey === key;
+    },
+    [bottomSortKey]
+  );
 
   const scaleMin = -scaleSpan;
   const scaleMax = scaleSpan;
@@ -292,28 +415,35 @@ export default function MarketHeatmapPage() {
   }, []);
 
   const downloadCsv = useCallback(() => {
-    if (!filteredRows.length) return;
-    const header = ['Symbol', 'Security', 'Sector', 'Price', 'ChangePercent'];
+    if (!bottomSortedRows.length) return;
+    const header = ['Ticker', 'Company', 'Sector', 'Industry', 'Price', 'Change %', 'Signal', 'Weight'];
     const lines = [
-      header.join(','),
-      ...filteredRows.map((r) =>
-        [
-          r.symbol,
-          `"${String(r.security || '').replace(/"/g, '""')}"`,
-          `"${String(r.sector || '').replace(/"/g, '""')}"`,
-          r.price != null ? Number(r.price) : '',
-          r.totalReturnPercentage != null ? Number(r.totalReturnPercentage) : ''
-        ].join(',')
-      )
+      header.map(csvEscape).join(','),
+      ...bottomSortedRows.map((r) => {
+        const pct = parsePct(r.totalReturnPercentage);
+        const chg = Number.isFinite(pct) ? String(pct) : '';
+        const tw = tileSizeForSort(r);
+        const w = tw != null ? tw.toFixed(3) : '';
+        return [
+          csvEscape(r.symbol || ''),
+          csvEscape(r.security || ''),
+          csvEscape(r.sector || ''),
+          csvEscape(r.industry || ''),
+          r.price != null && Number.isFinite(Number(r.price)) ? String(Number(r.price)) : '',
+          chg,
+          csvEscape(String(r.signal ?? '')),
+          csvEscape(w)
+        ].join(',');
+      })
     ];
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `heatmap-${fetchIndex}-${periodValue}.csv`;
+    a.download = `heatmap-table-${fetchIndex}-${periodValue}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filteredRows, fetchIndex, periodValue]);
+  }, [bottomSortedRows, fetchIndex, periodValue]);
 
   const zoomIn = () => setZoom((z) => Math.min(2.25, Math.round((z + 0.25) * 100) / 100));
   const zoomOut = () => setZoom((z) => Math.max(0.75, Math.round((z - 0.25) * 100) / 100));
@@ -528,70 +658,95 @@ export default function MarketHeatmapPage() {
           </div>
 
           <footer className="heatmap-scale-bar">
-            <div className="heatmap-scale-bar__hint" aria-live="polite">
+            {/* <div className="heatmap-scale-bar__hint" aria-live="polite">
               <div>Use mouse wheel to zoom in and out. Drag zoomed map to pan it.</div>
               <div>Double-click a ticker to display detailed information in a new window.</div>
               <div>
                 Hover mouse cursor over a ticker to see its main competitors in a stacked view with a 3-month history
                 graph.
               </div>
-            </div>
+            </div> */}
             <div className="heatmap-scale-bar__legend">
-              <div
-                className="heatmap-scale-bar__gradient"
-                style={{
-                  background: `linear-gradient(90deg, ${returnToHeatColor(-3, scaleMin, scaleMax, colorFade)} 0%, ${returnToHeatColor(0, scaleMin, scaleMax, colorFade)} 50%, ${returnToHeatColor(3, scaleMin, scaleMax, colorFade)} 100%)`
-                }}
-              />
-              <div className="heatmap-scale-bar__ticks">
-                {['-3%', '-2%', '-1%', '0%', '+1%', '+2%', '+3%'].map((lbl) => (
-                  <span key={lbl} className="heatmap-scale-bar__lbl">
-                    {lbl}
-                  </span>
-                ))}
+              <div className="heatmap-scale-bar__fades">
+                <div className="flex w-full min-w-0 flex-row items-end justify-between gap-2.5">
+                  <div className="flex min-w-0 flex-1 basis-0 flex-col items-stretch gap-1">
+                    <label
+                      htmlFor="heatmap-fade-green"
+                      className="flex min-h-10 flex-col items-center justify-end gap-0.5 text-center text-[10px] leading-snug text-white/70 [html[data-theme=light]_&]:text-slate-700"
+                    >
+                      <span className="block w-full shrink-0">Green fade</span>
+                      <span className="inline-block min-w-[4.25ch] text-center tabular-nums">{colorFade.posFade}%</span>
+                    </label>
+                    <input
+                      id="heatmap-fade-green"
+                      type="range"
+                      className="h-2 w-full min-w-0 cursor-pointer"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={colorFade.posFade}
+                      onChange={(e) =>
+                        setColorFade((prev) => ({ ...prev, posFade: Number(e.target.value) }))
+                      }
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-1 basis-0 flex-col items-stretch gap-1">
+                    <label
+                      htmlFor="heatmap-fade-neutral"
+                      className="flex min-h-10 flex-col items-center justify-end gap-0.5 text-center text-[10px] leading-snug text-white/70 [html[data-theme=light]_&]:text-slate-700"
+                    >
+                      <span className="block w-full shrink-0">Neutral fade</span>
+                      <span className="inline-block min-w-[4.25ch] text-center tabular-nums">{colorFade.neutralFade}%</span>
+                    </label>
+                    <input
+                      id="heatmap-fade-neutral"
+                      type="range"
+                      className="h-2 w-full min-w-0 cursor-pointer"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={colorFade.neutralFade}
+                      onChange={(e) =>
+                        setColorFade((prev) => ({ ...prev, neutralFade: Number(e.target.value) }))
+                      }
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-1 basis-0 flex-col items-stretch gap-1">
+                    <label
+                      htmlFor="heatmap-fade-red"
+                      className="flex min-h-10 flex-col items-center justify-end gap-0.5 text-center text-[10px] leading-snug text-white/70 [html[data-theme=light]_&]:text-slate-700"
+                    >
+                      <span className="block w-full shrink-0">Red fade</span>
+                      <span className="inline-block min-w-[4.25ch] text-center tabular-nums">{colorFade.negFade}%</span>
+                    </label>
+                    <input
+                      id="heatmap-fade-red"
+                      type="range"
+                      className="h-2 w-full min-w-0 cursor-pointer"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={colorFade.negFade}
+                      onChange={(e) =>
+                        setColorFade((prev) => ({ ...prev, negFade: Number(e.target.value) }))
+                      }
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="heatmap-scale-bar__controller">
-                <div className="heatmap-scale-bar__controller-row">
-                  <label htmlFor="heatmap-fade-green">Green fade {colorFade.posFade}%</label>
-                  <input
-                    id="heatmap-fade-green"
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={colorFade.posFade}
-                    onChange={(e) =>
-                      setColorFade((prev) => ({ ...prev, posFade: Number(e.target.value) }))
-                    }
-                  />
-                </div>
-                <div className="heatmap-scale-bar__controller-row">
-                  <label htmlFor="heatmap-fade-neutral">Neutral fade {colorFade.neutralFade}%</label>
-                  <input
-                    id="heatmap-fade-neutral"
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={colorFade.neutralFade}
-                    onChange={(e) =>
-                      setColorFade((prev) => ({ ...prev, neutralFade: Number(e.target.value) }))
-                    }
-                  />
-                </div>
-                <div className="heatmap-scale-bar__controller-row">
-                  <label htmlFor="heatmap-fade-red">Red fade {colorFade.negFade}%</label>
-                  <input
-                    id="heatmap-fade-red"
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={colorFade.negFade}
-                    onChange={(e) =>
-                      setColorFade((prev) => ({ ...prev, negFade: Number(e.target.value) }))
-                    }
-                  />
+              <div className="heatmap-scale-bar__scale">
+                <div
+                  className="heatmap-scale-bar__gradient"
+                  style={{
+                    background: `linear-gradient(90deg, ${returnToHeatColor(-3, scaleMin, scaleMax, colorFade)} 0%, ${returnToHeatColor(0, scaleMin, scaleMax, colorFade)} 50%, ${returnToHeatColor(3, scaleMin, scaleMax, colorFade)} 100%)`
+                  }}
+                />
+                <div className="heatmap-scale-bar__ticks">
+                  {['-3%', '-2%', '-1%', '0%', '+1%', '+2%', '+3%'].map((lbl) => (
+                    <span key={lbl} className="heatmap-scale-bar__lbl">
+                      {lbl}
+                    </span>
+                  ))}
                 </div>
               </div>
             </div>
@@ -602,22 +757,166 @@ export default function MarketHeatmapPage() {
               <h2 className="heatmap-card__title" id="heatmap-bottom-table-title">
                 {activeMenu.label} Tickers
               </h2>
-              <span className="heatmap-bottom-table__meta">
-                Showing {tableRows.length} of {sortedRows.length} rows (page {tablePageSafe}/{tableTotalPages})
-              </span>
+              <div className="heatmap-bottom-table__head-right">
+                <button
+                  type="button"
+                  className="historical-data__btn"
+                  disabled={loading || !bottomSortedRows.length}
+                  onClick={downloadCsv}
+                >
+                  Download CSV
+                </button>
+              </div>
             </div>
             <div className="heatmap-table-wrap heatmap-table-wrap--bottom">
               <table className="heatmap-table heatmap-table--bottom">
                 <thead>
                   <tr>
-                    <th>Ticker</th>
-                    <th>Company</th>
-                    <th>Sector</th>
-                    <th>Industry</th>
-                    <th>Price</th>
-                    <th>Change %</th>
-                    <th>Signal</th>
-                    <th>Weight</th>
+                    <th aria-sort={bottomThAriaSort('symbol')}>
+                      <button
+                        type="button"
+                        className="heatmap-table__sort-btn"
+                        onClick={() => handleBottomSortClick('symbol')}
+                      >
+                        <span className="heatmap-table__sort-text">Ticker</span>
+                        <span
+                          className={
+                            'heatmap-table__sort-ico' +
+                            (isBottomSortColumnActive('symbol')
+                              ? ' heatmap-table__sort-ico--active'
+                              : ' heatmap-table__sort-ico--idle')
+                          }
+                          aria-hidden
+                        >
+                          {isBottomSortColumnActive('symbol') ? '▲' : '▼'}
+                        </span>
+                      </button>
+                    </th>
+                    <th aria-sort={bottomThAriaSort('company')}>
+                      <button
+                        type="button"
+                        className="heatmap-table__sort-btn"
+                        onClick={() => handleBottomSortClick('company')}
+                      >
+                        <span className="heatmap-table__sort-text">Company</span>
+                        <span
+                          className={
+                            'heatmap-table__sort-ico' +
+                            (isBottomSortColumnActive('company')
+                              ? ' heatmap-table__sort-ico--active'
+                              : ' heatmap-table__sort-ico--idle')
+                          }
+                          aria-hidden
+                        >
+                          {isBottomSortColumnActive('company') ? '▲' : '▼'}
+                        </span>
+                      </button>
+                    </th>
+                    <th aria-sort={bottomThAriaSort('sector')}>
+                      <button
+                        type="button"
+                        className="heatmap-table__sort-btn"
+                        onClick={() => handleBottomSortClick('sector')}
+                      >
+                        <span className="heatmap-table__sort-text">Sector</span>
+                        <span
+                          className={
+                            'heatmap-table__sort-ico' +
+                            (isBottomSortColumnActive('sector')
+                              ? ' heatmap-table__sort-ico--active'
+                              : ' heatmap-table__sort-ico--idle')
+                          }
+                          aria-hidden
+                        >
+                          {isBottomSortColumnActive('sector') ? '▲' : '▼'}
+                        </span>
+                      </button>
+                    </th>
+                    <th aria-sort={bottomThAriaSort('industry')}>
+                      <button
+                        type="button"
+                        className="heatmap-table__sort-btn"
+                        onClick={() => handleBottomSortClick('industry')}
+                      >
+                        <span className="heatmap-table__sort-text">Industry</span>
+                        <span
+                          className={
+                            'heatmap-table__sort-ico' +
+                            (isBottomSortColumnActive('industry')
+                              ? ' heatmap-table__sort-ico--active'
+                              : ' heatmap-table__sort-ico--idle')
+                          }
+                          aria-hidden
+                        >
+                          {isBottomSortColumnActive('industry') ? '▲' : '▼'}
+                        </span>
+                      </button>
+                    </th>
+                    <th aria-sort={bottomThAriaSort('price')}>
+                      <button
+                        type="button"
+                        className="heatmap-table__sort-btn"
+                        onClick={() => handleBottomSortClick('price')}
+                      >
+                        <span className="heatmap-table__sort-text">Price</span>
+                        <span
+                          className={
+                            'heatmap-table__sort-ico' +
+                            (isBottomSortColumnActive('price')
+                              ? ' heatmap-table__sort-ico--active'
+                              : ' heatmap-table__sort-ico--idle')
+                          }
+                          aria-hidden
+                        >
+                          {isBottomSortColumnActive('price') ? '▲' : '▼'}
+                        </span>
+                      </button>
+                    </th>
+                    <th aria-sort={bottomThAriaSort('changePct')}>
+                      <button
+                        type="button"
+                        className="heatmap-table__sort-btn"
+                        title={
+                          bottomSortKey === BOTTOM_SORT_ABS
+                            ? 'Sorted by absolute change; click for signed %'
+                            : 'Sort by change %'
+                        }
+                        onClick={() => handleBottomSortClick('changePct')}
+                      >
+                        <span className="heatmap-table__sort-text">Change %</span>
+                        <span
+                          className={
+                            'heatmap-table__sort-ico' +
+                            (isBottomSortColumnActive('changePct')
+                              ? ' heatmap-table__sort-ico--active'
+                              : ' heatmap-table__sort-ico--idle')
+                          }
+                          aria-hidden
+                        >
+                          {isBottomSortColumnActive('changePct') ? '▲' : '▼'}
+                        </span>
+                      </button>
+                    </th>
+                    <th aria-sort={bottomThAriaSort('weight')}>
+                      <button
+                        type="button"
+                        className="heatmap-table__sort-btn"
+                        onClick={() => handleBottomSortClick('weight')}
+                      >
+                        <span className="heatmap-table__sort-text">Weight</span>
+                        <span
+                          className={
+                            'heatmap-table__sort-ico' +
+                            (isBottomSortColumnActive('weight')
+                              ? ' heatmap-table__sort-ico--active'
+                              : ' heatmap-table__sort-ico--idle')
+                          }
+                          aria-hidden
+                        >
+                          {isBottomSortColumnActive('weight') ? '▲' : '▼'}
+                        </span>
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -656,7 +955,6 @@ export default function MarketHeatmapPage() {
                         >
                           {formatPctEuSigned(t.totalReturnPercentage)}
                         </td>
-                        <td>{t.signal || 'N'}</td>
                         <td title={weight != null ? `Raw weight: ${weight}` : 'No raw weight available'}>
                           {tileSize != null ? tileSize.toFixed(3) : 'N/A'}
                         </td>
@@ -665,7 +963,7 @@ export default function MarketHeatmapPage() {
                   })}
                   {!loading && !tableRows.length ? (
                     <tr>
-                      <td colSpan={9} className="heatmap-table__empty">
+                      <td colSpan={8} className="heatmap-table__empty">
                         No tickers found for this index/period.
                       </td>
                     </tr>

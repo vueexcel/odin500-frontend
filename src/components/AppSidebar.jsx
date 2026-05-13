@@ -7,11 +7,7 @@ import { fetchWithAuth } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 import { prefetchRouteChunks } from '../utils/routePrefetch.js';
-import {
-  DEFAULT_INDEX_ROUTE_SLUG,
-  DEFAULT_TICKER_ROUTE_SYMBOL,
-  isMainTickerRoutePath
-} from '../utils/tickerUrlSync.js';
+import { DEFAULT_TICKER_ROUTE_SYMBOL, isMainTickerRoutePath } from '../utils/tickerUrlSync.js';
 
 function IconGlobe() {
   return (
@@ -232,6 +228,7 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
   const isStatsRoute =
     annualPageActive || quarterlyPageActive || monthlyPageActive || weeklyPageActive || dailyPageActive || location.pathname === '/statistic-data';
   const isIndicesRoute = location.pathname.startsWith('/indices');
+  const isSectorDataRoute = location.pathname.startsWith('/sector-data');
   const [indicesOpen, setIndicesOpen] = useState(isIndicesRoute);
   const [statsOpen, setStatsOpen] = useState(isStatsRoute);
 
@@ -356,23 +353,46 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
           <div className="app-sidebar__scroll">
             <nav className="app-sidebar__nav" aria-label="Markets">
               <NavRow to="/market" icon={IconGlobe} label="Markets" />
-              <button
-                type="button"
-                className={'app-sidebar__row app-sidebar__row--btn app-sidebar__row--indices' + (isIndicesRoute ? ' app-sidebar__row--active' : '')}
-                aria-expanded={indicesOpen}
-                aria-controls="app-sidebar-indices-options"
-                onClick={() => setIndicesOpen((v) => !v)}
-                onMouseEnter={() => prefetchRouteChunks(`/indices/${DEFAULT_INDEX_ROUTE_SLUG}`)}
-                onFocus={() => prefetchRouteChunks(`/indices/${DEFAULT_INDEX_ROUTE_SLUG}`)}
+              <div
+                className={
+                  'app-sidebar__row app-sidebar__row--indices app-sidebar__row--indices-split' +
+                  (isIndicesRoute ? ' app-sidebar__row--active' : '')
+                }
+                role="group"
+                aria-label="Indices"
+                onMouseEnter={() => prefetchRouteChunks('/indices/dow-jones')}
               >
-                <span className="app-sidebar__row-icon">
-                  <IconGrid />
-                </span>
-                <span className="app-sidebar__row-label">Indices</span>
-                <span className={'app-sidebar__indices-chevron' + (indicesOpen ? ' app-sidebar__indices-chevron--open' : '')} aria-hidden>
-                  <IconChevronRight />
-                </span>
-              </button>
+                <button
+                  type="button"
+                  className="app-sidebar__indices-main"
+                  onClick={() => {
+                    navigate('/indices/dow-jones');
+                    setIndicesOpen(true);
+                  }}
+                  onFocus={() => prefetchRouteChunks('/indices/dow-jones')}
+                  title="Open Dow Jones index (opens menu)"
+                >
+                  <span className="app-sidebar__row-icon">
+                    <IconGrid />
+                  </span>
+                  <span className="app-sidebar__row-label">Indices</span>
+                </button>
+                <button
+                  type="button"
+                  className="app-sidebar__indices-chevron-btn"
+                  aria-expanded={indicesOpen}
+                  aria-controls="app-sidebar-indices-options"
+                  aria-label={indicesOpen ? 'Collapse indices submenu' : 'Expand indices submenu'}
+                  onClick={() => setIndicesOpen((v) => !v)}
+                >
+                  <span
+                    className={'app-sidebar__indices-chevron' + (indicesOpen ? ' app-sidebar__indices-chevron--open' : '')}
+                    aria-hidden
+                  >
+                    <IconChevronRight />
+                  </span>
+                </button>
+              </div>
               {indicesOpen ? (
                 <div id="app-sidebar-indices-options" className="app-sidebar__subnav" role="group" aria-label="Indices options">
                   <NavRow to="/indices/dow-jones" icon={IconLineChart} label="Dow Jones" />
@@ -383,6 +403,12 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
               <NavRow to="/news" icon={IconNews} label="News" />
               <NavRow to="/market-movers" icon={IconFlame} label="Market Movers" />
               <NavRow to="/heatmap" icon={IconGrid} label="Heatmaps" />
+              <NavRow
+                to="/sector-data/xlk"
+                icon={IconPie}
+                label="Sector Data"
+                active={isSectorDataRoute}
+              />
             </nav>
 
             
@@ -401,7 +427,13 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
                 className={'app-sidebar__row app-sidebar__row--btn app-sidebar__row--stats' + (isStatsRoute ? ' app-sidebar__row--active' : '')}
                 aria-expanded={statsOpen}
                 aria-controls="app-sidebar-stats-options"
-                onClick={() => setStatsOpen((v) => !v)}
+                onClick={() => {
+                  setStatsOpen((wasOpen) => {
+                    const nextOpen = !wasOpen;
+                    if (nextOpen) navigate(annualTo);
+                    return nextOpen;
+                  });
+                }}
                 onMouseEnter={() => {
                   prefetchRouteChunks(annualTo);
                   prefetchRouteChunks(quarterlyTo);

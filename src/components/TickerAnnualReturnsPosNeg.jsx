@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { periodModeNouns } from '../utils/periodModeNouns.js';
@@ -6,6 +6,8 @@ import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 import { PosNegReturnsChartSkeleton } from './ChartSkeletons.jsx';
+import { useReturnsChartFiltersMenuMode } from '../context/WatchlistDockContext.jsx';
+import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
 
 const BUCKETS_DARK = [
   { key: 'b01', legend: '0-1%', color: '#38bdf8' },
@@ -190,6 +192,49 @@ function csvEscape(s) {
   return t;
 }
 
+/** Pie icon + period returns badge (layout: Tailwind only). */
+function PosNegToolbarBadgeWithIcon({ periodMode, pn }) {
+  const clipId = useId().replace(/:/g, '');
+  return (
+    <div className="inline-flex min-w-0 shrink-0 items-center ">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 14 14"
+        fill="none"
+        className="shrink-0"
+        aria-hidden
+      >
+        <g clipPath={`url(#${clipId})`}>
+          <path
+            d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z"
+            stroke="white"
+            strokeWidth="0.875"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z"
+            stroke="white"
+            strokeWidth="0.875"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </g>
+        <defs>
+          <clipPath id={clipId}>
+            <rect width="14" height="14" fill="white" />
+          </clipPath>
+        </defs>
+      </svg>
+      <span className="ticker-annual-figma__badge uppercase">
+        {`${periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive & negative ${pn.lower}`}
+      </span>
+    </div>
+  );
+}
+
 /**
  * Figma-style bucketed donuts + center toggle (uses annual/quarterly returns payload rows).
  * @param {{ symbol: string, annualReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'annual' | 'quarterly' | 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean }} props
@@ -204,6 +249,7 @@ export function TickerAnnualReturnsPosNeg({
   loading = false
 }) {
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
+  const filtersMenuMode = useReturnsChartFiltersMenuMode();
   const buckets = useMemo(() => bucketsForTheme(chartTheme), [chartTheme]);
   const [rightMode, setRightMode] = useState('positive');
   const [showTable, setShowTable] = useState(false);
@@ -270,6 +316,70 @@ export function TickerAnnualReturnsPosNeg({
   }, [filteredRows, symbol, periodMode]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
+
+  const posNegPrimaryToolbar = (
+    <>
+      {!suppressChartDateFilter ? (
+        <div className="ticker-annual-posneg__range-inline">
+          <ChartDateApplyRow
+            idPrefix="annual-posneg"
+            maxDate={asOfDate}
+            mode={periodMode === 'daily' ? 'date' : 'year'}
+            minYear={1980}
+            maxYear={2026}
+            initialStart={periodMode === 'daily' ? '' : '2018'}
+            initialEnd={periodMode === 'daily' ? '' : String(asOfDate || '').slice(0, 4)}
+            onApply={({ start, end }) => setRangeApplied({ start, end })}
+          />
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className="ticker-annual-figma__btn"
+        onClick={() => setShowTable((v) => !v)}
+        aria-pressed={showTable}
+      >
+        <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
+      </button>
+      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
+        <IcoDownload /> Download CSV
+      </button>
+    </>
+  );
+
+  const posNegModeToggleButtons = (
+    <>
+      <button
+        type="button"
+        role="tab"
+        className={
+          'ticker-annual-donut__toggle-btn' + (rightMode === 'positive' ? ' ticker-annual-donut__toggle-btn--active' : '')
+        }
+        aria-selected={rightMode === 'positive'}
+        onClick={() => setRightMode('positive')}
+      >
+        {positiveTabLabel}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        className={
+          'ticker-annual-donut__toggle-btn' + (rightMode === 'negative' ? ' ticker-annual-donut__toggle-btn--active' : '')
+        }
+        aria-selected={rightMode === 'negative'}
+        onClick={() => setRightMode('negative')}
+      >
+        {negativeTabLabel}
+      </button>
+    </>
+  );
+
+  const posNegModeToggleForFilters = (
+    <div className="ticker-annual-donut__toggle ticker-annual-donut__toggle--in-filters">{posNegModeToggleButtons}</div>
+  );
+
+  const posNegModeToggleForSubrow = <div className="ticker-annual-donut__toggle">{posNegModeToggleButtons}</div>;
+
   const asOfLine = asOfDate ? (
     <p className="ticker-data-tip__p">
       Returns as of <strong>{asOfDate}</strong> on the ticker-returns payload.
@@ -284,9 +394,7 @@ export function TickerAnnualReturnsPosNeg({
       <div className="ticker-annual-donut">
         <div className="ticker-annual-figma__section">
           <div className="ticker-annual-figma__toolbar">
-            <span className="ticker-annual-figma__badge">
-              {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive &amp; negative {pn.lower}
-            </span>
+            <PosNegToolbarBadgeWithIcon periodMode={periodMode} pn={pn} />
           </div>
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">
@@ -302,66 +410,22 @@ export function TickerAnnualReturnsPosNeg({
     <div className="ticker-annual-donut">
       <div className="ticker-annual-figma__section ticker-annual-donut__section">
         <div className="ticker-annual-figma__toolbar">
-          <span className="ticker-annual-figma__badge">
-            {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive &amp; negative {pn.lower}
-          </span>
-          <div className="ticker-annual-figma__actions ticker-annual-posneg__actions">
-            {!suppressChartDateFilter ? (
-              <div className="ticker-annual-posneg__range-inline">
-                <ChartDateApplyRow
-                  idPrefix="annual-posneg"
-                  maxDate={asOfDate}
-                  mode={periodMode === 'daily' ? 'date' : 'year'}
-                  minYear={1980}
-                  maxYear={2026}
-                  initialStart={periodMode === 'daily' ? '' : '2018'}
-                  initialEnd={periodMode === 'daily' ? '' : String(asOfDate || '').slice(0, 4)}
-                  onApply={({ start, end }) => setRangeApplied({ start, end })}
-                />
-              </div>
-            ) : null}
-            <button
-              type="button"
-              className="ticker-annual-figma__btn"
-              onClick={() => setShowTable((v) => !v)}
-              aria-pressed={showTable}
-            >
-              <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
-            </button>
-            <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
-              <IcoDownload /> Download CSV
-            </button>
-          </div>
+          <PosNegToolbarBadgeWithIcon periodMode={periodMode} pn={pn} />
+          {filtersMenuMode ? (
+            <ReturnsChartFiltersMenu>
+              {posNegPrimaryToolbar}
+              {posNegModeToggleForFilters}
+            </ReturnsChartFiltersMenu>
+          ) : (
+            <div className="ticker-annual-figma__actions ticker-annual-posneg__actions">{posNegPrimaryToolbar}</div>
+          )}
         </div>
-        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
-          <div className="ticker-annual-figma__left" />
-          <div className="ticker-annual-donut__toggle">
-            <button
-                type="button"
-                role="tab"
-                className={
-                  'ticker-annual-donut__toggle-btn' +
-                  (rightMode === 'positive' ? ' ticker-annual-donut__toggle-btn--active' : '')
-                }
-                aria-selected={rightMode === 'positive'}
-                onClick={() => setRightMode('positive')}
-              >
-                {positiveTabLabel}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                className={
-                  'ticker-annual-donut__toggle-btn' +
-                  (rightMode === 'negative' ? ' ticker-annual-donut__toggle-btn--active' : '')
-                }
-                aria-selected={rightMode === 'negative'}
-                onClick={() => setRightMode('negative')}
-              >
-                {negativeTabLabel}
-              </button>
+        {!filtersMenuMode ? (
+          <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
+            <div className="ticker-annual-figma__left" />
+            {posNegModeToggleForSubrow}
           </div>
-        </div>
+        ) : null}
 
         <div className="ticker-annual-donut__stage">
           <div className="ticker-annual-donut__split">

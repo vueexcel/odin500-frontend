@@ -4,6 +4,8 @@ import { ChartInfoTip } from './ChartInfoTip.jsx';
 import TradingChartLoader from './TradingChartLoader.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import { useReturnsChartFiltersMenuMode } from '../context/WatchlistDockContext.jsx';
+import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
 
 const GROUPS = [
   { id: 'sp500', apiIndex: 'SP500', label: 'S&P 500', benchmark: 'SPX', benchLabel: 'S&P 500' },
@@ -27,6 +29,13 @@ const TF_ROWS = [
   { key: '20Y', period: 'Last 20 years' }
 ];
 const TABLE_ONLY_START_DATE = '2005-01-01';
+
+/** Stable empty default — `= []` in params is a new array every render when the prop is omitted. */
+const DEFAULT_INITIAL_SP500_ROWS = Object.freeze([]);
+
+/** Dev-only: logs 1D / "Last date" pipeline. For prod builds, temporarily set to `true`. */
+const DEBUG_BENCHMARK_TABLE_1D =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV) || false;
 
 function yesterdayIso() {
   const d = new Date();
@@ -94,7 +103,7 @@ export function TickerSection23Section24({
   prefetchedLongBenchSymbol = '',
   prefetchedLongBusy = false,
   onSectionBenchmarkSymbolChange,
-  initialSp500Rows = []
+  initialSp500Rows = DEFAULT_INITIAL_SP500_ROWS
 }) {
   const [groupId, setGroupId] = useState('sp500');
   const [groupRows, setGroupRows] = useState([]);
@@ -104,8 +113,16 @@ export function TickerSection23Section24({
   const [localReturnsBusy, setLocalReturnsBusy] = useState(false);
   const [loadingGroup, setLoadingGroup] = useState(false);
   const coreReturnsCacheRef = useRef(new Map());
+  const filtersMenuMode = useReturnsChartFiltersMenuMode();
 
   const activeGroup = useMemo(() => GROUPS.find((g) => g.id === groupId) || GROUPS[0], [groupId]);
+
+  /** Avoid effect loops: default prop `initialSp500Rows = []` is a new [] every render when omitted. */
+  const initialSp500RowsSig = useMemo(() => {
+    const arr = initialSp500Rows;
+    if (!Array.isArray(arr) || !arr.length) return '';
+    return `${arr.length}:${arr.map((r) => String(r?.symbol || '')).join(',')}`;
+  }, [initialSp500Rows]);
 
   useEffect(() => {
     setTicker(String(pageSymbol || '').toUpperCase());
@@ -134,17 +151,20 @@ export function TickerSection23Section24({
       if (!getAuthToken()) return;
       setLoadingGroup(true);
       try {
-        const data =
+        const rowsFromProp =
           activeGroup.id === 'sp500' && Array.isArray(initialSp500Rows) && initialSp500Rows.length
-            ? { data: initialSp500Rows }
-            : (
-                await fetchJsonCached({
-                  path: '/api/market/ticker-details',
-                  method: 'POST',
-                  body: { index: activeGroup.apiIndex, period: 'last-1-year' },
-                  ttlMs: 10 * 60 * 1000
-                })
-              ).data;
+            ? initialSp500Rows
+            : null;
+        const data = rowsFromProp
+          ? { data: rowsFromProp }
+          : (
+              await fetchJsonCached({
+                path: '/api/market/ticker-details',
+                method: 'POST',
+                body: { index: activeGroup.apiIndex, period: 'last-1-year' },
+                ttlMs: 10 * 60 * 1000
+              })
+            ).data;
         if (cancelled) return;
         const list = Array.isArray(data?.data) ? data.data : [];
         const sorted = [...list].sort((a, b) =>
@@ -165,7 +185,7 @@ export function TickerSection23Section24({
     return () => {
       cancelled = true;
     };
-  }, [activeGroup.apiIndex, activeGroup.id, initialSp500Rows]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeGroup.apiIndex, activeGroup.id, initialSp500RowsSig]);
 
   /**
    * When the peer ticker differs from the page symbol, load only missing core payloads.
@@ -249,11 +269,74 @@ export function TickerSection23Section24({
       const tick = pickDynamic(dynT, tf.period);
       const diff =
         Number.isFinite(bench) && Number.isFinite(tick)
-          ? Number(tick) - Number(bench)
+          ? Number(bench) - Number(tick)
           : null;
       return { tf: tf.key, bench, tick, diff };
     });
   }, [tickerReturns, benchReturns]);
+
+  useEffect(() => {
+    if (!DEBUG_BENCHMARK_TABLE_1D || loadingReturns) return;
+    const period1d = TF_ROWS[0].period;
+    const dynT = tickerReturns?.performance?.dynamicPeriods || [];
+    const dynB = benchReturns?.performance?.dynamicPeriods || [];
+    const rowT = dynT.find((r) => r.period === period1d);
+    const rowB = dynB.find((r) => r.period === period1d);
+    const tick = pickDynamic(dynT, period1d);
+    const bench = pickDynamic(dynB, period1d);
+    const diff =
+      Number.isFinite(bench) && Number.isFinite(tick) ? Number(bench) - Number(tick) : null;
+
+    // eslint-disable-next-line no-console -- intentional debug trace for 1D / Last date
+    console.groupCollapsed('[TickerSection23Section24:1D / Last date]');
+    // eslint-disable-next-line no-console
+    console.log('context', {
+      ticker,
+      benchmark: activeGroup.benchmark,
+      benchLabel: activeGroup.benchLabel,
+      usePrefetchLong,
+      tickerAsOf: tickerReturns?.asOfDate,
+      benchAsOf: benchReturns?.asOfDate
+    });
+    // eslint-disable-next-line no-console
+    console.log('period key we match on', JSON.stringify(period1d));
+    // eslint-disable-next-line no-console
+    console.log('all dynamic period labels (ticker)', dynT.map((r) => r.period));
+    // eslint-disable-next-line no-console
+    console.log('all dynamic period labels (benchmark)', dynB.map((r) => r.period));
+    // eslint-disable-next-line no-console
+    console.log('raw row ticker "Last date"', rowT ?? '(no row with exact period match)');
+    // eslint-disable-next-line no-console
+    console.log('raw row benchmark "Last date"', rowB ?? '(no row with exact period match)');
+    // eslint-disable-next-line no-console
+    console.log('pickDynamic totals', { tick1d: tick, bench1d: bench, diff1d: diff });
+    const row1d = rows.find((r) => r.tf === '1D');
+    // eslint-disable-next-line no-console
+    console.log('computed table row (1D)', row1d);
+    // eslint-disable-next-line no-console
+    console.log(
+      'why 0%? (same calendar start/end often means one trading bar → ~0% return)',
+      {
+        tickerSameDay:
+          rowT?.startDate && rowT?.endDate ? rowT.startDate === rowT.endDate : null,
+        benchSameDay:
+          rowB?.startDate && rowB?.endDate ? rowB.startDate === rowB.endDate : null,
+        tickerPrices: rowT ? { start: rowT.startPrice, end: rowT.endPrice } : null,
+        benchPrices: rowB ? { start: rowB.startPrice, end: rowB.endPrice } : null
+      }
+    );
+    // eslint-disable-next-line no-console
+    console.groupEnd();
+  }, [
+    loadingReturns,
+    tickerReturns,
+    benchReturns,
+    ticker,
+    activeGroup.benchmark,
+    activeGroup.benchLabel,
+    usePrefetchLong,
+    rows
+  ]);
 
   const axis = useMemo(() => niceAxisBounds(rows), [rows]);
 
@@ -265,48 +348,59 @@ export function TickerSection23Section24({
     });
   }, [rows]);
 
+  const benchmarkControls = (
+    <div className="ticker-s23s24__controls">
+      <ThemedDropdown
+        className="ticker-s23s24__select-dd"
+        style={{ width: '100%' }}
+        size="sm"
+        wideLabel
+        value={ticker}
+        options={groupRows.map((r) => {
+          const s = String(r.symbol || '').toUpperCase();
+          return { id: s, label: s };
+        })}
+        onChange={setTicker}
+        title="Ticker"
+        ariaLabelPrefix="Ticker"
+        disabled={!groupRows.length}
+        labelFallback="—"
+      />
+      <ThemedDropdown
+        className="ticker-s23s24__select-dd"
+        style={{ width: '100%' }}
+        size="sm"
+        wideLabel
+        value={groupId}
+        options={GROUPS.map((g) => ({ id: g.id, label: g.label }))}
+        onChange={setGroupId}
+        title="Index group"
+        ariaLabelPrefix="Group"
+      />
+    </div>
+  );
+
   return (
     <section className="ticker-s23s24">
       <div className="ticker-s23s24__card ticker-s23">
-        <div className="ticker-card__h-with-tip">
-          <h3 className="ticker-subh ticker-subh--flex">Benchmark vs Ticker Table</h3>
-          <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
+        <div className="ticker-s23s24__head-row">
+          <div className="ticker-card__h-with-tip">
+            <h3 className="ticker-subh ticker-subh--flex">Benchmark vs Ticker Table</h3>
+            <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
+          </div>
+          {filtersMenuMode ? (
+            <ReturnsChartFiltersMenu className="ticker-s23s24__filters-menu">
+              {benchmarkControls}
+            </ReturnsChartFiltersMenu>
+          ) : null}
         </div>
-        <div className="ticker-s23s24__controls">
-        <ThemedDropdown
-            className="ticker-s23s24__select-dd"
-            style={{ width: '100%' }}
-            size="sm"
-            wideLabel
-            value={ticker}
-            options={groupRows.map((r) => {
-              const s = String(r.symbol || '').toUpperCase();
-              return { id: s, label: s };
-            })}
-            onChange={setTicker}
-            title="Ticker"
-            ariaLabelPrefix="Ticker"
-            disabled={!groupRows.length}
-            labelFallback="—"
-          />
-          <ThemedDropdown
-            className="ticker-s23s24__select-dd"
-            style={{ width: '100%' }}
-            size="sm"
-            wideLabel
-            value={groupId}
-            options={GROUPS.map((g) => ({ id: g.id, label: g.label }))}
-            onChange={setGroupId}
-            title="Index group"
-            ariaLabelPrefix="Group"
-          />
-        </div>
+        {!filtersMenuMode ? benchmarkControls : null}
         <table className="ticker-s23__table">
           <thead>
             <tr>
               <th> Time</th>
-              <th>{activeGroup.benchLabel}</th>
               <th>{ticker || 'Ticker'}</th>
+              <th>{activeGroup.benchLabel}</th>
               <th>Difference</th>
             </tr>
           </thead>

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { NewsRailFlyout } from './NewsRailFlyout.jsx';
-import { WatchlistRailFlyout } from './WatchlistRailFlyout.jsx';
+import { useNavigate } from 'react-router-dom';
+import { useRightRailDock } from '../context/WatchlistDockContext.jsx';
 import { clearApiCache, clearAuthToken, fetchWithAuth } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 
@@ -110,9 +109,7 @@ function IcoOdinSignals() {
 
 export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [watchlistOpen, setWatchlistOpen] = useState(false);
-  const [newsOpen, setNewsOpen] = useState(false);
+  const dock = useRightRailDock();
   const [profileOpen, setProfileOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -174,24 +171,18 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
   }, []);
 
   const closeAll = () => {
-    setWatchlistOpen(false);
-    setNewsOpen(false);
+    dock.close();
     setProfileOpen(false);
     if (typeof onRequestClose === 'function') onRequestClose();
   };
 
   const toggleWatchlist = () => {
-    closeAll();
-    try {
-      sessionStorage.setItem('ticker_open_watchlist', '1');
-    } catch {
-      /* ignore */
-    }
-    if (String(location.pathname || '').startsWith('/ticker')) {
-      window.dispatchEvent(new CustomEvent('ticker:open-watchlist'));
+    if (mobileOpen) {
+      closeAll();
       return;
     }
-    navigate('/ticker', { state: { openWatchlist: true } });
+    setProfileOpen(false);
+    dock.toggleWatchlist();
   };
 
   const toggleNews = () => {
@@ -199,15 +190,21 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
       closeAll();
       return;
     }
-    setWatchlistOpen(false);
     setProfileOpen(false);
-    setNewsOpen((o) => !o);
+    dock.toggleNews();
+  };
+
+  const toggleMarketMovers = () => {
+    if (mobileOpen) {
+      closeAll();
+      return;
+    }
+    setProfileOpen(false);
+    dock.toggleMarketMovers();
   };
 
   return (
     <>
-      <WatchlistRailFlyout open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
-      <NewsRailFlyout open={newsOpen} onClose={() => setNewsOpen(false)} />
       <aside className={'app-right-rail' + (mobileOpen ? ' app-right-rail--mobile-open' : '')} aria-label="Quick navigation">
         <div className="app-right-rail__stack">
           <div className="header-util-wrap" ref={profileWrapRef}>
@@ -222,8 +219,7 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
                   closeAll();
                   return;
                 }
-                setWatchlistOpen(false);
-                setNewsOpen(false);
+                dock.close();
                 setProfileOpen((v) => !v);
               }}
             >
@@ -267,10 +263,10 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
           </div>
           <button
             type="button"
-            className={'app-right-rail__btn' + (watchlistOpen ? ' app-right-rail__btn--active' : '')}
+            className={'app-right-rail__btn' + (dock.activePanel === 'watchlist' ? ' app-right-rail__btn--active' : '')}
             title="Watch Lists"
             aria-label="Watch Lists"
-            aria-expanded={watchlistOpen}
+            aria-expanded={dock.activePanel === 'watchlist'}
             onClick={toggleWatchlist}
           >
             <IcoAnalytics />
@@ -286,23 +282,22 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
           >
             <IcoOdinSignals />
           </Link> */}
-          <Link
-            to="/market-movers"
-            className="app-right-rail__btn"
-            title="Market Movers"
-            aria-label="Market Movers"
-            onClick={() => {
-              closeAll();
-            }}
-          >
-            <IcoFlame />
-          </Link>
           <button
             type="button"
-            className={'app-right-rail__btn' + (newsOpen ? ' app-right-rail__btn--active' : '')}
+            className={'app-right-rail__btn' + (dock.activePanel === 'market-movers' ? ' app-right-rail__btn--active' : '')}
+            title="Market Movers"
+            aria-label="Market Movers"
+            aria-expanded={dock.activePanel === 'market-movers'}
+            onClick={toggleMarketMovers}
+          >
+            <IcoFlame />
+          </button>
+          <button
+            type="button"
+            className={'app-right-rail__btn' + (dock.activePanel === 'news' ? ' app-right-rail__btn--active' : '')}
             title="Top news"
             aria-label="Top news"
-            aria-expanded={newsOpen}
+            aria-expanded={dock.activePanel === 'news'}
             onClick={toggleNews}
           >
             <IcoNews />

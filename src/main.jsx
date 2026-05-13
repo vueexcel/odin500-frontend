@@ -71,6 +71,8 @@ function AppRoutes() {
         <Route path="/ticker/:symbol" element={<TickerPage />} />
         <Route path="/indices" element={<Navigate to={`/indices/${DEFAULT_INDEX_ROUTE_SLUG}`} replace />} />
         <Route path="/indices/:indexSlug" element={<IndexPage />} />
+        <Route path="/sector-data" element={<Navigate to="/sector-data/xlk" replace />} />
+        <Route path="/sector-data/:sectorKey" element={<IndexPage />} />
         <Route path="/heatmap" element={<MarketHeatmapPage />} />
         <Route path="/market-movers" element={<MarketMoversPage />} />
         <Route path="/news" element={<NewsPage />} />

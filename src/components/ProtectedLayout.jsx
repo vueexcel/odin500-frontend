@@ -2,15 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { warmWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
-// import { AppHeader } from './AppHeader.jsx';
+import { WatchlistDockProvider, useRightRailDock } from '../context/WatchlistDockContext.jsx';
 import { AppMainTopBar } from './AppMainTopBar.jsx';
 import { AppSidebar } from './AppSidebar.jsx';
 import { AppRightRail } from './AppRightRail.jsx';
+import { WatchlistRailFlyout } from './WatchlistRailFlyout.jsx';
+import { NewsRailFlyout } from './NewsRailFlyout.jsx';
+import { MarketMoversRailFlyout } from './MarketMoversRailFlyout.jsx';
 import { useSitewideSeo } from '../seo/usePageSeo.js';
 
-export function ProtectedLayout() {
+function ProtectedLayoutShell() {
   useSitewideSeo();
   const location = useLocation();
+  const { activePanel, isDockOpen, close: closeRightDock } = useRightRailDock();
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
   const [mobileRightOpen, setMobileRightOpen] = useState(false);
@@ -84,18 +88,22 @@ export function ProtectedLayout() {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
   };
 
+  const closeMobileOverlays = () => {
+    setMobileLeftOpen(false);
+    setMobileRightOpen(false);
+  };
+
   return (
     <div className="app-shell">
-      {/* <AppHeader compact theme={theme} onToggleTheme={toggleTheme} /> */}
       <div className="app-body">
-        {isMobile && (mobileLeftOpen || mobileRightOpen) ? (
+        {isMobile && (mobileLeftOpen || mobileRightOpen || isDockOpen) ? (
           <button
             type="button"
             className="app-mobile-overlay-backdrop"
             aria-label="Close side panels"
             onClick={() => {
-              setMobileLeftOpen(false);
-              setMobileRightOpen(false);
+              closeMobileOverlays();
+              if (isDockOpen) closeRightDock();
             }}
           />
         ) : null}
@@ -105,10 +113,35 @@ export function ProtectedLayout() {
           mobileOpen={isMobile && mobileLeftOpen}
           onRequestClose={() => setMobileLeftOpen(false)}
         />
-        <div className="app-main-column">
+        <div className={'app-main-column' + (isDockOpen ? ' app-main-column--watchlist-open' : '')}>
           <AppMainTopBar theme={theme} onToggleTheme={toggleTheme} />
-          <div className="app-main-scroll" ref={mainScrollRef}>
-            <Outlet />
+          <div className="app-main-after-topbar">
+            <div className="app-main-scroll" ref={mainScrollRef}>
+              <Outlet />
+            </div>
+            {isDockOpen && isMobile ? (
+              <button
+                type="button"
+                className="app-watchlist-dock-backdrop"
+                aria-label="Close panel"
+                onClick={closeRightDock}
+              />
+            ) : null}
+            {activePanel === 'watchlist' ? (
+              <aside className="app-watchlist-dock is-open" aria-label="Watchlist sidebar">
+                <WatchlistRailFlyout open onClose={closeRightDock} docked />
+              </aside>
+            ) : null}
+            {activePanel === 'news' ? (
+              <aside className="app-watchlist-dock is-open" aria-label="Top news">
+                <NewsRailFlyout open onClose={closeRightDock} docked />
+              </aside>
+            ) : null}
+            {activePanel === 'market-movers' ? (
+              <aside className="app-watchlist-dock is-open" aria-label="Market movers">
+                <MarketMoversRailFlyout open onClose={closeRightDock} docked />
+              </aside>
+            ) : null}
           </div>
         </div>
         <AppRightRail mobileOpen={isMobile && mobileRightOpen} onRequestClose={() => setMobileRightOpen(false)} />
@@ -153,3 +186,10 @@ export function ProtectedLayout() {
   );
 }
 
+export function ProtectedLayout() {
+  return (
+    <WatchlistDockProvider>
+      <ProtectedLayoutShell />
+    </WatchlistDockProvider>
+  );
+}

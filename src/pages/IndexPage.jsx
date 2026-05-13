@@ -5,6 +5,7 @@ import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma
 import { TickerMonthlyReturnsChart } from '../components/TickerMonthlyReturnsChart.jsx';
 import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
+import { ReturnsChartFiltersMenu } from '../components/ReturnsChartFiltersMenu.jsx';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import {
   IconChartTypeDropdown,
@@ -16,6 +17,8 @@ import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 import { DEFAULT_INDEX_ROUTE_SLUG } from '../utils/tickerUrlSync.js';
+import { MARKET_SERIES } from '../components/marketSeriesRegistry.js';
+import { rowMatchesSectorEtf } from '../utils/sectorEtfMatch.js';
 
 const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
 const MAX_SIGNAL_RANGE_DAYS = 40000;
@@ -63,13 +66,27 @@ export const INDEX_ROUTE_CHOICES = [
   { slug: 'nasdaq-100', apiIndex: 'Nasdaq 100', label: 'Nasdaq 100' }
 ];
 const INDEX_ROUTE_DROPDOWN_OPTIONS = INDEX_ROUTE_CHOICES.map((opt) => ({ id: opt.slug, label: opt.label }));
+
+/** SPDR sector ETFs (same universe as market page / heatmap sectors). */
+const SECTOR_ROUTE_CHOICES = MARKET_SERIES.filter((s) => s.group === 'sector');
+const SECTOR_ROUTE_DROPDOWN_OPTIONS = SECTOR_ROUTE_CHOICES.map((s) => ({
+  id: s.key.toLowerCase(),
+  label: `${s.label} (${s.ticker})`
+}));
+const DEFAULT_SECTOR_ROUTE_SLUG = 'xlk';
+
 const RELATIVE_STRENGTH_OPTIONS = [
-  
   ...INDEX_ROUTE_CHOICES.map((opt) => ({
     key: `IDX:${opt.slug}`,
     label: opt.label,
     kind: 'index',
     apiIndex: opt.apiIndex
+  })),
+  ...SECTOR_ROUTE_CHOICES.map((s) => ({
+    key: `TK:${s.ticker}`,
+    label: `${s.label} (${s.ticker})`,
+    kind: 'ticker',
+    ticker: s.ticker
   }))
 ];
 const RELATIVE_STRENGTH_DROPDOWN_OPTIONS = RELATIVE_STRENGTH_OPTIONS.map((opt) => ({ id: opt.key, label: opt.label }));
@@ -90,6 +107,16 @@ function sanitizeIndexSlug(raw) {
   };
   if (aliases[s]) return aliases[s];
   return s;
+}
+
+function sanitizeSectorSlug(raw) {
+  const u = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  if (!u) return DEFAULT_SECTOR_ROUTE_SLUG;
+  const found = SECTOR_ROUTE_CHOICES.find((s) => s.key.toLowerCase() === u);
+  return found ? found.key.toLowerCase() : DEFAULT_SECTOR_ROUTE_SLUG;
 }
 
 function pickNum(row, keys) {
@@ -602,29 +629,71 @@ function useMediaChartHeight() {
 
 export default function IndexPage() {
   const location = useLocation();
-  const { indexSlug: indexSlugParam } = useParams();
+  const { indexSlug: indexSlugParam, sectorKey: sectorKeyParam } = useParams();
   const navigate = useNavigate();
+  const isSectorDataRoute = location.pathname.startsWith('/sector-data');
+  const sectorSlugResolved = useMemo(
+    () => (isSectorDataRoute ? sanitizeSectorSlug(sectorKeyParam) : null),
+    [isSectorDataRoute, sectorKeyParam]
+  );
+  const activeSector = useMemo(() => {
+    if (!isSectorDataRoute || !sectorSlugResolved) return null;
+    const key = String(sectorSlugResolved).toUpperCase();
+    return SECTOR_ROUTE_CHOICES.find((s) => s.key === key) || SECTOR_ROUTE_CHOICES.find((s) => s.key === 'XLK') || null;
+  }, [isSectorDataRoute, sectorSlugResolved]);
+
+  useEffect(() => {
+    if (!isSectorDataRoute || !sectorKeyParam) return;
+    const resolved = sanitizeSectorSlug(sectorKeyParam);
+    if (String(sectorKeyParam).toLowerCase().replace(/[^a-z0-9]/g, '') !== resolved) {
+      navigate(`/sector-data/${encodeURIComponent(resolved)}`, { replace: true });
+    }
+  }, [isSectorDataRoute, sectorKeyParam, navigate]);
+
   const [activeSlug, setActiveSlug] = useState(() => sanitizeIndexSlug(indexSlugParam) || 'sp500');
   const slug = activeSlug;
   useEffect(() => {
     const next = sanitizeIndexSlug(indexSlugParam) || 'sp500';
     setActiveSlug((prev) => (prev === next ? prev : next));
   }, [indexSlugParam]);
-  const activeMeta = useMemo(
-    () => INDEX_ROUTE_CHOICES.find((x) => x.slug === slug) || INDEX_ROUTE_CHOICES[0],
-    [slug]
-  );
+
+  const activeMeta = useMemo(() => {
+    if (isSectorDataRoute && activeSector) {
+      return {
+        slug: activeSector.key.toLowerCase(),
+        label: activeSector.label,
+        apiIndex: 'Dow Jones',
+        sectorEtfKey: activeSector.key
+      };
+    }
+    return INDEX_ROUTE_CHOICES.find((x) => x.slug === slug) || INDEX_ROUTE_CHOICES[0];
+  }, [isSectorDataRoute, activeSector, slug]);
+
+  const topDropdownValue = isSectorDataRoute ? sectorSlugResolved || DEFAULT_SECTOR_ROUTE_SLUG : slug;
+  const topDropdownLabel = isSectorDataRoute ? 'Sector' : 'Index';
 
   usePageSeo({
-    title: `${activeMeta.label} Signals & Heatmap | Odin500`,
-    description: `Daily Odin500 signal distribution, heatmap views, and constituent analytics for ${activeMeta.label}.`,
-    canonicalPath: `/indices/${slug}`,
+    title: isSectorDataRoute
+      ? `${activeMeta.label} (${activeSector?.ticker ?? ''}) · Sector data | Odin500`
+      : `${activeMeta.label} Signals & Heatmap | Odin500`,
+    description: isSectorDataRoute
+      ? `Sector ETF ${activeSector?.ticker ?? ''} and Dow Jones constituents in ${activeMeta.label}.`
+      : `Daily Odin500 signal distribution, heatmap views, and constituent analytics for ${activeMeta.label}.`,
+    canonicalPath: isSectorDataRoute
+      ? `/sector-data/${sectorSlugResolved || DEFAULT_SECTOR_ROUTE_SLUG}`
+      : `/indices/${slug}`,
     noindex: Boolean(location.search),
-    breadcrumbItems: [
-      { name: 'Market', path: '/market' },
-      { name: 'Indices', path: '/indices/sp500' },
-      { name: activeMeta.label, path: `/indices/${slug}` }
-    ]
+    breadcrumbItems: isSectorDataRoute
+      ? [
+          { name: 'Market', path: '/market' },
+          { name: 'Sector data', path: `/sector-data/${DEFAULT_SECTOR_ROUTE_SLUG}` },
+          { name: activeMeta.label, path: `/sector-data/${sectorSlugResolved || DEFAULT_SECTOR_ROUTE_SLUG}` }
+        ]
+      : [
+          { name: 'Market', path: '/market' },
+          { name: 'Indices', path: '/indices/sp500' },
+          { name: activeMeta.label, path: `/indices/${slug}` }
+        ]
   });
 
   const [authVersion, setAuthVersion] = useState(0);
@@ -719,6 +788,14 @@ export default function IndexPage() {
     [navigate]
   );
 
+  const onSectorSlugChange = useCallback(
+    (nextId) => {
+      const s = sanitizeSectorSlug(nextId);
+      navigate('/sector-data/' + encodeURIComponent(s));
+    },
+    [navigate]
+  );
+
   const applyCustomChartRange = useCallback(() => {
     const n = normalizeCustomChartRange(draftChartStart, draftChartEnd, asOfDate);
     if (!n) return;
@@ -743,6 +820,8 @@ export default function IndexPage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isCustomRangePopupOpen]);
 
+  const sectorTickerForLoad = isSectorDataRoute && activeSector ? String(activeSector.ticker).trim().toUpperCase() : '';
+
   useEffect(() => {
     let cancelled = false;
     if (!getAuthToken()) {
@@ -764,42 +843,64 @@ export default function IndexPage() {
       setMetaBusy(true);
       setError('');
       try {
-        const idxRes = await fetchJsonCached({
-          path: '/api/market/index-returns',
-          method: 'POST',
-          body: { index: activeMeta.apiIndex },
-          ttlMs: 10 * 60 * 1000
-        });
-        if (cancelled) return;
-        const d = idxRes.data;
-        setIndexPayload(d && typeof d === 'object' ? d : null);
-        const asOf = d?.asOfDate || new Date().toISOString().slice(0, 10);
-        setAsOfDate(asOf);
-        const series = Array.isArray(d?.syntheticCloseSeries) ? d.syntheticCloseSeries : [];
-        setFullCloseSeries(series);
+        if (isSectorDataRoute && sectorTickerForLoad) {
+          const ticker = sectorTickerForLoad;
+          const [retRes, ohlcLongRes] = await Promise.all([
+            fetchJsonCached({
+              path: '/api/market/ticker-returns',
+              method: 'POST',
+              body: { ticker },
+              ttlMs: 15 * 60 * 1000
+            }),
+            fetchJsonCached({
+              path: '/api/market/ohlc?symbol=' + encodeURIComponent(ticker) + '&limit=4000',
+              method: 'GET',
+              ttlMs: 10 * 60 * 1000
+            })
+          ]);
+          if (cancelled) return;
+          const retData = retRes.data && typeof retRes.data === 'object' ? retRes.data : {};
+          const ohlcSorted = sortRowsAsc(ohlcRowsFromPayload(ohlcLongRes.data));
+          const syntheticCloseSeries = ohlcSorted
+            .map((r) => {
+              const date = rowDateToTimeKey(r);
+              const close = pickNum(r, ['Close', 'close']);
+              if (!date || close == null || !Number.isFinite(close)) return null;
+              return { date, close };
+            })
+            .filter(Boolean);
+          const asOf = String(
+            retData.asOfDate ||
+              (ohlcSorted.length ? rowDateToTimeKey(ohlcSorted[ohlcSorted.length - 1]) : '') ||
+              new Date().toISOString().slice(0, 10)
+          ).slice(0, 10);
+          setAsOfDate(asOf);
+          setIndexPayload({
+            officialIndexTicker: ticker,
+            ticker,
+            asOfDate: asOf,
+            syntheticCloseSeries,
+            performance: retData.performance,
+            seriesMode: 'Sector ETF'
+          });
+          setFullCloseSeries(syntheticCloseSeries);
 
-        const asOfD = new Date(String(asOf).slice(0, 10) + 'T12:00:00');
-        const start365 = new Date(asOfD);
-        start365.setFullYear(start365.getFullYear() - 1);
-        const startIso = toIso(start365);
-        const endIso = String(asOf).slice(0, 10);
+          const asOfD = new Date(String(asOf).slice(0, 10) + 'T12:00:00');
+          const start365 = new Date(asOfD);
+          start365.setFullYear(start365.getFullYear() - 1);
+          const startIso = toIso(start365);
+          const endIso = String(asOf).slice(0, 10);
 
-        const symForOhlc =
-          (d?.officialIndexTicker && String(d.officialIndexTicker).trim()) ||
-          (d?.ticker && String(d.ticker).trim()) ||
-          '';
+          const retSpy = await fetchJsonCached({
+            path: '/api/market/ticker-returns',
+            method: 'POST',
+            body: { ticker: BENCHMARK },
+            ttlMs: 15 * 60 * 1000
+          });
+          if (cancelled) return;
+          setReturnsSpy(retSpy.data);
 
-        const retSpy = await fetchJsonCached({
-          path: '/api/market/ticker-returns',
-          method: 'POST',
-          body: { ticker: BENCHMARK },
-          ttlMs: 15 * 60 * 1000
-        });
-        if (cancelled) return;
-        setReturnsSpy(retSpy.data);
-
-        if (symForOhlc) {
-          const u = encodeURIComponent(symForOhlc);
+          const u = encodeURIComponent(ticker);
           const [tailRes, statsSymRes, statsSpyRes] = await Promise.all([
             fetchJsonCached({
               path: '/api/market/ohlc?symbol=' + u + '&limit=8',
@@ -835,29 +936,101 @@ export default function IndexPage() {
           setStatsRows(sortRowsAsc(ohlcRowsFromPayload(statsSymRes.data)));
           setStatsRowsSpy(sortRowsAsc(ohlcRowsFromPayload(statsSpyRes.data)));
         } else {
-          const baseRows = sortRowsAsc(closeSeriesToChartRows(series));
-          const tail = baseRows.slice(-8);
-          setTailRows(tail);
-          const stats = baseRows.filter((r) => {
-            const iso = rowDateToTimeKey(r);
-            return iso && iso >= startIso && iso <= endIso;
-          });
-          setStatsRows(stats.length ? stats : baseRows.slice(-252));
-
-          const statsSpyRes = await fetchJsonCached({
-            path:
-              '/api/market/ohlc?symbol=' +
-              encodeURIComponent(BENCHMARK) +
-              '&start_date=' +
-              encodeURIComponent(startIso) +
-              '&end_date=' +
-              encodeURIComponent(endIso) +
-              '&limit=400',
-            method: 'GET',
+          const idxRes = await fetchJsonCached({
+            path: '/api/market/index-returns',
+            method: 'POST',
+            body: { index: activeMeta.apiIndex },
             ttlMs: 10 * 60 * 1000
           });
           if (cancelled) return;
-          setStatsRowsSpy(sortRowsAsc(ohlcRowsFromPayload(statsSpyRes.data)));
+          const d = idxRes.data;
+          setIndexPayload(d && typeof d === 'object' ? d : null);
+          const asOf = d?.asOfDate || new Date().toISOString().slice(0, 10);
+          setAsOfDate(asOf);
+          const series = Array.isArray(d?.syntheticCloseSeries) ? d.syntheticCloseSeries : [];
+          setFullCloseSeries(series);
+
+          const asOfD = new Date(String(asOf).slice(0, 10) + 'T12:00:00');
+          const start365 = new Date(asOfD);
+          start365.setFullYear(start365.getFullYear() - 1);
+          const startIso = toIso(start365);
+          const endIso = String(asOf).slice(0, 10);
+
+          const symForOhlc =
+            (d?.officialIndexTicker && String(d.officialIndexTicker).trim()) ||
+            (d?.ticker && String(d.ticker).trim()) ||
+            '';
+
+          const retSpy = await fetchJsonCached({
+            path: '/api/market/ticker-returns',
+            method: 'POST',
+            body: { ticker: BENCHMARK },
+            ttlMs: 15 * 60 * 1000
+          });
+          if (cancelled) return;
+          setReturnsSpy(retSpy.data);
+
+          if (symForOhlc) {
+            const u = encodeURIComponent(symForOhlc);
+            const [tailRes, statsSymRes, statsSpyRes] = await Promise.all([
+              fetchJsonCached({
+                path: '/api/market/ohlc?symbol=' + u + '&limit=8',
+                method: 'GET',
+                ttlMs: 60 * 1000
+              }),
+              fetchJsonCached({
+                path:
+                  '/api/market/ohlc?symbol=' +
+                  u +
+                  '&start_date=' +
+                  encodeURIComponent(startIso) +
+                  '&end_date=' +
+                  encodeURIComponent(endIso) +
+                  '&limit=400',
+                method: 'GET',
+                ttlMs: 10 * 60 * 1000
+              }),
+              fetchJsonCached({
+                path:
+                  '/api/market/ohlc?symbol=' +
+                  encodeURIComponent(BENCHMARK) +
+                  '&start_date=' +
+                  encodeURIComponent(startIso) +
+                  '&end_date=' +
+                  encodeURIComponent(endIso) +
+                  '&limit=400',
+                method: 'GET',
+                ttlMs: 10 * 60 * 1000
+              })
+            ]);
+            setTailRows(sortRowsAsc(ohlcRowsFromPayload(tailRes.data)));
+            setStatsRows(sortRowsAsc(ohlcRowsFromPayload(statsSymRes.data)));
+            setStatsRowsSpy(sortRowsAsc(ohlcRowsFromPayload(statsSpyRes.data)));
+          } else {
+            const baseRows = sortRowsAsc(closeSeriesToChartRows(series));
+            const tail = baseRows.slice(-8);
+            setTailRows(tail);
+            const stats = baseRows.filter((r) => {
+              const iso = rowDateToTimeKey(r);
+              return iso && iso >= startIso && iso <= endIso;
+            });
+            setStatsRows(stats.length ? stats : baseRows.slice(-252));
+
+            const statsSpyRes = await fetchJsonCached({
+              path:
+                '/api/market/ohlc?symbol=' +
+                encodeURIComponent(BENCHMARK) +
+                '&start_date=' +
+                encodeURIComponent(startIso) +
+                '&end_date=' +
+                encodeURIComponent(endIso) +
+                '&limit=400',
+              method: 'GET',
+              ttlMs: 10 * 60 * 1000
+            });
+            if (cancelled) return;
+            setStatsRowsSpy(sortRowsAsc(ohlcRowsFromPayload(statsSpyRes.data)));
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -877,7 +1050,7 @@ export default function IndexPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeMeta.apiIndex, authVersion]);
+  }, [isSectorDataRoute, sectorTickerForLoad, activeMeta.apiIndex, authVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -925,7 +1098,7 @@ export default function IndexPage() {
 
   useEffect(() => {
     setNewsPage(1);
-  }, [slug]);
+  }, [slug, isSectorDataRoute, sectorSlugResolved]);
 
   const allChartRows = useMemo(() => sortRowsAsc(closeSeriesToChartRows(fullCloseSeries)), [fullCloseSeries]);
 
@@ -963,16 +1136,30 @@ export default function IndexPage() {
     return liveNews.slice(start, start + NEWS_PAGE_SIZE);
   }, [liveNews, newsPageSafe]);
 
-  const relatedIndexLinks = useMemo(
-    () => INDEX_ROUTE_CHOICES.filter((x) => x.slug !== slug),
-    [slug]
-  );
+  const relatedIndexLinks = useMemo(() => {
+    if (isSectorDataRoute && activeSector) {
+      return SECTOR_ROUTE_CHOICES.filter((x) => x.key !== activeSector.key).map((x) => ({
+        slug: x.key.toLowerCase(),
+        label: x.label,
+        to: `/sector-data/${encodeURIComponent(x.key.toLowerCase())}`
+      }));
+    }
+    return INDEX_ROUTE_CHOICES.filter((x) => x.slug !== slug).map((x) => ({
+      slug: x.slug,
+      label: x.label,
+      to: `/indices/${encodeURIComponent(x.slug)}`
+    }));
+  }, [isSectorDataRoute, activeSector, slug]);
 
   useEffect(() => {
-    setRelativeLeftKey(`IDX:${slug}`);
-    setRelativeRightKey('SPX');
     setIndexTickersPage(1);
-  }, [slug]);
+    if (isSectorDataRoute && activeSector) {
+      setRelativeLeftKey(`TK:${activeSector.ticker}`);
+    } else {
+      setRelativeLeftKey(`IDX:${slug}`);
+    }
+    setRelativeRightKey('SPX');
+  }, [isSectorDataRoute, slug, activeSector?.ticker]);
 
   const dynamicSym = returnsSym?.performance?.dynamicPeriods || [];
   const dynamicSpy = returnsSpy?.performance?.dynamicPeriods || [];
@@ -1219,13 +1406,13 @@ export default function IndexPage() {
   const spyQtd = qtdFromRows(statsSpySorted);
 
   useEffect(() => {
-    const currentKey = `IDX:${slug}`;
+    const leftKey = isSectorDataRoute && activeSector ? `TK:${activeSector.ticker}` : `IDX:${slug}`;
     setRelativeSeriesByKey((prev) => ({
       ...prev,
-      [currentKey]: { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd },
+      [leftKey]: { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd },
       SPX: { dynamicPeriods: dynamicSpy, mtd: spyMtd, qtd: spyQtd }
     }));
-  }, [slug, dynamicSym, symMtd, symQtd, dynamicSpy, spyMtd, spyQtd]);
+  }, [isSectorDataRoute, slug, activeSector?.ticker, dynamicSym, symMtd, symQtd, dynamicSpy, spyMtd, spyQtd]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1271,9 +1458,13 @@ export default function IndexPage() {
         });
         if (cancelled) return;
         const rows = Array.isArray(data?.data) ? data.data : [];
-        const mapped = rows
+        const filtered =
+          isSectorDataRoute && activeSector
+            ? rows.filter((r) => rowMatchesSectorEtf(activeSector.key, r.Sector || r.sector))
+            : rows;
+        const mapped = filtered
           .map((r) => ({
-            symbol: String(r.symbol || '').toUpperCase().trim(),
+            symbol: String(r.symbol || r.Symbol || '').toUpperCase().trim(),
             close: Number(r.price),
             ret1d: Number(r.totalReturnPercentage)
           }))
@@ -1288,7 +1479,7 @@ export default function IndexPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeMeta.apiIndex, authVersion]);
+  }, [activeMeta.apiIndex, authVersion, isSectorDataRoute, activeSector?.key]);
 
   const relativeLeftSeries =
     relativeSeriesByKey[relativeLeftKey] || { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd };
@@ -1369,18 +1560,18 @@ export default function IndexPage() {
     <div className="ticker-page">
       <div className="ticker-page__search-row">
         <label className="ticker-page__label" htmlFor="index-dash-select" style={{ marginRight: 8 }}>
-          Index
+          {topDropdownLabel}
         </label>
         <ThemedDropdown
           buttonId="index-dash-select"
           wideLabel
           style={{ minWidth: 220, maxWidth: '100%' }}
-          value={slug}
-          options={INDEX_ROUTE_DROPDOWN_OPTIONS}
-          onChange={onIndexSlugChange}
-          title="Index universe"
-          ariaLabelPrefix="Index"
-          labelFallback={activeMeta.label}
+          value={topDropdownValue}
+          options={isSectorDataRoute ? SECTOR_ROUTE_DROPDOWN_OPTIONS : INDEX_ROUTE_DROPDOWN_OPTIONS}
+          onChange={isSectorDataRoute ? onSectorSlugChange : onIndexSlugChange}
+          title={isSectorDataRoute ? 'Sector ETF' : 'Index universe'}
+          ariaLabelPrefix={topDropdownLabel}
+          labelFallback={isSectorDataRoute ? activeSector?.label ?? '' : activeMeta.label}
         />
         {metaBusy ? <span className="ticker-page__loading-pill">Loading…</span> : null}
       </div>
@@ -1445,7 +1636,10 @@ export default function IndexPage() {
               <span className="ticker-page__metric-value">{seriesModeLabel}</span>
               <DataInfoTip align="start">
                 <p className="ticker-data-tip__p">
-                  <strong>seriesMode</strong> from index-returns: official single-ticker path vs synthetic constituents.
+                  <strong>seriesMode</strong>{' '}
+                  {isSectorDataRoute
+                    ? 'Sector view uses ticker returns and OHLC for the selected SPDR sector ETF.'
+                    : 'from index-returns: official single-ticker path vs synthetic constituents.'}
                 </p>
               </DataInfoTip>
             </div>
@@ -1746,56 +1940,85 @@ export default function IndexPage() {
             defaultToLatestYear
             loading={metaBusy}
           />
-          <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>
-          <div className="flex align-centers"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-<g clip-path="url(#clip0_609_23954)">
-<path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
-<defs>
-<clipPath id="clip0_609_23954">
-<rect width="14" height="14" fill="white"/>
-</clipPath>
-</defs>
-</svg>
-</div>
-            <h3 className="ticker-subh ticker-subh--flex">Relative Strength selector</h3>
-            <DataInfoTip align="start">
-              <p className="ticker-data-tip__p">Choose two indices; table and bars show return% difference (left minus right).</p>
-            </DataInfoTip>
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-            <ThemedDropdown
-              wideLabel
-              style={{ minWidth: 220, maxWidth: '100%' }}
-              value={relativeLeftKey}
-              options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
-              onChange={setRelativeLeftKey}
-              title="Relative strength left"
-              ariaLabelPrefix="Left index"
-              labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeLeftKey)?.label ?? ''}
+          <section className="ticker-card ticker-card--rs-benchmark" aria-labelledby="index-rs-selector-h">
+            <div className="ticker-subh-with-tip ticker-subh-with-tip--in-card ticker-rs-selector-head">
+              <div className="ticker-rs-selector-head__left">
+                <div className="flex shrink-0 align-centers">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <g clipPath="url(#clip0_index_rs_icon)">
+                      <path
+                        d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z"
+                        stroke="white"
+                        strokeWidth="0.875"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z"
+                        stroke="white"
+                        strokeWidth="0.875"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </g>
+                    <defs>
+                      <clipPath id="clip0_index_rs_icon">
+                        <rect width="14" height="14" fill="white" />
+                      </clipPath>
+                    </defs>
+                  </svg>
+                </div>
+                <div className="ticker-subh-left">
+                  <h3 id="index-rs-selector-h" className="ticker-subh ticker-subh--flex">
+                    Relative Strength selector
+                  </h3>
+                  <DataInfoTip align="start">
+                    <p className="ticker-data-tip__p">
+                      Choose two indices; table and bars show return% difference (left minus right).
+                    </p>
+                  </DataInfoTip>
+                </div>
+              </div>
+              <div className="ticker-rs-selector-head__right">
+                <ReturnsChartFiltersMenu className="ticker-rs-selector-head__filters">
+                  <div className="ticker-rs-controls ticker-rs-controls--in-filters-panel">
+                    <ThemedDropdown
+                      wideLabel
+                      style={{ minWidth: 0, maxWidth: '100%' }}
+                      value={relativeLeftKey}
+                      options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
+                      onChange={setRelativeLeftKey}
+                      title="Relative strength left"
+                      ariaLabelPrefix="Left index"
+                      labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeLeftKey)?.label ?? ''}
+                    />
+                    <ThemedDropdown
+                      wideLabel
+                      style={{ minWidth: 0, maxWidth: '100%' }}
+                      value={relativeRightKey}
+                      options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
+                      onChange={setRelativeRightKey}
+                      title="Relative strength right"
+                      ariaLabelPrefix="Right index"
+                      labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeRightKey)?.label ?? ''}
+                    />
+                    {relativeBusy ? (
+                      <span className="ticker-page__loading-pill">Loading relative strength…</span>
+                    ) : null}
+                  </div>
+                </ReturnsChartFiltersMenu>
+              </div>
+            </div>
+            <TickerSection16Section17
+              rows={section16Rows}
+              compareRows={section17CompareRows}
+              relativeStrengthTitle={`Relative Strength vs ${relativeRightLabel}`}
+              relativeStrengthHeader={`Relative Strength (${relativeLeftLabel} - ${relativeRightLabel})`}
             />
-            <ThemedDropdown
-              wideLabel
-              style={{ minWidth: 220, maxWidth: '100%' }}
-              value={relativeRightKey}
-              options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
-              onChange={setRelativeRightKey}
-              title="Relative strength right"
-              ariaLabelPrefix="Right index"
-              labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeRightKey)?.label ?? ''}
-            />
-            {relativeBusy ? <span className="ticker-page__loading-pill">Loading relative strength…</span> : null}
-          </div>
-          <TickerSection16Section17
-            rows={section16Rows}
-            compareRows={section17CompareRows}
-            relativeStrengthTitle={`Relative Strength vs ${relativeRightLabel}`}
-            relativeStrengthHeader={`Relative Strength (${relativeLeftLabel} - ${relativeRightLabel})`}
-          />
+          </section>
         </div>
 
-        <aside className="ticker-page__aside">
+        <aside className="ticker-page__aside index-page__aside-stack">
           {/* <section className="ticker-card ticker-card--signal" aria-labelledby="index-odin-signal-h">
             <div className="ticker-signal-head">
               <span className="ticker-signal-logo" aria-hidden />
@@ -1849,66 +2072,37 @@ export default function IndexPage() {
             </div>
           </section> */}
 
-          <section className="ticker-card" aria-labelledby="index-key-data-h">
-            {/* <div className="ticker-card__h-with-tip">
-              <h2 className="ticker-card__h ticker-card__h--flex" id="index-key-data-h">
-                Key data &amp; performance
-              </h2>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  <strong>52-week range</strong> from ~1y daily OHLC when an official index ticker exists; otherwise from the index close series in
-                  that window.
-                </p>
-              </DataInfoTip>
-            </div>
-            <div className="ticker-kd-grid">
-              <dl className="ticker-kd-dl">
-                <div className="ticker-kd-row">
-                  <dt>Dividend yield</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>52-week range</dt>
-                  <dd>{hi52 != null && lo52 != null ? `${formatPx(lo52)} – ${formatPx(hi52)}` : '—'}</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>Beta</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>Volatility (ann.)</dt>
-                  <dd>{vola != null ? `${vola}%` : '—'}</dd>
-                </div>
-              </dl>
-              <dl className="ticker-kd-dl">
-                <div className="ticker-kd-row">
-                  <dt>Avg volume (1y)</dt>
-                  <dd>{ohlcSymbol ? formatVolLong(avgVol) : '—'}</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>Market cap</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>P/E (TTM)</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>EPS (TTM)</dt>
-                  <dd>—</dd>
-                </div>
-              </dl>
-            </div> */}
-            <div className="ticker-subh-with-tip">
-              <h3 className="ticker-subh ticker-subh--flex">{activeMeta.label} Constituents</h3>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  Source: <code className="ticker-data-tip__code">POST /api/market/ticker-details</code> with period{' '}
-                  <code className="ticker-data-tip__code">last-date</code>. Return % is 1D.
-                </p>
-              </DataInfoTip>
-            </div>
-            <div className="index-constituents-card">
+          <section className="mkt-mini-card index-aside-mini" aria-labelledby="index-constituents-h">
+            <header className="mkt-mini-card__head">
+              <span className="mkt-mini-card__k" id="index-constituents-h">
+                {isSectorDataRoute ? (
+                  <>
+                    Dow Jones
+                    <span className="mkt-mini-card__k"> Constituents</span>
+                    {activeSector ? (
+                      <>
+                        {' '}
+                        · <span className="mkt-mini-card__k">{activeSector.label}</span>
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    {activeMeta.label}
+                    <span className="mkt-mini-card__k"> Constituents</span>
+                  </>
+                )}
+              </span>
+              <span className="mkt-mini-card__head-actions">
+                <DataInfoTip align="start">
+                  <p className="ticker-data-tip__p">
+                    Source: <code className="ticker-data-tip__code">POST /api/market/ticker-details</code> with period{' '}
+                    <code className="ticker-data-tip__code">last-date</code>. Return % is 1D.
+                  </p>
+                </DataInfoTip>
+              </span>
+            </header>
+            <div className="index-constituents-card index-constituents-card--mkt">
               <div className="index-constituents-table-wrap">
                 <table className="index-constituents-table">
                   <thead>
@@ -1947,67 +2141,82 @@ export default function IndexPage() {
                 <FigmaPagination page={indexTickersPageSafe} totalPages={indexTickersTotalPages} onPageChange={setIndexTickersPage} />
               ) : null}
             </div>
-            <p className="ticker-page__label ticker-kd-comp-label custom-margin" style={{ marginTop: 10 }}>Other indices</p>
-            <p className="ticker-kd-comp">
-              {relatedIndexLinks.length ? (
-                relatedIndexLinks.map((x) => (
-                  <Link key={x.slug} to={`/indices/${encodeURIComponent(x.slug)}`} className="ticker-kd-comp__a">
-                    {x.label}
-                  </Link>
-                ))
-              ) : (
-                <span className="ticker-page__muted">—</span>
-              )}
-            </p>
+          </section>
 
-            
-
-            <div className="ticker-subh-with-tip">
-              <h3 className="ticker-subh ticker-subh--flex">
-              Relative Performance (%)
-              </h3>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  <strong>MTD / QTD</strong> use the same ~1y OHLC samples as the ticker page when an official index OHLC symbol exists; otherwise MTD/QTD for the index may be limited.
-                </p>
-              </DataInfoTip>
+          <section className="mkt-mini-card index-aside-mini" aria-labelledby="index-other-indices-h">
+            <header className="mkt-mini-card__head">
+              <span className="mkt-mini-card__k" id="index-other-indices-h">
+                {isSectorDataRoute ? 'Other sectors' : 'Other indices'}
+              </span>
+            </header>
+            <div className="index-aside-mini__body">
+              <p className="ticker-kd-comp">
+                {relatedIndexLinks.length ? (
+                  relatedIndexLinks.map((x) => (
+                    <Link key={x.slug} to={x.to} className="ticker-kd-comp__a">
+                      {x.label}
+                    </Link>
+                  ))
+                ) : (
+                  <span className="ticker-page__muted">—</span>
+                )}
+              </p>
             </div>
-            <div className="ticker-compare">
-              <div className="ticker-compare__head">
-                <span />
-                <span>{displaySym}</span>
-                <span>{BENCHMARK}</span>
-                <span>Diff</span>
+          </section>
+
+          <section className="mkt-mini-card index-aside-mini" aria-labelledby="index-rel-perf-h">
+            <header className="mkt-mini-card__head">
+              <span className="mkt-mini-card__k" id="index-rel-perf-h">
+                Relative performance
+                <span className="mkt-mini-card__tf">%</span>
+              </span>
+              <span className="mkt-mini-card__head-actions">
+                <DataInfoTip align="start">
+                  <p className="ticker-data-tip__p">
+                    <strong>MTD / QTD</strong> use the same ~1y OHLC samples as the ticker page when an official index OHLC symbol exists; otherwise
+                    MTD/QTD for the index may be limited.
+                  </p>
+                </DataInfoTip>
+              </span>
+            </header>
+            <div className="index-aside-mini__body">
+              <div className="ticker-compare">
+                <div className="ticker-compare__head">
+                  <span />
+                  <span>{displaySym}</span>
+                  <span>{BENCHMARK}</span>
+                  <span>Diff</span>
+                </div>
+                {COMPARE_ROWS.map((row) => {
+                  const symPct = row.period
+                    ? pickDynamic(dynamicSym, row.period)
+                    : row.mtd
+                      ? symMtd
+                      : row.qtd
+                        ? symQtd
+                        : null;
+                  const spyPct = row.period
+                    ? pickDynamic(dynamicSpy, row.period)
+                    : row.mtd
+                      ? spyMtd
+                      : row.qtd
+                        ? spyQtd
+                        : null;
+                  const diff =
+                    symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct)
+                      ? symPct - spyPct
+                      : null;
+                  return (
+                    <div key={row.key} className="ticker-compare__row">
+                      <span className="ticker-compare__tf">{row.key}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(symPct)}>{formatPct(symPct)}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(spyPct)}>{formatPct(spyPct)}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(diff)}>{formatPct(diff)}</span>
+                    </div>
+                  );
+                })}
               </div>
-              {COMPARE_ROWS.map((row) => {
-                const symPct = row.period
-                  ? pickDynamic(dynamicSym, row.period)
-                  : row.mtd
-                    ? symMtd
-                    : row.qtd
-                      ? symQtd
-                      : null;
-                const spyPct = row.period
-                  ? pickDynamic(dynamicSpy, row.period)
-                  : row.mtd
-                    ? spyMtd
-                    : row.qtd
-                      ? spyQtd
-                      : null;
-                const diff =
-                  symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct)
-                    ? symPct - spyPct
-                    : null;
-                return (
-                  <div key={row.key} className="ticker-compare__row">
-                    <span className="ticker-compare__tf">{row.key}</span>
-                    <span className={'ticker-compare__cell ' + pctClass(symPct)}>{formatPct(symPct)}</span>
-                    <span className={'ticker-compare__cell ' + pctClass(spyPct)}>{formatPct(spyPct)}</span>
-                    <span className={'ticker-compare__cell ' + pctClass(diff)}>{formatPct(diff)}</span>
-                  </div>
-                );
-              })}
-            </div>            
+            </div>
           </section>
         </aside>
       </div>

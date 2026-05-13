@@ -1,9 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
+import { getReturnsChartViewMoreHref } from '../utils/returnsViewMoreNavigation.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
-import { QuarterlyDualPanelChartSkeleton } from './ChartSkeletons.jsx';
+import { useReturnsChartFiltersMenuMode } from '../context/WatchlistDockContext.jsx';
+import { QuarterlyDualPanelChartSkeleton, QuarterlyReturnsToolbarBadge } from './ChartSkeletons.jsx';
+import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
 
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
 const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
@@ -75,6 +78,12 @@ function csvEscape(s) {
   return t;
 }
 
+/** Tailwind-only caption under quarterly panel SVGs (above legend). */
+const QTR_TOTAL_YEARS_CAPTION =
+  'm-0 w-full shrink-0 px-2 pt-1.5 pb-0 text-center text-[0.72rem] font-semibold leading-snug';
+
+const QTR_TOTAL_YEARS_STRONG = 'font-extrabold text-slate-900 dark:text-slate-100';
+
 /**
  * Two grouped quarterly bar charts (by year | by quarter), dark UI + per-panel info tips.
  * @param {{ symbol: string, quarterlyReturns?: unknown[], quarterlyReturnsAll?: unknown[], asOfDate?: string, plotHeight?: number, showOpenPeriodPageButton?: boolean, toolbarControls?: import('react').ReactNode, loading?: boolean }} props
@@ -90,6 +99,8 @@ export function TickerQuarterlyReturnsChart({
   loading = false
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const filtersMenuMode = useReturnsChartFiltersMenuMode();
   const rowsAll = useMemo(() => buildRows(quarterlyReturnsAll ?? quarterlyReturns), [quarterlyReturnsAll, quarterlyReturns]);
   const rows = useMemo(() => buildRows(quarterlyReturns), [quarterlyReturns]);
   const [showTable, setShowTable] = useState(false);
@@ -121,6 +132,8 @@ export function TickerQuarterlyReturnsChart({
     years.forEach((y, i) => m.set(y, YEAR_PALETTE[i % YEAR_PALETTE.length]));
     return m;
   }, [years]);
+
+  const totalYearsInSelection = years.length;
 
   const leftSvg = useMemo(() => {
     if (!years.length) return null;
@@ -319,30 +332,46 @@ export function TickerQuarterlyReturnsChart({
   }, [filteredRows, symU]);
 
   const onViewMore = useCallback(() => {
-    const params = new URLSearchParams({ section: 'quarterly' });
-    const sym = String(symbol || '').trim().toUpperCase();
-    if (sym) params.set('symbol', sym);
-    console.info('[view-more] quarterly click', {
-      fromPath: window.location.pathname,
-      fromSearch: window.location.search,
-      to: `/statistic-data?${params.toString()}`
+    const to = getReturnsChartViewMoreHref({
+      pathname: location.pathname,
+      search: location.search,
+      periodMode: 'quarterly',
+      symbol
     });
-    navigate(`/statistic-data?${params.toString()}`);
+    navigate(to);
     queueMicrotask(() => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    setTimeout(() => {
-      console.info('[view-more] quarterly post-nav check', {
-        currentPath: window.location.pathname,
-        currentSearch: window.location.search
-      });
-    }, 150);
-  }, [navigate, symbol]);
+  }, [navigate, location.pathname, location.search, symbol]);
 
   const onOpenQuarterlyPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
     navigate('/statistic/ticker-quarterly/' + encodeURIComponent(symPart));
   }, [navigate, symbol]);
+
+  const primaryToolbarButtons = (
+    <>
+      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onViewMore}>
+        View More
+      </button>
+      {showOpenPeriodPageButton ? (
+        <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onOpenQuarterlyPage}>
+          Open Quarterly Page
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="ticker-annual-figma__btn"
+        onClick={() => setShowTable((v) => !v)}
+        aria-pressed={showTable}
+      >
+        <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
+      </button>
+      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
+        <IcoDownload /> Download CSV
+      </button>
+    </>
+  );
 
   if (!rowsAll.length) {
     if (loading) {
@@ -352,7 +381,7 @@ export function TickerQuarterlyReturnsChart({
       <div className="ticker-quarterly">
         <div className="ticker-annual-figma__section">
           <div className="ticker-annual-figma__toolbar">
-            <span className="ticker-annual-figma__badge">Quarterly returns</span>
+            <QuarterlyReturnsToolbarBadge />
           </div>
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">
@@ -368,40 +397,21 @@ export function TickerQuarterlyReturnsChart({
     <div className="ticker-quarterly">
       <div className="ticker-annual-figma__section">
         <div className="ticker-annual-figma__toolbar">
-          <span className="ticker-annual-figma__badge">Quarterly returns</span>
-          <div className="ticker-annual-figma__actions">
-            <button
-              type="button"
-              className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
-              onClick={onViewMore}
-            >
-              View More
-            </button>
-            {showOpenPeriodPageButton ? (
-              <button
-                type="button"
-                className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
-                onClick={onOpenQuarterlyPage}
-              >
-                Open Quarterly Page
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="ticker-annual-figma__btn"
-              onClick={() => setShowTable((v) => !v)}
-              aria-pressed={showTable}
-            >
-              <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
-            </button>
-            <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
-              <IcoDownload /> Download CSV
-            </button>
+          <QuarterlyReturnsToolbarBadge />
+          {filtersMenuMode ? (
+            <ReturnsChartFiltersMenu>
+              {primaryToolbarButtons}
+              {toolbarControls ? <div className="returns-chart-filters-menu__extras">{toolbarControls}</div> : null}
+            </ReturnsChartFiltersMenu>
+          ) : (
+            <div className="ticker-annual-figma__actions">{primaryToolbarButtons}</div>
+          )}
+        </div>
+        {!filtersMenuMode ? (
+          <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
+            <div className="ticker-annual-figma__left">{toolbarControls}</div>
           </div>
-        </div>
-        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
-          <div className="ticker-annual-figma__left">{toolbarControls}</div>
-        </div>
+        ) : null}
 
         {rows.length > 0 && !filteredRows.length ? (
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
@@ -442,6 +452,9 @@ export function TickerQuarterlyReturnsChart({
               </div>
             </div>
             {leftSvg}
+            <p className={QTR_TOTAL_YEARS_CAPTION}>
+              Total years: <strong className={QTR_TOTAL_YEARS_STRONG}>{totalYearsInSelection}</strong>
+            </p>
             <div className="ticker-quarterly__legend-row">
               {[1, 2, 3, 4].map((q) => (
                 <span key={q} className="ticker-annual-figma__legend-item">
@@ -482,6 +495,9 @@ export function TickerQuarterlyReturnsChart({
               </div>
             </div>
             {rightSvg}
+            <p className={QTR_TOTAL_YEARS_CAPTION}>
+              Total years: <strong className={QTR_TOTAL_YEARS_STRONG}>{totalYearsInSelection}</strong>
+            </p>
             <div className="ticker-quarterly__legend-row ticker-quarterly__legend-row--wrap">
               {years.map((yr) => (
                 <span key={yr} className="ticker-annual-figma__legend-item">

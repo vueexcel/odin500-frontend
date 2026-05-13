@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { formatWeekAxisDate, isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
 import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
+import { getReturnsChartViewMoreHref } from '../utils/returnsViewMoreNavigation.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
+import { useReturnsChartFiltersMenuMode } from '../context/WatchlistDockContext.jsx';
 import { MonthlyReturnsChartSkeleton } from './ChartSkeletons.jsx';
+import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
 
 const COL_BAR = '#2563eb';
 const COL_BAR_NEG = '#f59e0b';
@@ -96,7 +99,7 @@ function yForValue(v, innerTop, innerH, yMin, yMax) {
 
 /**
  * Monthly returns for one calendar year (Figma-style), with year dropdown + info tip.
- * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, useThemedYearDropdown?: boolean, defaultToLatestYear?: boolean, hideChartDateApplyRow?: boolean, loading?: boolean }} props
+ * @param {{ symbol: string, monthlyReturns?: unknown[], asOfDate?: string, plotHeight?: number, periodMode?: 'monthly' | 'weekly' | 'daily', suppressChartDateFilter?: boolean, showOpenPeriodPageButton?: boolean, useThemedYearDropdown?: boolean, defaultToLatestYear?: boolean, hideChartDateApplyRow?: boolean, chartToolbarExtras?: import('react').ReactNode, loading?: boolean }} props
  */
 export function TickerMonthlyReturnsChart({
   symbol,
@@ -109,9 +112,12 @@ export function TickerMonthlyReturnsChart({
   useThemedYearDropdown = false,
   defaultToLatestYear = false,
   hideChartDateApplyRow = false,
+  chartToolbarExtras = null,
   loading = false
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const filtersMenuMode = useReturnsChartFiltersMenuMode();
   const isMonthlyMode = periodMode === 'monthly';
   const [showTable, setShowTable] = useState(false);
   const [rangeApplied, setRangeApplied] = useState({ start: '', end: '' });
@@ -367,28 +373,17 @@ export function TickerMonthlyReturnsChart({
   }, [selectedYearRows, selectedYear, symU, periodMode]);
 
   const onViewMore = useCallback(() => {
-    const section = periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'monthly';
-    const params = new URLSearchParams({ section });
-    const sym = String(symbol || '').trim().toUpperCase();
-    if (sym) params.set('symbol', sym);
-    console.info('[view-more] monthly chart click', {
+    const to = getReturnsChartViewMoreHref({
+      pathname: location.pathname,
+      search: location.search,
       periodMode,
-      fromPath: window.location.pathname,
-      fromSearch: window.location.search,
-      to: `/statistic-data?${params.toString()}`
+      symbol
     });
-    navigate(`/statistic-data?${params.toString()}`);
+    navigate(to);
     queueMicrotask(() => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    setTimeout(() => {
-      console.info('[view-more] monthly chart post-nav check', {
-        periodMode,
-        currentPath: window.location.pathname,
-        currentSearch: window.location.search
-      });
-    }, 150);
-  }, [navigate, periodMode, symbol]);
+  }, [navigate, location.pathname, location.search, periodMode, symbol]);
 
   const onOpenPeriodPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
@@ -426,6 +421,52 @@ export function TickerMonthlyReturnsChart({
     ) : null;
   const showYearInToolbar = isMonthlyMode || hideChartDateApplyRow;
 
+  const yearTrailingSelect =
+    !isMonthlyMode && !suppressChartDateFilter && !hideChartDateApplyRow ? (
+      <div className="ticker-monthly__select-wrap">
+        <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-year-trailing">
+          Year
+        </label>
+        <ThemedDropdown
+          buttonId="ticker-monthly-year-trailing"
+          className="ticker-monthly__select-dd"
+          size="sm"
+          value={String(selectedYear)}
+          options={yearDropdownOptions}
+          onChange={(v) => setSelectedYear(Number(v))}
+          title="Year"
+          ariaLabelPrefix="Year"
+          labelFallback={String(selectedYear)}
+        />
+      </div>
+    ) : null;
+
+  const toolbarActionsRow = (
+    <>
+      {chartToolbarExtras}
+      {showYearInToolbar ? yearToolbarDropdown : null}
+      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onViewMore}>
+        View More
+      </button>
+      {showOpenPeriodPageButton ? (
+        <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onOpenPeriodPage}>
+          Open {periodMode === 'weekly' ? 'Weekly' : periodMode === 'daily' ? 'Daily' : 'Monthly'} Page
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="ticker-annual-figma__btn"
+        onClick={() => setShowTable((v) => !v)}
+        aria-pressed={showTable}
+      >
+        <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
+      </button>
+      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
+        <IcoDownload /> Download CSV
+      </button>
+    </>
+  );
+
   if (!rows.length) {
     if (loading) {
       return <MonthlyReturnsChartSkeleton periodMode={periodMode} />;
@@ -448,7 +489,7 @@ export function TickerMonthlyReturnsChart({
 </defs>
 </svg>
 </div>
-              <span className="ticker-monthly__title">{periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Monthly returns'}</span>
+              <span className="ticker-monthly__title uppercase">{periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Monthly returns'}</span>
               <DataInfoTip align="end">
                 <p className="ticker-data-tip__p">
                   <strong>Monthly returns</strong> use <code className="ticker-data-tip__code">performance.monthlyReturns</code> from{' '}
@@ -475,11 +516,14 @@ export function TickerMonthlyReturnsChart({
                 labelFallback={String(selectedYear)}
                 disabled
               />
-            ) : null}
-          </div>
-          {showDateApplyRow ? (
-            <ChartDateApplyRow
-              idPrefix="monthly-returns-empty"
+          ) : null}
+        </div>
+        {chartToolbarExtras ? (
+          <div className="flex flex-wrap items-center gap-2 px-1 py-1">{chartToolbarExtras}</div>
+        ) : null}
+        {showDateApplyRow ? (
+          <ChartDateApplyRow
+            idPrefix="monthly-returns-empty"
               maxDate={asOfDate}
               onApply={({ start, end }) => setRangeApplied({ start, end })}
             />
@@ -511,7 +555,7 @@ export function TickerMonthlyReturnsChart({
 </defs>
 </svg>
 </div>
-            <span className="ticker-monthly__title">{periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Monthly returns'}</span>
+            <span className="ticker-monthly__title uppercase">{periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Monthly returns'}</span>
             <DataInfoTip align="end">
               <p className="ticker-data-tip__p">
                 <strong>Data</strong>: <code className="ticker-data-tip__code">performance.monthlyReturns</code> from{' '}
@@ -541,55 +585,18 @@ export function TickerMonthlyReturnsChart({
             </DataInfoTip>
           </div>
           <div className="ticker-monthly__head-right">
-          <div className="ticker-annual-figma__actions ticker-monthly__actions-right">
-            {showYearInToolbar ? yearToolbarDropdown : null}
-            <button
-              type="button"
-              className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
-              onClick={onViewMore}
-            >
-              View More
-            </button>
-            {showOpenPeriodPageButton ? (
-              <button
-                type="button"
-                className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
-                onClick={onOpenPeriodPage}
-              >
-                Open {periodMode === 'weekly' ? 'Weekly' : periodMode === 'daily' ? 'Daily' : 'Monthly'} Page
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="ticker-annual-figma__btn"
-              onClick={() => setShowTable((v) => !v)}
-              aria-pressed={showTable}
-            >
-              <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
-            </button>
-            <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
-              <IcoDownload /> Download CSV
-            </button>
+            {filtersMenuMode ? (
+              <ReturnsChartFiltersMenu>
+                {toolbarActionsRow}
+                {!showYearInToolbar ? yearTrailingSelect : null}
+              </ReturnsChartFiltersMenu>
+            ) : (
+              <div className="ticker-annual-figma__actions ticker-monthly__actions-right min-w-0 flex flex-wrap items-center gap-2">
+                {toolbarActionsRow}
+              </div>
+            )}
           </div>
-          </div>
-          {!isMonthlyMode && !suppressChartDateFilter && !hideChartDateApplyRow ? (
-            <div className="ticker-monthly__select-wrap">
-              <label className="ticker-monthly__select-label" htmlFor="ticker-monthly-year-trailing">
-                Year
-              </label>
-              <ThemedDropdown
-                buttonId="ticker-monthly-year-trailing"
-                className="ticker-monthly__select-dd"
-                size="sm"
-                value={String(selectedYear)}
-                options={yearDropdownOptions}
-                onChange={(v) => setSelectedYear(Number(v))}
-                title="Year"
-                ariaLabelPrefix="Year"
-                labelFallback={String(selectedYear)}
-              />
-            </div>
-          ) : null}
+          {!filtersMenuMode ? yearTrailingSelect : null}
         </div>
         {showDateApplyRow ? (
           <ChartDateApplyRow
@@ -609,7 +616,7 @@ export function TickerMonthlyReturnsChart({
           )}
         </div>
 
-        <div className="ticker-annual-figma__legend ticker-monthly__legend">
+        <div className="ticker-annual-figma__legends ticker-monthly__legend justify-center" >
           <span className="ticker-annual-figma__legend-item">
             <span className="ticker-monthly__swatch" aria-hidden />
             {selectedYear}

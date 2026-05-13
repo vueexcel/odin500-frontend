@@ -8,7 +8,8 @@ import { TickerMonthlyReturnsWaterfallDonut } from '../components/TickerMonthlyR
 import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
 import { TickerSection23Section24 } from '../components/TickerSection23Section24.jsx';
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
-import { WatchlistRailFlyout } from '../components/WatchlistRailFlyout.jsx';
+import { useWatchlistDock } from '../context/WatchlistDockContext.jsx';
+import { ReturnsChartFiltersMenu } from '../components/ReturnsChartFiltersMenu.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
@@ -566,76 +567,29 @@ function useMediaChartHeight() {
 }
 
 export default function TickerPage() {
-  const WATCHLIST_ANIM_MS = 260;
   const location = useLocation();
   const { symbol: symbolParam } = useParams();
   const navigate = useNavigate();
+  const watchlistDock = useWatchlistDock();
   const [activeSymbol, setActiveSymbol] = useState(() => sanitizeTickerPageInput(symbolParam) || 'AAPL');
   const sym = activeSymbol;
   const canonicalSym = String(sym || 'AAPL').toLowerCase();
-  const [watchlistDocked, setWatchlistDocked] = useState(false);
-  const [watchlistMounted, setWatchlistMounted] = useState(false);
 
-  const openDockedWatchlist = useCallback(() => {
-    setWatchlistMounted(true);
-    setWatchlistDocked(true);
-  }, []);
   const onAddTickerToWatchlist = useCallback(() => {
     const ticker = String(sym || '').toUpperCase().trim();
-    openDockedWatchlist();
+    watchlistDock.open();
     try {
       if (ticker) sessionStorage.setItem('watchlist_add_symbol', ticker);
     } catch {
       /* ignore */
     }
     window.dispatchEvent(new CustomEvent('watchlist:add-ticker', { detail: { symbol: ticker } }));
-  }, [openDockedWatchlist, sym]);
+  }, [watchlistDock, sym]);
 
   useEffect(() => {
     const next = sanitizeTickerPageInput(symbolParam) || 'AAPL';
     setActiveSymbol((prev) => (prev === next ? prev : next));
   }, [symbolParam]);
-
-  useEffect(() => {
-    let shouldOpen = Boolean(location.state && location.state.openWatchlist);
-    if (!shouldOpen) {
-      try {
-        shouldOpen = sessionStorage.getItem('ticker_open_watchlist') === '1';
-      } catch {
-        shouldOpen = false;
-      }
-    }
-    if (shouldOpen) {
-      openDockedWatchlist();
-      try {
-        sessionStorage.removeItem('ticker_open_watchlist');
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [location.state, openDockedWatchlist]);
-
-  useEffect(() => {
-    if (watchlistDocked) {
-      setWatchlistMounted(true);
-      return;
-    }
-    const t = window.setTimeout(() => setWatchlistMounted(false), WATCHLIST_ANIM_MS);
-    return () => window.clearTimeout(t);
-  }, [watchlistDocked]);
-
-  useEffect(() => {
-    const onOpen = () => {
-      openDockedWatchlist();
-      try {
-        sessionStorage.removeItem('ticker_open_watchlist');
-      } catch {
-        /* ignore */
-      }
-    };
-    window.addEventListener('ticker:open-watchlist', onOpen);
-    return () => window.removeEventListener('ticker:open-watchlist', onOpen);
-  }, [openDockedWatchlist]);
 
   usePageSeo({
     title: `${String(sym).toUpperCase()} Odin500 Signal, Returns & Market Statistics`,
@@ -1240,14 +1194,6 @@ export default function TickerPage() {
     const start = (newsPageSafe - 1) * NEWS_PAGE_SIZE;
     return liveNews.slice(start, start + NEWS_PAGE_SIZE);
   }, [liveNews, newsPageSafe]);
-  const closeDockedWatchlist = useCallback(() => {
-    setWatchlistDocked(false);
-    try {
-      sessionStorage.removeItem('ticker_open_watchlist');
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   const myDetail = useMemo(() => {
     const u = sym.toUpperCase();
@@ -1677,7 +1623,7 @@ export default function TickerPage() {
     : `Using pill timeframe “${timeframe}”, anchored to as-of ${asOfDate}.`;
 
   return (
-    <div className={'ticker-page' + (watchlistMounted ? ' ticker-page--watchlist-open' : '') + (watchlistDocked ? ' ticker-page--watchlist-visible' : '')}>
+    <div className="ticker-page">
 
 
       {error ? (
@@ -1760,7 +1706,7 @@ export default function TickerPage() {
         </div>
       </header>
 
-      <div className={'ticker-page__grid' + (watchlistMounted ? ' ticker-page__grid--watchlist-open' : '')}>
+      <div className="ticker-page__grid">
         <div className="ticker-page__main">
           <section className="ticker-card ticker-card--main-chart" aria-labelledby="snapshot-chart-title">
             {/* <div className="ticker-chart-toolbar">
@@ -1934,12 +1880,6 @@ export default function TickerPage() {
                 )}
               </div>
               <div className="ticker-chart-footer-icons">
-                <button type="button" className="ticker-chart-footer-icons__btn" aria-label="Settings">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-                  </svg>
-                </button>
                 <button
                   type="button"
                   className="ticker-chart-footer-icons__btn"
@@ -2068,57 +2008,84 @@ export default function TickerPage() {
             />
           </TickerChartResizeScope> */}
           
-          <div className="ticker-subh-with-tip" style={{ marginTop: 6, marginBottom: 10 }}>
-                <div className="flex align-centers"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <g clip-path="url(#clip0_609_23954)">
-                  <path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" stroke-width="0.875" stroke-linecap="round" stroke-linejoin="round"/>
-                  </g>
-                  <defs>
-                  <clipPath id="clip0_609_23954">
-                  <rect width="14" height="14" fill="white"/>
-                  </clipPath>
-                  </defs>
+          <section className="ticker-card ticker-card--rs-benchmark" aria-labelledby="ticker-rs-selector-h">
+            <div className="ticker-subh-with-tip ticker-subh-with-tip--in-card ticker-rs-selector-head">
+              <div className="ticker-rs-selector-head__left">
+                <div className="flex shrink-0 align-centers">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <g clipPath="url(#clip0_ticker_rs_sel)">
+                      <path
+                        d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z"
+                        stroke="white"
+                        strokeWidth="0.875"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z"
+                        stroke="white"
+                        strokeWidth="0.875"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </g>
+                    <defs>
+                      <clipPath id="clip0_ticker_rs_sel">
+                        <rect width="14" height="14" fill="white" />
+                      </clipPath>
+                    </defs>
                   </svg>
                 </div>
-
-            <div className="ticker-subh-left">
-              <h3 className="ticker-subh ticker-subh--flex">Relative Strength selector</h3>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  Choose one index and one ticker; relative strength is shown as <strong>index return − ticker return</strong>.
-                </p>
-              </DataInfoTip>
+                <div className="ticker-subh-left">
+                  <h3 id="ticker-rs-selector-h" className="ticker-subh ticker-subh--flex">
+                    Relative Strength selector
+                  </h3>
+                  <DataInfoTip align="start">
+                    <p className="ticker-data-tip__p">
+                      Choose one index and one ticker; relative strength is shown as <strong>index return − ticker return</strong>.
+                    </p>
+                  </DataInfoTip>
+                </div>
+              </div>
+              <div className="ticker-rs-selector-head__right">
+                <ReturnsChartFiltersMenu className="ticker-rs-selector-head__filters">
+                  <div className="ticker-rs-controls ticker-rs-controls--in-filters-panel">
+                    <ThemedDropdown
+                      value={relativeTickerSymbol}
+                      options={tickerRsDropdownOptions}
+                      onChange={setRelativeTickerSymbol}
+                      title="Compare ticker"
+                      ariaLabelPrefix="Ticker"
+                      labelFallback={relativeTickerSymbol}
+                    />
+                    <ThemedDropdown
+                      value={relativeIndexKey}
+                      options={RELATIVE_INDEX_DROPDOWN_OPTIONS}
+                      onChange={setRelativeIndexKey}
+                      title="Benchmark index"
+                      ariaLabelPrefix="Index"
+                      labelFallback={RELATIVE_INDEX_OPTIONS.find((o) => o.key === relativeIndexKey)?.label ?? ''}
+                    />
+                    <button
+                      type="button"
+                      className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+                      onClick={onOpenRelativeStrengthPage}
+                    >
+                      Open Relative Strength
+                    </button>
+                    {relativeCompareBusy ? (
+                      <span className="ticker-page__loading-pill">Loading relative strength…</span>
+                    ) : null}
+                  </div>
+                </ReturnsChartFiltersMenu>
+              </div>
             </div>
-            <div className="ticker-rs-controls ticker-rs-controls--inline">
-              <ThemedDropdown
-                value={relativeTickerSymbol}
-                options={tickerRsDropdownOptions}
-                onChange={setRelativeTickerSymbol}
-                title="Compare ticker"
-                ariaLabelPrefix="Ticker"
-                labelFallback={relativeTickerSymbol}
-              />
-              <ThemedDropdown
-                value={relativeIndexKey}
-                options={RELATIVE_INDEX_DROPDOWN_OPTIONS}
-                onChange={setRelativeIndexKey}
-                title="Benchmark index"
-                ariaLabelPrefix="Index"
-                labelFallback={RELATIVE_INDEX_OPTIONS.find((o) => o.key === relativeIndexKey)?.label ?? ''}
-              />
-              <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onOpenRelativeStrengthPage}>
-                Open Relative Strength
-              </button>
-              {relativeCompareBusy ? <span className="ticker-page__loading-pill">Loading relative strength…</span> : null}
-            </div>
-          </div>
-          <TickerSection16Section17
+          {/* <TickerSection16Section17
             rows={section16Rows}
             compareRows={section17CompareRows}
             relativeStrengthTitle={`Relative Strength vs ${selectedTickerKey || relativeTickerSymbol}`}
             relativeStrengthHeader={`Relative Strength (${selectedIndexLabel} - ${selectedTickerKey || relativeTickerSymbol})`}
-          />
+          /> */}
           <TickerSection23Section24
             pageSymbol={sym}
             prefetchedLongTickerReturns={longRangeTickerReturns}
@@ -2128,224 +2095,230 @@ export default function TickerPage() {
             onSectionBenchmarkSymbolChange={onSectionBenchmarkSymbolChange}
             initialSp500Rows={detailRows}
           />
+          </section>
         </div>
 
-        {!watchlistMounted ? (
-        <aside className="ticker-page__aside">
-          <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h">
-            <div className="ticker-signal-head">
-              <span className="ticker-signal-logo" aria-hidden />
-              <h2 className="ticker-card__h ticker-card__h--inline" id="odin-signal-h">
+        <aside className="ticker-page__aside ticker-page__aside-stack">
+          <section className="mkt-mini-card ticker-aside-mini" aria-labelledby="odin-signal-h">
+            <header className="mkt-mini-card__head">
+              <h2 className="mkt-mini-card__k uppercase" id="odin-signal-h">
                 Odin Signal
               </h2>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  <strong>Highlighted ladder step</strong> is derived from the <strong>last row</strong> of the chart
-                  payload (same request as the sparkline).
-                </p>
-                <p className="ticker-data-tip__p">
-                  Field: <code className="ticker-data-tip__code">signal</code> on each day, normalized server-side and
-                  grouped visually into L1–L3, S1–S3, or N (e.g. L11 maps into the L1 bucket).
-                </p>
-                <p className="ticker-data-tip__p">As-of follows the last chart date shown below the title.</p>
-              </DataInfoTip>
-            </div>
-            <p className="ticker-signal-asof">As of {lastUpdatedFmt}</p>
-            <div className="ticker-signal-lanes" role="list">
-              {[
-                { k: 'L1', tone: 'green-dark' },
-                { k: 'L2', tone: 'green-dark' },
-                { k: 'L3', tone: 'green-bright' },
-                { k: 'S1', tone: 'orange' },
-                { k: 'S2', tone: 'orange-mid' },
-                { k: 'S3', tone: 'amber' },
-                { k: 'N', tone: 'gray' }
-              ].map((s) => (
-                <div
-                  key={s.k}
-                  className={
-                    'ticker-signal-cell ticker-signal-cell--' +
-                    s.tone +
-                    (activeBucket === s.k ? ' ticker-signal-cell--active' : '')
-                  }
-                  role="listitem"
-                >
-                  {s.k}
-                </div>
-              ))}
-            </div>
-            <div className="ticker-signal-foot">
-              <Link to="/odin-signals" className="ticker-signal-foot__link">
-                Learn more about Odin Signals
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none">
-<g clip-path="url(#clip0_609_26680)">
-<path d="M4.71094 7.18266L11.2734 0.726562" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M11.2734 4.41609V0.726562H7.52344" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M6.05859 3.07031H1.13672C1.02794 3.07031 0.923614 3.11353 0.846694 3.19044C0.769775 3.26736 0.726562 3.37169 0.726562 3.48047V10.8633C0.726563 10.9721 0.769775 11.0764 0.846694 11.1533C0.923614 11.2302 1.02794 11.2734 1.13672 11.2734H8.51953C8.62831 11.2734 8.73264 11.2302 8.80956 11.1533C8.88647 11.0764 8.92969 10.9721 8.92969 10.8633V5.94141" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
-<defs>
-<clipPath id="clip0_609_26680">
-<rect width="12" height="12" fill="white"/>
-</clipPath>
-</defs>
-</svg>
-              </Link>
+              <span className="mkt-mini-card__head-actions">
+                <DataInfoTip align="start">
+                  <p className="ticker-data-tip__p">
+                    <strong>Highlighted ladder step</strong> is derived from the <strong>last row</strong> of the chart
+                    payload (same request as the sparkline).
+                  </p>
+                  <p className="ticker-data-tip__p">
+                    Field: <code className="ticker-data-tip__code">signal</code> on each day, normalized server-side and
+                    grouped visually into L1–L3, S1–S3, or N (e.g. L11 maps into the L1 bucket).
+                  </p>
+                  <p className="ticker-data-tip__p">As-of follows the last chart date shown below the title.</p>
+                </DataInfoTip>
+              </span>
+            </header>
+            <div className="ticker-aside-mini__body">
+              <p className="ticker-signal-asof">As of {lastUpdatedFmt}</p>
+              <div className="ticker-signal-lanes" role="list">
+                {[
+                  { k: 'L1', tone: 'green-dark' },
+                  { k: 'L2', tone: 'green-dark' },
+                  { k: 'L3', tone: 'green-bright' },
+                  { k: 'S1', tone: 'orange' },
+                  { k: 'S2', tone: 'orange-mid' },
+                  { k: 'S3', tone: 'amber' },
+                  { k: 'N', tone: 'gray' }
+                ].map((s) => (
+                  <div
+                    key={s.k}
+                    className={
+                      'ticker-signal-cell ticker-signal-cell--' +
+                      s.tone +
+                      (activeBucket === s.k ? ' ticker-signal-cell--active' : '')
+                    }
+                    role="listitem"
+                  >
+                    {s.k}
+                  </div>
+                ))}
+              </div>
+              <div className="ticker-signal-foot">
+                <Link to="/odin-signals" className="ticker-signal-foot__link">
+                  Learn more about Odin Signals
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <g clip-path="url(#clip0_609_26680)">
+                    <path d="M4.71094 7.18266L11.2734 0.726562" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M11.2734 4.41609V0.726562H7.52344" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M6.05859 3.07031H1.13672C1.02794 3.07031 0.923614 3.11353 0.846694 3.19044C0.769775 3.26736 0.726562 3.37169 0.726562 3.48047V10.8633C0.726563 10.9721 0.769775 11.0764 0.846694 11.1533C0.923614 11.2302 1.02794 11.2734 1.13672 11.2734H8.51953C8.62831 11.2734 8.73264 11.2302 8.80956 11.1533C8.88647 11.0764 8.92969 10.9721 8.92969 10.8633V5.94141" stroke="#CDE4FD" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+                    </g>
+                    <defs>
+                    <clipPath id="clip0_609_26680">
+                    <rect width="12" height="12" fill="white"/>
+                    </clipPath>
+                    </defs>
+                  </svg>
+                </Link>
+              </div>
             </div>
           </section>
 
-          <section className="ticker-card" aria-labelledby="key-data-h">
-            <div className="ticker-card__h-with-tip">
-              <h2 className="ticker-card__h ticker-card__h--flex" id="key-data-h">
+          <section className="mkt-mini-card ticker-aside-mini" aria-labelledby="key-data-h">
+            <header className="mkt-mini-card__head">
+              <h2 className="mkt-mini-card__k uppercase" id="key-data-h">
                 Key data &amp; performance
               </h2>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  <strong>52-week range</strong> uses <strong>High</strong> / <strong>Low</strong> across ~1 year of
-                  daily rows from <code className="ticker-data-tip__code">GET /api/market/ohlc</code> ending on{' '}
-                  <strong>{asOfDate}</strong>.
-                </p>
-                <p className="ticker-data-tip__p">
-                  <strong>Avg volume</strong> averages the <strong>Volume</strong> column over those same rows.{' '}
-                  <strong>Volatility</strong> is an annualized estimate from daily <strong>Close</strong> log-returns in
-                  that window.
-                </p>
-                <p className="ticker-data-tip__p">
-                  <strong>Related tickers</strong> are other symbols from the same ticker-details response (same sector
-                  first), not a live correlation API.
-                </p>
-              </DataInfoTip>
-            </div>
-            <div className="ticker-kd-grid">
-              <dl className="ticker-kd-dl">
-                <div className="ticker-kd-row">
-                  <dt>Dividend yield</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>52-week range</dt>
-                  <dd>
-                    {hi52 != null && lo52 != null ? `${formatPx(lo52)} – ${formatPx(hi52)}` : '—'}
-                  </dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>Beta</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>Volatility (ann.)</dt>
-                  <dd>{vola != null ? `${vola}%` : '—'}</dd>
-                </div>
-              </dl>
-              <dl className="ticker-kd-dl">
-                <div className="ticker-kd-row">
-                  <dt>Avg volume (1y)</dt>
-                  <dd>{formatVolLong(avgVol)}</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>Market cap</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>P/E (TTM)</dt>
-                  <dd>—</dd>
-                </div>
-                <div className="ticker-kd-row">
-                  <dt>EPS (TTM)</dt>
-                  <dd>—</dd>
-                </div>
-              </dl>
-            </div>
-            <p className="ticker-page__label ticker-kd-comp-label">
-              <span>INDICES</span>
-              <span className="ticker-kd-comp-label__links">
-                {RELATED_INDEX_LINKS.map((idx) => (
-                  <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">
-                    {idx.label}
-                  </Link>
-                ))}
+              <span className="mkt-mini-card__head-actions">
+                <DataInfoTip align="start">
+                  <p className="ticker-data-tip__p">
+                    <strong>52-week range</strong> uses <strong>High</strong> / <strong>Low</strong> across ~1 year of
+                    daily rows from <code className="ticker-data-tip__code">GET /api/market/ohlc</code> ending on{' '}
+                    <strong>{asOfDate}</strong>.
+                  </p>
+                  <p className="ticker-data-tip__p">
+                    <strong>Avg volume</strong> averages the <strong>Volume</strong> column over those same rows.{' '}
+                    <strong>Volatility</strong> is an annualized estimate from daily <strong>Close</strong> log-returns in
+                    that window.
+                  </p>
+                  <p className="ticker-data-tip__p">
+                    <strong>Related tickers</strong> are other symbols from the same ticker-details response (same sector
+                    first), not a live correlation API.
+                  </p>
+                </DataInfoTip>
               </span>
-            </p>
-            
-            <p className="ticker-page__label ticker-kd-comp-label">
-            <span>RELATED TICKERS</span>
-            <span className="ticker-kd-comp-label__links">
-              {competitors.length ? (
-                competitors.map((t) => (
-                  <Link key={t} to={`/ticker/${encodeURIComponent(t)}`} className="ticker-kd-comp__a">
-                    {t}
-                  </Link>
-                ))
-              ) : (
-                <span className="ticker-page__muted">—</span>
-              )}
-              </span>
-            </p>
-
-
-            <div className="ticker-subh-with-tip">
-              <h3 className="ticker-subh ticker-subh--flex">
-              Relative Performance (%)
-              </h3>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">
-                  For rolling windows (1D, 5D, 1M, …) values come from the same <strong>dynamicPeriods</strong> arrays
-                  as the performance table, keyed by period label (e.g. “Last Month”, “Last 1 year”).
-                </p>
-                <p className="ticker-data-tip__p">
-                  <strong>MTD / QTD</strong> rows are computed in the browser from the ~1y daily OHLC samples: first
-                  close on/after month or quarter start vs latest <strong>Close</strong> for {selectedIndexLabel} and for{' '}
-                  {selectedTickerKey || relativeTickerSymbol}{' '}
-                  separately.
-                </p>
-                <p className="ticker-data-tip__p">
-                  <strong>Diff</strong> = symbol total return minus benchmark total return for that row.
-                </p>
-              </DataInfoTip>
-            </div>
-            <div className="ticker-compare">
-              <div className="ticker-compare__head">
-                <span />
-                <span>{selectedTickerKey || relativeTickerSymbol}</span>
-                <span>{selectedIndexLabel}</span>
-                <span>Diff</span>
-              </div>
-              {COMPARE_ROWS.map((row) => {
-                let symPct = row.period
-                  ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period)
-                  : row.mtd
-                    ? selectedIndexSeries.mtd
-                    : row.qtd
-                      ? selectedIndexSeries.qtd
-                      : null;
-                let spyPct = row.period
-                  ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period)
-                  : row.mtd
-                    ? selectedTickerSeries.mtd
-                    : row.qtd
-                      ? selectedTickerSeries.qtd
-                      : null;
-                const diff =
-                  symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct)
-                    ? symPct - spyPct
-                    : null;
-                return (
-                  <div key={row.key} className="ticker-compare__row">
-                    <span className="ticker-compare__tf">{row.key}</span>
-                    <span className={'ticker-compare__cell ' + pctClass(spyPct)}>{formatPct(spyPct)}</span>
-                    <span className={'ticker-compare__cell ' + pctClass(symPct)}>{formatPct(symPct)}</span>
-                    <span className={'ticker-compare__cell ' + pctClass(diff)}>{formatPct(diff)}</span>
+            </header>
+            <div className="ticker-aside-mini__body">
+              <div className="ticker-kd-grid">
+                <dl className="ticker-kd-dl">
+                  <div className="ticker-kd-row">
+                    <dt>Dividend yield</dt>
+                    <dd>—</dd>
                   </div>
-                );
-              })}
+                  <div className="ticker-kd-row">
+                    <dt>52-week range</dt>
+                    <dd>
+                      {hi52 != null && lo52 != null ? `${formatPx(lo52)} – ${formatPx(hi52)}` : '—'}
+                    </dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>Beta</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>Volatility (ann.)</dt>
+                    <dd>{vola != null ? `${vola}%` : '—'}</dd>
+                  </div>
+                </dl>
+                <dl className="ticker-kd-dl">
+                  <div className="ticker-kd-row">
+                    <dt>Avg volume (1y)</dt>
+                    <dd>{formatVolLong(avgVol)}</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>Market cap</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>P/E (TTM)</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>EPS (TTM)</dt>
+                    <dd>—</dd>
+                  </div>
+                </dl>
+              </div>
+              <p className="ticker-page__label ticker-kd-comp-label">
+                <span>INDICES</span>
+                <span className="ticker-kd-comp-label__links">
+                  {RELATED_INDEX_LINKS.map((idx) => (
+                    <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">
+                      {idx.label}
+                    </Link>
+                  ))}
+                </span>
+              </p>
+
+              <p className="ticker-page__label ticker-kd-comp-label">
+                <span>RELATED TICKERS</span>
+                <span className="ticker-kd-comp-label__links">
+                  {competitors.length ? (
+                    competitors.map((t) => (
+                      <Link key={t} to={`/ticker/${encodeURIComponent(t)}`} className="ticker-kd-comp__a">
+                        {t}
+                      </Link>
+                    ))
+                  ) : (
+                    <span className="ticker-page__muted">—</span>
+                  )}
+                </span>
+              </p>
+            </div>
+          </section>
+
+          <section className="mkt-mini-card ticker-aside-mini" aria-labelledby="ticker-rel-perf-h">
+            <header className="mkt-mini-card__head">
+              <span className="mkt-mini-card__k uppercase" id="ticker-rel-perf-h">
+                Relative performance (%)
+              </span>
+              <span className="mkt-mini-card__head-actions">
+                <DataInfoTip align="start">
+                  <p className="ticker-data-tip__p">
+                    For rolling windows (1D, 5D, 1M, …) values come from the same <strong>dynamicPeriods</strong> arrays
+                    as the performance table, keyed by period label (e.g. “Last Month”, “Last 1 year”).
+                  </p>
+                  <p className="ticker-data-tip__p">
+                    <strong>MTD / QTD</strong> rows are computed in the browser from the ~1y daily OHLC samples: first
+                    close on/after month or quarter start vs latest <strong>Close</strong> for {selectedIndexLabel} and for{' '}
+                    {selectedTickerKey || relativeTickerSymbol}{' '}
+                    separately.
+                  </p>
+                  <p className="ticker-data-tip__p">
+                    <strong>Diff</strong> = symbol total return minus benchmark total return for that row.
+                  </p>
+                </DataInfoTip>
+              </span>
+            </header>
+            <div className="ticker-aside-mini__body">
+              <div className="ticker-compare">
+                <div className="ticker-compare__head">
+                  <span />
+                  <span>{selectedTickerKey || relativeTickerSymbol}</span>
+                  <span>{selectedIndexLabel}</span>
+                  <span>Diff</span>
+                </div>
+                {COMPARE_ROWS.map((row) => {
+                  let symPct = row.period
+                    ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period)
+                    : row.mtd
+                      ? selectedIndexSeries.mtd
+                      : row.qtd
+                        ? selectedIndexSeries.qtd
+                        : null;
+                  let spyPct = row.period
+                    ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period)
+                    : row.mtd
+                      ? selectedTickerSeries.mtd
+                      : row.qtd
+                        ? selectedTickerSeries.qtd
+                        : null;
+                  const diff =
+                    symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct)
+                      ? symPct - spyPct
+                      : null;
+                  return (
+                    <div key={row.key} className="ticker-compare__row">
+                      <span className="ticker-compare__tf">{row.key}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(spyPct)}>{formatPct(spyPct)}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(symPct)}>{formatPct(symPct)}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(diff)}>{formatPct(diff)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </section>
         </aside>
-        ) : null}
-        {watchlistMounted ? (
-          <aside className={'ticker-page__watchlist-dock' + (watchlistDocked ? ' is-open' : '')} aria-label="Watchlist sidebar">
-            <WatchlistRailFlyout open onClose={closeDockedWatchlist} docked />
-          </aside>
-        ) : null}
       </div>
     </div>
   );

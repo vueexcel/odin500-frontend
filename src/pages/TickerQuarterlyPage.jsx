@@ -673,6 +673,22 @@ export default function TickerQuarterlyPage() {
   const selectedIndexSeries = { dynamicPeriods: dynamicSym, mtd: symMtd, qtd: symQtd };
   const selectedTickerSeries = { dynamicPeriods: dynamicSpy, mtd: spyMtd, qtd: spyQtd };
 
+  const quarterlyReturnsTableRangeControl = (
+    <div className="ticker-page__custom-range" aria-label="Quarterly table range">
+      <span className="ticker-page__label ticker-page__label--inline">Range</span>
+      <ThemedDropdown
+        size="sm"
+        style={{ minWidth: 96 }}
+        value={tableRangePreset}
+        options={TABLE_RANGE_DROPDOWN_OPTIONS}
+        onChange={setTableRangePreset}
+        title="Table year range"
+        ariaLabelPrefix="Year range"
+        labelFallback={tableRangePreset}
+      />
+    </div>
+  );
+
   return (
     <div className="ticker-page">
       {error ? (
@@ -682,14 +698,13 @@ export default function TickerQuarterlyPage() {
       ) : null}
 
       <header className="ticker-page__header ticker-page__header--figma">
-        <div className="ticker-page__header-top">
-          <div className="ticker-page__header-identity">
-            <h1 className="ticker-page__company ticker-page__company--hero">{symU} Quarterly Statistics</h1>
-          </div>
-          <div className="ticker-page__header-controls">
+        <div className="flex flex-wrap items-center justify-start gap-[10px]">
+          <div className="inline-flex min-w-0 flex-wrap items-center gap-[10px] [&_.ticker-symbol-search]:min-w-[220px] [&_.ticker-symbol-search]:max-w-[420px]">
             <TickerSymbolCombobox symbol={sym} onSymbolChange={onSymbolChange} inputId="ticker-quarterly-symbol" />
             {loading ? (<span className="ticker-page__loading-pill">Loading quarterly data…</span>) : null}
-            
+          </div>
+          <div className="min-w-0">
+            <h1 className="ticker-page__company ticker-page__company--hero">{symU} Quarterly Statistics</h1>
           </div>
         </div>
       </header>
@@ -724,66 +739,11 @@ export default function TickerQuarterlyPage() {
               loading={loading}
             />
           </TickerChartResizeScope>
-          <div className="stats-cmp-charts">
-            <AnnualReturnBarChart
-              mode="quarterly"
-              ticker={symU}
-              benchmarkIndex={benchmarkIndex}
-              startYear={Number(chartStartYear)}
-              endYear={Number(chartEndYear)}
-              theme={chartTheme}
-              rows={quarterlyComparisonRows}
-              benchmarkOptions={BENCHMARK_OPTIONS}
-              onBenchmarkChange={setBenchmarkIndex}
-              controls={chartRangeControls}
-              loading={loading}
-            />
-            <ExcessReturnLineChart
-              mode="quarterly"
-              ticker={symU}
-              benchmarkIndex={benchmarkIndex}
-              startYear={Number(chartStartYear)}
-              endYear={Number(chartEndYear)}
-              theme={chartTheme}
-              rows={quarterlyComparisonRows}
-              benchmarkOptions={BENCHMARK_OPTIONS}
-              onBenchmarkChange={setBenchmarkIndex}
-              controls={chartRangeControls}
-              loading={loading}
-            />
-            <PeriodicReturnBarChart
-              mode="quarterly"
-              ticker={symU}
-              benchmarkIndex={benchmarkIndex}
-              startYear={Number(chartStartYear)}
-              endYear={Number(chartEndYear)}
-              theme={chartTheme}
-              rows={quarterlyComparisonRows}
-              benchmarkOptions={BENCHMARK_OPTIONS}
-              onBenchmarkChange={setBenchmarkIndex}
-              controls={chartRangeControls}
-              loading={loading}
-            />
-          </div>
 
           <section className="statistic-data__card">
             <div className="statistic-data__table-head">
               <h2 className="statistic-data__table-title">Quarterly Returns</h2>
-              <div className="statistic-data__head-actions">
-                <div className="ticker-page__custom-range" aria-label="Quarterly table range">
-                  <span className="ticker-page__label ticker-page__label--inline">Range</span>
-                  <ThemedDropdown
-                    size="sm"
-                    style={{ minWidth: 96 }}
-                    value={tableRangePreset}
-                    options={TABLE_RANGE_DROPDOWN_OPTIONS}
-                    onChange={setTableRangePreset}
-                    title="Table year range"
-                    ariaLabelPrefix="Year range"
-                    labelFallback={tableRangePreset}
-                  />
-                </div>
-              </div>
+              <div className="statistic-data__head-actions">{quarterlyReturnsTableRangeControl}</div>
             </div>
             <div className="statistic-data__table-wrap">
               <table className="statistic-data__table">
@@ -907,7 +867,7 @@ export default function TickerQuarterlyPage() {
             ) : null}
           </section>
         </div>
-        <aside className="ticker-page__aside">
+        <aside className="ticker-page__aside ticker-page__aside-stack">
           {/* <section className="ticker-card ticker-card--signal" aria-labelledby="odin-signal-h-q">
             <div className="ticker-signal-head">
               <span className="ticker-signal-logo" aria-hidden />
@@ -924,53 +884,127 @@ export default function TickerQuarterlyPage() {
               <IconTrendDown className="ticker-signal-foot__ico" />
             </div>
           </section> */}
-          <section className="ticker-card" aria-labelledby="key-data-h-q">
-            <div className="ticker-card__h-with-tip">
-              <h2 className="ticker-card__h ticker-card__h--flex" id="key-data-h-q">Key data &amp; performance</h2>
-              <DataInfoTip align="start">
-                <p className="ticker-data-tip__p">52w range, avg volume, and volatility come from last ~1y OHLC rows.</p>
-              </DataInfoTip>
-            </div>
-            <div className="ticker-kd-grid">
-              <dl className="ticker-kd-dl">
-                <div className="ticker-kd-row"><dt>Dividend yield</dt><dd>—</dd></div>
-                <div className="ticker-kd-row"><dt>52-week range</dt><dd>{hi52 != null && lo52 != null ? `${formatPx(lo52)} – ${formatPx(hi52)}` : '—'}</dd></div>
-                <div className="ticker-kd-row"><dt>Beta</dt><dd>—</dd></div>
-                <div className="ticker-kd-row"><dt>Volatility (ann.)</dt><dd>{vola != null ? `${vola}%` : '—'}</dd></div>
-              </dl>
-              <dl className="ticker-kd-dl">
-                <div className="ticker-kd-row"><dt>Avg volume (1y)</dt><dd>{formatVolLong(avgVol)}</dd></div>
-                <div className="ticker-kd-row"><dt>Market cap</dt><dd>—</dd></div>
-                <div className="ticker-kd-row"><dt>P/E (TTM)</dt><dd>—</dd></div>
-                <div className="ticker-kd-row"><dt>EPS (TTM)</dt><dd>—</dd></div>
-              </dl>
-            </div>
-            <p className="ticker-page__label ticker-kd-comp-label">
-              <span>INDICES</span>
-              <span className="ticker-kd-comp-label__links">
-                {RELATED_INDEX_LINKS.map((idx) => (
-                  <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">
-                    {idx.label}
-                  </Link>
-                ))}
+          <section className="mkt-mini-card ticker-aside-mini" aria-labelledby="key-data-h-q">
+            <header className="mkt-mini-card__head">
+              <h2 className="mkt-mini-card__k" id="key-data-h-q">
+                Key data &amp; performance
+              </h2>
+              <span className="mkt-mini-card__head-actions">
+                <DataInfoTip align="start">
+                  <p className="ticker-data-tip__p">52w range, avg volume, and volatility come from last ~1y OHLC rows.</p>
+                </DataInfoTip>
               </span>
-            </p>
-            <p className="ticker-page__label ticker-kd-comp-label">
-            <span>RELATED TICKERS</span>
-            <span className="ticker-kd-comp-label__links">
-              {competitors.length ? competitors.map((t) => (<Link key={t} to={`/ticker/${encodeURIComponent(t)}`} className="ticker-kd-comp__a">{t}</Link>)) : <span className="ticker-page__muted">—</span>}
+            </header>
+            <div className="ticker-aside-mini__body">
+              <div className="ticker-kd-grid">
+                <dl className="ticker-kd-dl">
+                  <div className="ticker-kd-row">
+                    <dt>Dividend yield</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>52-week range</dt>
+                    <dd>{hi52 != null && lo52 != null ? `${formatPx(lo52)} – ${formatPx(hi52)}` : '—'}</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>Beta</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>Volatility (ann.)</dt>
+                    <dd>{vola != null ? `${vola}%` : '—'}</dd>
+                  </div>
+                </dl>
+                <dl className="ticker-kd-dl">
+                  <div className="ticker-kd-row">
+                    <dt>Avg volume (1y)</dt>
+                    <dd>{formatVolLong(avgVol)}</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>Market cap</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>P/E (TTM)</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div className="ticker-kd-row">
+                    <dt>EPS (TTM)</dt>
+                    <dd>—</dd>
+                  </div>
+                </dl>
+              </div>
+              <p className="ticker-page__label ticker-kd-comp-label">
+                <span>INDICES</span>
+                <span className="ticker-kd-comp-label__links">
+                  {RELATED_INDEX_LINKS.map((idx) => (
+                    <Link key={idx.slug} to={`/indices/${idx.slug}`} className="ticker-kd-comp__a">
+                      {idx.label}
+                    </Link>
+                  ))}
+                </span>
+              </p>
+              <p className="ticker-page__label ticker-kd-comp-label">
+                <span>RELATED TICKERS</span>
+                <span className="ticker-kd-comp-label__links">
+                  {competitors.length ? (
+                    competitors.map((t) => (
+                      <Link key={t} to={`/ticker/${encodeURIComponent(t)}`} className="ticker-kd-comp__a">
+                        {t}
+                      </Link>
+                    ))
+                  ) : (
+                    <span className="ticker-page__muted">—</span>
+                  )}
+                </span>
+              </p>
+            </div>
+          </section>
+
+          <section className="mkt-mini-card ticker-aside-mini" aria-labelledby="ticker-quarterly-rel-perf-h">
+            <header className="mkt-mini-card__head">
+              <span className="mkt-mini-card__k" id="ticker-quarterly-rel-perf-h">
+                Relative performance
+                <span className="mkt-mini-card__tf">%</span>
               </span>
-            </p>
-            
-            <div className="ticker-subh-with-tip"><p className="ticker-subh ticker-subh--flex">Relative Performance (%) </p></div>
-            <div className="ticker-compare">
-              <div className="ticker-compare__head"><span /><span>{symU}</span><span>{benchmarkIndex}</span><span>Diff</span></div>
-              {COMPARE_ROWS.map((row) => {
-                const symPct = row.period ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period) : row.mtd ? selectedIndexSeries.mtd : row.qtd ? selectedIndexSeries.qtd : null;
-                const spyPct = row.period ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period) : row.mtd ? selectedTickerSeries.mtd : row.qtd ? selectedTickerSeries.qtd : null;
-                const diff = symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct) ? symPct - spyPct : null;
-                return <div key={row.key} className="ticker-compare__row"><span className="ticker-compare__tf">{row.key}</span><span className={'ticker-compare__cell ' + pctClass(symPct)}>{formatPct(symPct)}</span><span className={'ticker-compare__cell ' + pctClass(spyPct)}>{formatPct(spyPct)}</span><span className={'ticker-compare__cell ' + pctClass(diff)}>{formatPct(diff)}</span></div>;
-              })}
+            </header>
+            <div className="ticker-aside-mini__body">
+              <div className="ticker-compare">
+                <div className="ticker-compare__head">
+                  <span />
+                  <span>{symU}</span>
+                  <span>{benchmarkIndex}</span>
+                  <span>Diff</span>
+                </div>
+                {COMPARE_ROWS.map((row) => {
+                  const symPct = row.period
+                    ? pickDynamic(selectedIndexSeries.dynamicPeriods, row.period)
+                    : row.mtd
+                      ? selectedIndexSeries.mtd
+                      : row.qtd
+                        ? selectedIndexSeries.qtd
+                        : null;
+                  const spyPct = row.period
+                    ? pickDynamic(selectedTickerSeries.dynamicPeriods, row.period)
+                    : row.mtd
+                      ? selectedTickerSeries.mtd
+                      : row.qtd
+                        ? selectedTickerSeries.qtd
+                        : null;
+                  const diff =
+                    symPct != null && spyPct != null && Number.isFinite(symPct) && Number.isFinite(spyPct)
+                      ? symPct - spyPct
+                      : null;
+                  return (
+                    <div key={row.key} className="ticker-compare__row">
+                      <span className="ticker-compare__tf">{row.key}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(symPct)}>{formatPct(symPct)}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(spyPct)}>{formatPct(spyPct)}</span>
+                      <span className={'ticker-compare__cell ' + pctClass(diff)}>{formatPct(diff)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </section>
         </aside>

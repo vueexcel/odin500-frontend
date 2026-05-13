@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { useTickerPlotResize } from '../hooks/useTickerPlotResize.js';
@@ -7,8 +7,11 @@ import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import { formatWeekAxisDate, isoYearWeekFromIsoDate } from '../utils/isoWeek.js';
 import { periodModeNouns } from '../utils/periodModeNouns.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
+import { getReturnsChartViewMoreHref } from '../utils/returnsViewMoreNavigation.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
+import { useReturnsChartFiltersMenuMode } from '../context/WatchlistDockContext.jsx';
 import { AnnualReturnsFigmaChartSkeleton, badgeLabelForPeriodMode } from './ChartSkeletons.jsx';
+import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
 
 /** Match `TickerLightweightChart` / dark ticker cards. */
 const COL_BAR = '#2563eb';
@@ -221,6 +224,8 @@ export function TickerAnnualReturnsFigma({
   loading = false
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const filtersMenuMode = useReturnsChartFiltersMenuMode();
   const resize = useTickerPlotResize(resizeStorageKey ?? null, resizeDefaultHeight);
   const plotPx = resize.plotHeight ?? plotHeight;
   const clipComboId = useId().replace(/:/g, '');
@@ -433,37 +438,17 @@ export function TickerAnnualReturnsFigma({
   }, [displayRows, symbol, periodMode]);
 
   const onViewMore = useCallback(() => {
-    const section =
-      periodMode === 'quarterly'
-        ? 'quarterly'
-        : periodMode === 'monthly'
-          ? 'monthly'
-          : periodMode === 'weekly'
-            ? 'weekly'
-            : periodMode === 'daily'
-              ? 'daily'
-              : 'annual';
-    const params = new URLSearchParams({ section });
-    const sym = String(symbol || '').trim().toUpperCase();
-    if (sym) params.set('symbol', sym);
-    console.info('[view-more] annual figma click', {
+    const to = getReturnsChartViewMoreHref({
+      pathname: location.pathname,
+      search: location.search,
       periodMode,
-      fromPath: window.location.pathname,
-      fromSearch: window.location.search,
-      to: `/statistic-data?${params.toString()}`
+      symbol
     });
-    navigate(`/statistic-data?${params.toString()}`);
+    navigate(to);
     queueMicrotask(() => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    setTimeout(() => {
-      console.info('[view-more] annual figma post-nav check', {
-        periodMode,
-        currentPath: window.location.pathname,
-        currentSearch: window.location.search
-      });
-    }, 150);
-  }, [navigate, periodMode, symbol]);
+  }, [navigate, location.pathname, location.search, periodMode, symbol]);
 
   const onOpenPeriodPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
@@ -480,6 +465,51 @@ export function TickerAnnualReturnsFigma({
               : '/statistic/ticker-annual';
     navigate(path + suffix);
   }, [navigate, periodMode, symbol]);
+
+  const annualFigToolbarActions = (
+    <>
+      {enableInlineYearDropdowns && (periodMode === 'annual' || periodMode === 'quarterly' || periodMode === 'monthly') ? (
+        <div className="ticker-annual-figma__range-controls">
+          <span className="ticker-annual-figma__range-label">Start</span>
+          <ThemedDropdown
+            size="sm"
+            value={chartStartYear}
+            options={dropdownYearOptions}
+            onChange={setChartStartYear}
+            title="Start year"
+            ariaLabelPrefix="Start year"
+            labelFallback="Start"
+          />
+          <span className="ticker-annual-figma__range-label">End</span>
+          <ThemedDropdown
+            size="sm"
+            value={chartEndYear}
+            options={dropdownYearOptions}
+            onChange={setChartEndYear}
+            title="End year"
+            ariaLabelPrefix="End year"
+            labelFallback="End"
+          />
+        </div>
+      ) : (
+        <div className="ticker-annual-figma__external-controls">{toolbarControls}</div>
+      )}
+      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onViewMore}>
+        View More
+      </button>
+      {showOpenPeriodPageButton ? (
+        <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onOpenPeriodPage}>
+          Open {periodMode === 'quarterly' ? 'Quarterly' : periodMode === 'monthly' ? 'Monthly' : periodMode === 'weekly' ? 'Weekly' : periodMode === 'daily' ? 'Daily' : 'Annual'} Page
+        </button>
+      ) : null}
+      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--primary" onClick={() => setShowTable((v) => !v)}>
+        <IcoTable /> Show data tables
+      </button>
+      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
+        <IcoDownload /> Download CSV
+      </button>
+    </>
+  );
 
   const comboSvg = useMemo(() => {
     if (!displayRows.length || !stats) return null;
@@ -875,7 +905,7 @@ export function TickerAnnualReturnsFigma({
       <div className="ticker-annual-figma">
         <div className="ticker-annual-figma__section">
           <div className="ticker-annual-figma__toolbar">
-            <span className="ticker-annual-figma__badge">{badgeLabelForPeriodMode(periodMode)}</span>
+            <span className="ticker-annual-figma__badge uppercase">{badgeLabelForPeriodMode(periodMode)}</span>
           </div>
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">No {badgeLabelForPeriodMode(periodMode).replace(' returns', '').toLowerCase()} return data for {String(symbol).toUpperCase()}.</p>
@@ -905,65 +935,16 @@ export function TickerAnnualReturnsFigma({
 </clipPath>
 </defs>
 </svg>
-          <span className="ticker-annual-figma__badge">
+          <span className="ticker-annual-figma__badge uppercase">
             {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'}{' '}
             <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualReturns} align="end" />
           </span>
           </div>
-          <div className="ticker-annual-figma__actions">
-            {enableInlineYearDropdowns && (periodMode === 'annual' || periodMode === 'quarterly' || periodMode === 'monthly') ? (
-              <div className="ticker-annual-figma__range-controls">
-                <span className="ticker-annual-figma__range-label">Start year</span>
-                <ThemedDropdown
-                  size="sm"
-                  value={chartStartYear}
-                  options={dropdownYearOptions}
-                  onChange={setChartStartYear}
-                  title="Start year"
-                  ariaLabelPrefix="Start year"
-                  labelFallback="Start"
-                />
-                <span className="ticker-annual-figma__range-label">End year</span>
-                <ThemedDropdown
-                  size="sm"
-                  value={chartEndYear}
-                  options={dropdownYearOptions}
-                  onChange={setChartEndYear}
-                  title="End year"
-                  ariaLabelPrefix="End year"
-                  labelFallback="End"
-                />
-              </div>
-            ) : (
-              <div className="ticker-annual-figma__external-controls">{toolbarControls}</div>
-            )}
-            <button
-              type="button"
-              className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
-              onClick={onViewMore}
-            >
-              View More
-            </button>
-            {showOpenPeriodPageButton ? (
-              <button
-                type="button"
-                className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
-                onClick={onOpenPeriodPage}
-              >
-                Open {periodMode === 'quarterly' ? 'Quarterly' : periodMode === 'monthly' ? 'Monthly' : periodMode === 'weekly' ? 'Weekly' : periodMode === 'daily' ? 'Daily' : 'Annual'} Page
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="ticker-annual-figma__btn ticker-annual-figma__btn--primary"
-              onClick={() => setShowTable((v) => !v)}
-            >
-              <IcoTable /> Show data tables
-            </button>
-            <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
-              <IcoDownload /> Download CSV
-            </button>
-          </div>
+          {filtersMenuMode ? (
+            <ReturnsChartFiltersMenu>{annualFigToolbarActions}</ReturnsChartFiltersMenu>
+          ) : (
+            <div className="ticker-annual-figma__actions">{annualFigToolbarActions}</div>
+          )}
         </div>
         <div className="ticker-annual-figma__chart-card">
           {comboSvg ? (
@@ -975,23 +956,28 @@ export function TickerAnnualReturnsFigma({
           )}
         </div>
         <div className="ticker-annual-figma__legend">
-          {periodMode === 'monthly' ? (
-            monthlyYearLegend.map((it) => (
-              <span key={`yl-${it.year}`} className="ticker-annual-figma__legend-item">
-                <span className="ticker-annual-figma__swatch" aria-hidden style={{ background: it.color }} />
-                {it.year}
+          <div className="ticker-annual-figma__legend-row">
+            {periodMode === 'monthly' ? (
+              monthlyYearLegend.map((it) => (
+                <span key={`yl-${it.year}`} className="ticker-annual-figma__legend-item">
+                  <span className="ticker-annual-figma__swatch" aria-hidden style={{ background: it.color }} />
+                  {it.year}
+                </span>
+              ))
+            ) : (
+              <span className="ticker-annual-figma__legend-item">
+                <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden />
+                {pn.statsLabel} return (%)
               </span>
-            ))
-          ) : (
+            )}
             <span className="ticker-annual-figma__legend-item">
-              <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden />
-              {pn.statsLabel} return (%)
+              <span className="ticker-annual-figma__swatch-line" aria-hidden />
+              Av. return (%)
             </span>
-          )}
-          <span className="ticker-annual-figma__legend-item">
-            <span className="ticker-annual-figma__swatch-line" aria-hidden />
-            Av. return (%)
-          </span>
+          </div>
+          <div className="ticker-annual-figma__legend-total-years">
+            Total years: <strong>{totalYearsInSelection}</strong>
+          </div>
         </div>
         {showTable ? (
           <div className="ticker-annual-figma__table-wrap">
@@ -1053,7 +1039,7 @@ export function TickerAnnualReturnsFigma({
                 </clipPath>
                 </defs>
               </svg>
-              <span className="ticker-annual-figma__badge-text">
+              <span className="ticker-annual-figma__badge-text uppercase">
                 {pn.statsLabel} stats — positive / negative, min max
               </span>
               <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualStats} align="end" />
@@ -1072,7 +1058,10 @@ export function TickerAnnualReturnsFigma({
           <div className="ticker-annual-figma__split">
             <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--donut">
               {donut}
-              <div className="ticker-annual-figma__legend ticker-annual-figma__legend--donut">
+              <p className="ticker-annual-figma__total-years-caption">
+                Total years: <strong>{totalYearsInSelection}</strong>
+              </p>
+              <div className="ticker-annual-figma__legends ticker-annual-figma__legend--donut flex">
                 <span className="ticker-annual-figma__legend-item">
                   <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden />
                   # positive {pn.lower}
@@ -1083,13 +1072,14 @@ export function TickerAnnualReturnsFigma({
                 </span>
               </div>
             </div>
-            <div className="ticker-annual-figma__chart-card">{summaryBars}</div>
-          </div>
-          <div className="ticker-annual-figma__stats-total-years">
-            <span className="ticker-annual-figma__legend-item">
-              <span className="ticker-annual-figma__swatch ticker-annual-figma__swatch--blue" aria-hidden />
-              Total years: {totalYearsInSelection}
-            </span>
+            <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--summary">
+              {summaryBars}
+              {summaryBars ? (
+                <div className="ticker-annual-figma__summary-total-years">
+                  Total years: <strong>{totalYearsInSelection}</strong>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

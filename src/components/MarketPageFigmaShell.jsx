@@ -9,6 +9,7 @@ import { SectorTreemap } from './SectorTreemap.jsx';
 import TradingChartLoader from './TradingChartLoader.jsx';
 import { DEFAULT_SELECTED_KEYS, META_BY_KEY, MARKET_SERIES } from './marketSeriesRegistry.js';
 import { returnToSummaryTableHeatColor, summaryTableTextOnFill } from '../utils/heatmapColors.js';
+import { useRightRailDock } from '../context/WatchlistDockContext.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import {
   calcRangeReturnPct,
@@ -75,12 +76,12 @@ function LeftSnapshotStack({
     };
   }, [loadOhlcRows, timeframe, refreshMs]);
 
-  return (
+return (
     <aside className="mkt-left">
       {LEFT_GROUPS.map((g) => (
         <section key={g.id} className="mkt-mini-card">
           <header className="mkt-mini-card__head">
-            <span>
+            <span className="uppercase text-[12px]" >
               {g.title}
               <span
                 className={'mkt-mini-card__tf' + (String(timeframe).toUpperCase() === '10Y' ? ' mkt-mini-card__tf--10y' : '')}
@@ -101,6 +102,7 @@ function LeftSnapshotStack({
           <div className="mkt-mini-card__subhead" title="Last close and total move over the chart timeframe">
             <span>M</span>
             <span>Name</span>
+            <span>Ticker</span>
             <span>Last</span>
             <span>Δ</span>
             <span>%</span>
@@ -110,6 +112,7 @@ function LeftSnapshotStack({
             const up = Number(v?.chgPct) > 0;
             const down = Number(v?.chgPct) < 0;
             const checked = selectedKeys.includes(r.key);
+            const tickerLabel = String(r.symbol || r.ticker || r.key || '').toUpperCase();
             return (
               <div key={r.key} className="mkt-mini-card__row">
                 <input
@@ -121,6 +124,9 @@ function LeftSnapshotStack({
                   aria-label={`Show ${r.label} in chart`}
                 />
                 <span className="mkt-mini-card__name">{r.label}</span>
+                <span className="mkt-mini-card__ticker" title={`OHLC symbol: ${String(r.ticker || '').toUpperCase()}`}>
+                  {tickerLabel || '—'}
+                </span>
                 <span>{v ? fmtPrice(v.close) : '—'}</span>
                 <span className={up ? 'is-up' : down ? 'is-down' : ''}>{v ? fmtAbsSigned(v.chg) : '—'}</span>
                 <span className={up ? 'is-up' : down ? 'is-down' : ''}>{v ? fmtPctSigned(v.chgPct, 1) : '—'}</span>
@@ -352,11 +358,27 @@ const WATCHLIST_INDEX_OPTIONS = [
   { id: 'nasdaq-100', label: 'Nasdaq 100', apiIndex: 'Nasdaq 100' }
 ];
 
+function watchRowSymbolUpper(r) {
+  return String(r.symbol || r.ticker || '').toUpperCase().trim();
+}
+
+function watchRowLastNum(r) {
+  const n = Number(r.price ?? r.close);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function watchRowPctNum(r) {
+  const rawPct = Number(r.totalReturnPercentage);
+  const fallbackPct = Number(r.change_pct);
+  return Number.isFinite(rawPct) ? rawPct : Number.isFinite(fallbackPct) ? fallbackPct * 100 : NaN;
+}
+
 function RightWatchlistCard({ refreshMs = 0 }) {
   const [selectedIndexId, setSelectedIndexId] = useState('dow-jones');
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [sort, setSort] = useState({ key: 'security', dir: 'asc' });
 
   const selectedIndex = useMemo(
     () => WATCHLIST_INDEX_OPTIONS.find((opt) => opt.id === selectedIndexId) || WATCHLIST_INDEX_OPTIONS[0],
@@ -403,6 +425,65 @@ function RightWatchlistCard({ refreshMs = 0 }) {
     };
   }, [refreshMs, selectedIndex.apiIndex]);
 
+  useEffect(() => {
+    setSort({ key: 'security', dir: 'asc' });
+  }, [selectedIndexId]);
+
+  const sortedRows = useMemo(() => {
+    const list = [...rows];
+    const dirMul = sort.dir === 'asc' ? 1 : -1;
+    const tie = (a, b) => watchRowSymbolUpper(a).localeCompare(watchRowSymbolUpper(b), undefined, { sensitivity: 'base' });
+    list.sort((a, b) => {
+      if (sort.key === 'security') {
+        return dirMul * watchRowSymbolUpper(a).localeCompare(watchRowSymbolUpper(b), undefined, { sensitivity: 'base' });
+      }
+      if (sort.key === 'last') {
+        const na = watchRowLastNum(a);
+        const nb = watchRowLastNum(b);
+        const aNa = !Number.isFinite(na);
+        const bNa = !Number.isFinite(nb);
+        if (aNa && bNa) return tie(a, b);
+        if (aNa) return 1;
+        if (bNa) return -1;
+        const c = dirMul * (na - nb);
+        return c !== 0 ? c : tie(a, b);
+      }
+      if (sort.key === 'pct') {
+        const pa = watchRowPctNum(a);
+        const pb = watchRowPctNum(b);
+        const aNa = !Number.isFinite(pa);
+        const bNa = !Number.isFinite(pb);
+        if (aNa && bNa) return tie(a, b);
+        if (aNa) return 1;
+        if (bNa) return -1;
+        const c = dirMul * (pa - pb);
+        return c !== 0 ? c : tie(a, b);
+      }
+      return tie(a, b);
+    });
+    return list;
+  }, [rows, sort]);
+
+  const onWatchSort = useCallback((key) => {
+    setSort((prev) => {
+      if (prev.key === key) {
+        return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, dir: 'asc' };
+    });
+  }, []);
+
+  const watchSortGlyph = (key) => (sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : '↕');
+
+  const watchSortIcoClass = (key) =>
+    'mkt-watch-card__sort-ico' +
+    (sort.key === key ? ' mkt-watch-card__sort-ico--active' : ' mkt-watch-card__sort-ico--idle');
+
+  const ariaSortFor = (key) => {
+    if (sort.key !== key) return 'none';
+    return sort.dir === 'asc' ? 'ascending' : 'descending';
+  };
+
   return (
     <aside className="mkt-right">
       <section className="mkt-watch-card">
@@ -422,10 +503,43 @@ function RightWatchlistCard({ refreshMs = 0 }) {
           </div>
         </header>
         <div className="mkt-watch-card__table">
-          <div className="mkt-watch-card__row mkt-watch-card__row--head">
-            <span>Security</span>
-            <span>Last</span>
-            <span>1D%</span>
+          <div className="mkt-watch-card__row mkt-watch-card__row--head" role="row">
+            <button
+              type="button"
+              className="mkt-watch-card__th"
+              onClick={() => onWatchSort('security')}
+              aria-sort={ariaSortFor('security')}
+              title="Sort by security name"
+            >
+              Security
+              <span className={watchSortIcoClass('security')} aria-hidden>
+                {watchSortGlyph('security')}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="mkt-watch-card__th mkt-watch-card__th--num"
+              onClick={() => onWatchSort('last')}
+              aria-sort={ariaSortFor('last')}
+              title="Sort by last price"
+            >
+              Last
+              <span className={watchSortIcoClass('last')} aria-hidden>
+                {watchSortGlyph('last')}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="mkt-watch-card__th mkt-watch-card__th--num"
+              onClick={() => onWatchSort('pct')}
+              aria-sort={ariaSortFor('pct')}
+              title="Sort by 1 day percent change"
+            >
+              1D%
+              <span className={watchSortIcoClass('pct')} aria-hidden>
+                {watchSortGlyph('pct')}
+              </span>
+            </button>
           </div>
           {loading && !rows.length ? (
             <div className="mkt-panel-status">Loading…</div>
@@ -436,20 +550,21 @@ function RightWatchlistCard({ refreshMs = 0 }) {
           {!loading && !error && !rows.length ? (
             <div className="mkt-panel-status">No data</div>
           ) : null}
-          {!error && rows.map((r, idx) => {
-            const symbol = String(r.symbol || r.ticker || '').toUpperCase().trim();
-            const last = Number(r.price ?? r.close);
-            const rawPct = Number(r.totalReturnPercentage);
-            const fallbackPct = Number(r.change_pct);
-            const pct = Number.isFinite(rawPct) ? rawPct : Number.isFinite(fallbackPct) ? fallbackPct * 100 : NaN;
-            return (
-              <Link to={'/ticker/' + encodeURIComponent(symbol)} className="mkt-watch-card__row" key={symbol || `idx-${idx}`}>
-                <span>{symbol || '—'}</span>
-                <span>{Number.isFinite(last) ? last.toFixed(2) : '—'}</span>
-                <span className={pct > 0 ? 'app-num--up' : pct < 0 ? 'app-num--down' : ''}>{Number.isFinite(pct) ? pct.toFixed(1) + '%' : '—'}</span>
-              </Link>
-            );
-          })}
+          {!error &&
+            sortedRows.map((r, idx) => {
+              const symbol = watchRowSymbolUpper(r);
+              const last = watchRowLastNum(r);
+              const pct = watchRowPctNum(r);
+              return (
+                <Link to={'/ticker/' + encodeURIComponent(symbol)} className="mkt-watch-card__row" key={symbol || `idx-${idx}`}>
+                  <span>{symbol || '—'}</span>
+                  <span>{Number.isFinite(last) ? last.toFixed(2) : '—'}</span>
+                  <span className={pct > 0 ? 'app-num--up' : pct < 0 ? 'app-num--down' : ''}>
+                    {Number.isFinite(pct) ? pct.toFixed(1) + '%' : '—'}
+                  </span>
+                </Link>
+              );
+            })}
         </div>
       </section>
     </aside>
@@ -457,6 +572,7 @@ function RightWatchlistCard({ refreshMs = 0 }) {
 }
 
 export function MarketPageFigmaShell() {
+  const { isDockOpen } = useRightRailDock();
   const [selectedSeries, setSelectedSeries] = useState(() => {
     try {
       const raw = localStorage.getItem(LS_KEYS.selected);
@@ -531,7 +647,7 @@ export function MarketPageFigmaShell() {
   }, [timeframe, axisMode, refreshMode]);
 
   return (
-    <section className="mkt-fig-shell">
+    <section className={'mkt-fig-shell' + (isDockOpen ? ' mkt-fig-shell--watchlist-dock-open' : '')}>
       <LeftSnapshotStack
         selectedKeys={selectedSeries}
         onToggleSeries={onToggleSeries}
@@ -542,7 +658,7 @@ export function MarketPageFigmaShell() {
         refreshMs={refreshMs}
       />
       <main className="mkt-center">
-        <div className="mkt-options">
+        {/* <div className="mkt-options">
           <label className="mkt-options__item">
             <span>Refresh</span>
             <ThemedDropdown
@@ -578,7 +694,7 @@ export function MarketPageFigmaShell() {
               ariaLabelPrefix="Axis"
             />
           </label>
-        </div>
+        </div> */}
         <NormalizedPerformanceCard
           selectedKeys={selectedSeries}
           onSelectedKeysChange={setSelectedSeries}
@@ -593,7 +709,7 @@ export function MarketPageFigmaShell() {
           <MarketHeatmapThumbnail refreshMs={refreshMs} />
         </div>
       </main>
-      <RightWatchlistCard refreshMs={refreshMs} />
+      {!isDockOpen ? <RightWatchlistCard refreshMs={refreshMs} /> : null}
     </section>
   );
 }
