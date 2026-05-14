@@ -16,11 +16,22 @@ export const MARKET_SERIES = [
   { key: 'XLRE', label: 'Real Estate', ticker: 'XLRE', color: '#ec4899', badge: '#831843', tone: 'pink', group: 'sector' },
   { key: 'XLC', label: 'Communication Services', ticker: 'XLC', color: '#06b6d4', badge: '#155e75', tone: 'cyan', group: 'sector' },
 
-  { key: 'EFA', label: 'Developed', ticker: 'EFA', color: '#ff00aa', badge: '#831843', tone: 'pink', group: 'other' },
-  { key: 'EEM', label: 'Developing', ticker: 'EEM', color: '#00ff6a', badge: '#14532d', tone: 'lime', group: 'other' },
-  { key: 'VGK', label: 'Europe', ticker: 'VGK', color: '#3f00ff', badge: '#2e1065', tone: 'indigo', group: 'other' },
-  { key: 'EWJ', label: 'Japan', ticker: 'EWJ', color: '#ff1493', badge: '#831843', tone: 'rose', group: 'other' },
-  { key: 'MCHI', label: 'China', ticker: 'MCHI', color: '#00e5ff', badge: '#164e63', tone: 'cyan', group: 'other' }
+  /** Client list — Other Markets (ETFs); `ticker` = OHLC symbol. */
+
+  { key: 'GLD', label: 'Gold', ticker: 'GLD', color: '#eab308', badge: '#713f12', tone: 'gold', group: 'other' },
+  { key: 'SLV', label: 'Silver', ticker: 'SLV', color: '#94a3b8', badge: '#334155', tone: 'gray', group: 'other' },
+  { key: 'USO', label: 'Oil', ticker: 'USO', color: '#0f766e', badge: '#134e4a', tone: 'teal', group: 'other' },
+  { key: 'UNG', label: 'Natural Gas', ticker: 'UNG', color: '#22d3ee', badge: '#155e75', tone: 'cyan', group: 'other' },
+  { key: 'TLT', label: '20+ Yr Treasury', ticker: 'TLT', color: '#6366f1', badge: '#312e81', tone: 'indigo', group: 'other' },
+  // { key: 'HYG', label: 'High Yield Bond', ticker: 'HYG', color: '#ec4899', badge: '#831843', tone: 'pink', group: 'other' },
+  // { key: 'EEM', label: 'Emerging Markets', ticker: 'EEM', color: '#00ff6a', badge: '#14532d', tone: 'lime', group: 'other' },
+  // { key: 'EFA', label: 'EAFE', ticker: 'EFA', color: '#ff00aa', badge: '#831843', tone: 'pink', group: 'other' },
+  // { key: 'VTI', label: 'Total Stock Mkt', ticker: 'VTI', color: '#3b82f6', badge: '#1e3a8a', tone: 'blue', group: 'other' },
+  // { key: 'VOO', label: 'Vanguard S&P 500', ticker: 'VOO', color: '#2563eb', badge: '#172554', tone: 'blue', group: 'other' },
+  // { key: 'VEA', label: 'Dev. Markets', ticker: 'VEA', color: '#8b5cf6', badge: '#4c1d95', tone: 'purple', group: 'other' },
+  // { key: 'VWO', label: 'Em. Markets', ticker: 'VWO', color: '#10b981', badge: '#064e3b', tone: 'green', group: 'other' },
+  // { key: 'BND', label: 'Total Bond', ticker: 'BND', color: '#64748b', badge: '#1e293b', tone: 'gray', group: 'other' },
+  // { key: 'AGG', label: 'US Aggregate Bond', ticker: 'AGG', color: '#78716c', badge: '#44403c', tone: 'brown', group: 'other' }
 ];
 
 export const META_BY_KEY = Object.fromEntries(MARKET_SERIES.map((s) => [s.key, s]));

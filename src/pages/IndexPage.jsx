@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
+import { FigmaPagination as NewsSectionPagination } from '../components/FigmaPagination.jsx';
 import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma.jsx';
 import { TickerMonthlyReturnsChart } from '../components/TickerMonthlyReturnsChart.jsx';
 import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
@@ -20,7 +21,7 @@ import { DEFAULT_INDEX_ROUTE_SLUG } from '../utils/tickerUrlSync.js';
 import { MARKET_SERIES } from '../components/marketSeriesRegistry.js';
 import { rowMatchesSectorEtf } from '../utils/sectorEtfMatch.js';
 
-const TIMEFRAMES = ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y', 'ALL'];
+const TIMEFRAMES = ['1D', '5D', '1M', '3M', '6M', '1Y', '3Y', '5Y', '10Y', '20Y'];
 const MAX_SIGNAL_RANGE_DAYS = 40000;
 const BENCHMARK = 'SPX';
 
@@ -725,7 +726,7 @@ export default function IndexPage() {
   const [draftChartStart, setDraftChartStart] = useState('');
   const [draftChartEnd, setDraftChartEnd] = useState('');
   const [isCustomRangePopupOpen, setIsCustomRangePopupOpen] = useState(false);
-  const [mainChartType, setMainChartType] = useState('line');
+  const [mainChartType, setMainChartType] = useState('area');
 
 
   const chartBodyRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -1496,7 +1497,9 @@ export default function IndexPage() {
     return indexTickersRows.slice(start, start + INDEX_TICKERS_PAGE_SIZE);
   }, [indexTickersRows, indexTickersPageSafe]);
   const section16Rows = useMemo(() => {
-    const compact = COMPARE_ROWS.filter((r) => ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD'].includes(r.key));
+    const compact = COMPARE_ROWS.filter((r) =>
+      ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y'].includes(r.key)
+    );
     return compact.map((row) => {
       const symPct = row.period
         ? pickDynamic(relativeLeftSeries.dynamicPeriods, row.period)
@@ -1521,7 +1524,9 @@ export default function IndexPage() {
   }, [relativeLeftSeries, relativeRightSeries]);
 
   const section17CompareRows = useMemo(() => {
-    const compact = COMPARE_ROWS.filter((r) => ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD'].includes(r.key));
+    const compact = COMPARE_ROWS.filter((r) =>
+      ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y'].includes(r.key)
+    );
     return compact.map((row) => {
       const symPct = row.period
         ? pickDynamic(dynamicSym, row.period)
@@ -1846,18 +1851,43 @@ export default function IndexPage() {
           </section>
 
           <section className="ticker-card ticker-card--news" aria-labelledby="index-news-h">
-            <div className="ticker-card__h-with-tip">
-              <h2 className="ticker-card__h ticker-card__h--flex" id="index-news-h">
-                News
-              </h2>
-              <Link to="/news" className="ticker-outline-btn ticker-outline-btn--sm">
-                View News
-              </Link>
+            <div className="ticker-subh-with-tip ticker-subh-with-tip--in-card ticker-rs-selector-head">
+              <div className="ticker-rs-selector-head__left">
+                <div className="flex shrink-0 align-centers">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden className="ticker-news-head__ico">
+                    <path d="M0 0h24v24H0z" fill="none" />
+                    <path
+                      fill="currentColor"
+                      d="M5.616 20q-.691 0-1.153-.462T4 18.384V5.616q0-.691.463-1.153T5.616 4h9.961L20 8.423v9.962q0 .69-.462 1.153T18.384 20zm0-1h12.769q.269 0 .442-.173t.173-.442V9h-4V5H5.616q-.27 0-.443.173T5 5.616v12.769q0 .269.173.442t.443.173M7.5 16h9v-1h-9zm0-7H12V8H7.5zm0 3.5h9v-1h-9zM5 5v4zv14z"
+                    />
+                  </svg>
+                </div>
+                <div className="ticker-subh-left">
+                  <h3 id="index-news-h" className="ticker-subh ticker-subh--flex">
+                    News
+                  </h3>
+                  <DataInfoTip align="start">
+                    <p className="ticker-data-tip__p">
+                      Headlines for <strong>{displaySym}</strong> from the live feed. Use <strong>View More</strong> to open the
+                      full news page with this ticker pre-selected.
+                    </p>
+                  </DataInfoTip>
+                </div>
+              </div>
+              <div className="ticker-rs-selector-head__right">
+                <button
+                  type="button"
+                  className="ticker-annual-figma__btn ticker-annual-figma__btn--outline shrink-0"
+                  onClick={() => navigate(`/news?ticker=${encodeURIComponent(displaySym)}`)}
+                >
+                  View More
+                </button>
+              </div>
             </div>
-            {newsBusy ? <p className="ticker-page__news-sample-note">Loading general trading news…</p> : null}
+            {newsBusy ? <p className="ticker-page__news-sample-note">Loading ticker news…</p> : null}
             {!newsBusy && newsError ? <p className="ticker-page__news-sample-note">{newsError}</p> : null}
             {!newsBusy && !newsError && !liveNews.length ? (
-              <p className="ticker-page__news-sample-note">No general trading headlines yet.</p>
+              <p className="ticker-page__news-sample-note">No ticker headlines yet.</p>
             ) : null}
             <ul className="ticker-news-list">
               {newsPageItems.map((n) => (
@@ -1882,27 +1912,12 @@ export default function IndexPage() {
               ))}
             </ul>
             {liveNews.length > NEWS_PAGE_SIZE ? (
-              <div className="ticker-news-pagination" aria-label="News pagination">
-                <button
-                  type="button"
-                  className="ticker-outline-btn"
-                  disabled={newsPageSafe <= 1}
-                  onClick={() => setNewsPage((p) => Math.max(1, p - 1))}
-                >
-                  Prev
-                </button>
-                <span className="ticker-news-pagination__label">
-                  Page {newsPageSafe} of {newsTotalPages}
-                </span>
-                <button
-                  type="button"
-                  className="ticker-outline-btn"
-                  disabled={newsPageSafe >= newsTotalPages}
-                  onClick={() => setNewsPage((p) => Math.min(newsTotalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
+              <NewsSectionPagination
+                page={newsPageSafe}
+                totalPages={newsTotalPages}
+                onPageChange={setNewsPage}
+                ariaLabel="News pagination"
+              />
             ) : null}
           </section>
 
@@ -2002,6 +2017,13 @@ export default function IndexPage() {
                       ariaLabelPrefix="Right index"
                       labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeRightKey)?.label ?? ''}
                     />
+                    <button
+                      type="button"
+                      className="ticker-annual-figma__btn ticker-annual-figma__btn--outline shrink-0"
+                      onClick={() => navigate('/relative-strength/ticker')}
+                    >
+                      View More
+                    </button>
                     {relativeBusy ? (
                       <span className="ticker-page__loading-pill">Loading relative strength…</span>
                     ) : null}
@@ -2076,16 +2098,9 @@ export default function IndexPage() {
             <header className="mkt-mini-card__head">
               <span className="mkt-mini-card__k" id="index-constituents-h">
                 {isSectorDataRoute ? (
-                  <>
-                    Dow Jones
-                    <span className="mkt-mini-card__k"> Constituents</span>
-                    {activeSector ? (
-                      <>
-                        {' '}
-                        · <span className="mkt-mini-card__k">{activeSector.label}</span>
-                      </>
-                    ) : null}
-                  </>
+                  <span className="mkt-mini-card__k">
+                    {activeSector ? `${activeSector.label.toUpperCase()} TICKERS` : 'SECTOR TICKERS'}
+                  </span>
                 ) : (
                   <>
                     {activeMeta.label}

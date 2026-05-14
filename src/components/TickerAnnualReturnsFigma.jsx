@@ -397,10 +397,37 @@ export function TickerAnnualReturnsFigma({
       med: median(rets)
     };
   }, [displayRows]);
-  const totalYearsInSelection = useMemo(() => {
-    const years = new Set(displayRows.map((r) => Number(r.year)).filter((y) => Number.isFinite(y)));
-    return years.size;
-  }, [displayRows]);
+  const selectionTotal = useMemo(() => {
+    const count =
+      periodMode === 'annual'
+        ? new Set(displayRows.map((r) => Number(r.year)).filter((y) => Number.isFinite(y))).size
+        : displayRows.length;
+    const unit =
+      periodMode === 'annual'
+        ? count === 1
+          ? 'Year'
+          : 'Years'
+        : periodMode === 'quarterly'
+          ? count === 1
+            ? 'Quarter'
+            : 'Quarters'
+          : periodMode === 'monthly'
+            ? count === 1
+              ? 'Month'
+              : 'Months'
+            : periodMode === 'weekly'
+              ? count === 1
+                ? 'Week'
+                : 'Weeks'
+              : periodMode === 'daily'
+                ? count === 1
+                  ? 'Day'
+                  : 'Days'
+                : count === 1
+                  ? 'Period'
+                  : 'Periods';
+    return { count, unit };
+  }, [displayRows, periodMode]);
 
   const pn = useMemo(() => periodModeNouns(periodMode), [periodMode]);
   const dropdownYearOptions = useMemo(
@@ -976,7 +1003,7 @@ export function TickerAnnualReturnsFigma({
             </span>
           </div>
           <div className="ticker-annual-figma__legend-total-years">
-            Total years: <strong>{totalYearsInSelection}</strong>
+            Total : <strong>{selectionTotal.count}</strong> {selectionTotal.unit}
           </div>
         </div>
         {showTable ? (
@@ -1059,7 +1086,7 @@ export function TickerAnnualReturnsFigma({
             <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--donut">
               {donut}
               <p className="ticker-annual-figma__total-years-caption">
-                Total years: <strong>{totalYearsInSelection}</strong>
+                Total : <strong>{selectionTotal.count}</strong> {selectionTotal.unit}
               </p>
               <div className="ticker-annual-figma__legends ticker-annual-figma__legend--donut flex">
                 <span className="ticker-annual-figma__legend-item">
@@ -1076,7 +1103,7 @@ export function TickerAnnualReturnsFigma({
               {summaryBars}
               {summaryBars ? (
                 <div className="ticker-annual-figma__summary-total-years">
-                  Total years: <strong>{totalYearsInSelection}</strong>
+                  Total : <strong>{selectionTotal.count}</strong> {selectionTotal.unit}
                 </div>
               ) : null}
             </div>

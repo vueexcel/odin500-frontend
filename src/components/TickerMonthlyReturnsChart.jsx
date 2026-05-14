@@ -324,8 +324,8 @@ export function TickerMonthlyReturnsChart({
         style={tickerSvgPlotStyle(plotHeight)}
       >
         {gridLines}
-        {avgLine}
         {bars}
+        {avgLine}
         {xLabels}
       </svg>
     );

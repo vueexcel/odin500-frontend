@@ -19,6 +19,7 @@ import {
   fmtPrice,
   tfRange
 } from '../utils/marketCalculations.js';
+import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 
 const LEFT_GROUPS = [
   { id: 'us', title: 'Key US Indices ' },
@@ -113,20 +114,38 @@ return (
             const down = Number(v?.chgPct) < 0;
             const checked = selectedKeys.includes(r.key);
             const tickerLabel = String(r.symbol || r.ticker || r.key || '').toUpperCase();
+            const routeSym = sanitizeTickerPageInput(r.ticker || r.symbol || r.key);
+            const tickerTo = routeSym
+              ? `/ticker/${encodeURIComponent(routeSym)}?ticker=${encodeURIComponent(routeSym)}`
+              : '';
             return (
               <div key={r.key} className="mkt-mini-card__row">
-                <input
-                  type="checkbox"
-                  className={'mkt-mini-card__check mkt-mini-card__check--' + r.tone}
-                  style={{ accentColor: r.color }}
-                  checked={checked}
-                  onChange={() => onToggleSeries(r.key)}
-                  aria-label={`Show ${r.label} in chart`}
-                />
+                <label
+                  className="mkt-mini-card__check-label"
+                  style={{ ['--mkt-check-accent']: r.color }}
+                >
+                  <input
+                    type="checkbox"
+                    className="mkt-mini-card__check"
+                    checked={checked}
+                    onChange={() => onToggleSeries(r.key)}
+                    aria-label={`Show ${r.label} in chart`}
+                  />
+                </label>
                 <span className="mkt-mini-card__name">{r.label}</span>
-                <span className="mkt-mini-card__ticker" title={`OHLC symbol: ${String(r.ticker || '').toUpperCase()}`}>
-                  {tickerLabel || '—'}
-                </span>
+                {routeSym ? (
+                  <Link
+                    className="mkt-mini-card__ticker mkt-mini-card__ticker--link"
+                    to={tickerTo}
+                    title={`Open ${routeSym} on ticker page (OHLC: ${String(r.ticker || '').toUpperCase()})`}
+                  >
+                    {tickerLabel || '—'}
+                  </Link>
+                ) : (
+                  <span className="mkt-mini-card__ticker" title={`OHLC symbol: ${String(r.ticker || '').toUpperCase()}`}>
+                    {tickerLabel || '—'}
+                  </span>
+                )}
                 <span>{v ? fmtPrice(v.close) : '—'}</span>
                 <span className={up ? 'is-up' : down ? 'is-down' : ''}>{v ? fmtAbsSigned(v.chg) : '—'}</span>
                 <span className={up ? 'is-up' : down ? 'is-down' : ''}>{v ? fmtPctSigned(v.chgPct, 1) : '—'}</span>

@@ -171,6 +171,7 @@ export function TickerSymbolCombobox({
     setItems([]);
     setOpen(false);
     setHighlight(-1);
+    onSymbolChange('');
   };
 
   return (

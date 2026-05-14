@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import TradingChartLoader from './TradingChartLoader.jsx';
@@ -94,6 +94,37 @@ function niceAxisBounds(rows) {
     ticks.push(Math.round(t * 1000) / 1000);
   }
   return { min, max, ticks };
+}
+
+/** @param {number} axisMax @param {number} axisMin @param {number} value */
+function chartYPct(axisMax, axisMin, value) {
+  const range = axisMax - axisMin;
+  if (!Number.isFinite(range) || range <= 0) return 50;
+  return ((axisMax - value) / range) * 100;
+}
+
+function formatS24AxisPct(v) {
+  if (!Number.isFinite(v)) return '—';
+  const n = Number(v);
+  return `${n >= 0 ? '+' : ''}${n.toFixed(Number.isInteger(n) ? 0 : 1)}%`;
+}
+
+/**
+ * @param {number} axisMax
+ * @param {number} axisMin
+ * @param {unknown} v
+ * @returns {{ topPct: number, heightPct: number, empty: boolean, dir: 'up' | 'down' | 'flat' }}
+ */
+function s24BarGeom(axisMax, axisMin, v) {
+  const z = chartYPct(axisMax, axisMin, 0);
+  if (v == null || !Number.isFinite(Number(v))) {
+    return { topPct: z, heightPct: 0, empty: true, dir: 'flat' };
+  }
+  const num = Number(v);
+  const yv = chartYPct(axisMax, axisMin, num);
+  if (num > 0) return { topPct: yv, heightPct: Math.max(0, z - yv), empty: false, dir: 'up' };
+  if (num < 0) return { topPct: z, heightPct: Math.max(0, yv - z), empty: false, dir: 'down' };
+  return { topPct: z, heightPct: 0, empty: false, dir: 'flat' };
 }
 
 export function TickerSection23Section24({
@@ -340,13 +371,69 @@ export function TickerSection23Section24({
 
   const axis = useMemo(() => niceAxisBounds(rows), [rows]);
 
-  const chartBars = useMemo(() => {
-    const step = 100 / Math.max(1, rows.length);
-    return rows.map((r, i) => {
-      const x = i * step + step / 2;
-      return { ...r, x };
-    });
-  }, [rows]);
+  const s24Ticks = useMemo(
+    () =>
+      axis.ticks.map((t) => ({
+        key: `s24y-${t}`,
+        value: t,
+        topPct: chartYPct(axis.max, axis.min, t)
+      })),
+    [axis]
+  );
+  const s24ZeroTopPct = useMemo(() => chartYPct(axis.max, axis.min, 0), [axis]);
+  const s24Cols = useMemo(
+    () =>
+      rows.map((r) => ({
+        tf: r.tf,
+        benchV: r.bench,
+        tickV: r.tick,
+        bench: s24BarGeom(axis.max, axis.min, r.bench),
+        tick: s24BarGeom(axis.max, axis.min, r.tick)
+      })),
+    [rows, axis]
+  );
+  const s24NCols = Math.max(1, rows.length);
+  const s24GapPx = s24NCols > 12 ? 4 : s24NCols > 8 ? 6 : 8;
+  const s24BarMaxPx = s24NCols > 12 ? 9 : s24NCols > 8 ? 11 : 13;
+
+  const s24FsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const [s24Fs, setS24Fs] = useState(false);
+
+  useEffect(() => {
+    const sync = () => {
+      const el = s24FsRef.current;
+      const d = /** @type {Document & { webkitFullscreenElement?: Element | null }} */ (document);
+      setS24Fs(!!el && (document.fullscreenElement === el || d.webkitFullscreenElement === el));
+    };
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+    sync();
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      document.removeEventListener('webkitfullscreenchange', sync);
+    };
+  }, []);
+
+  const toggleS24Fullscreen = useCallback(async () => {
+    const el = s24FsRef.current;
+    if (!el) return;
+    const d = /** @type {Document & { exitFullscreen?: () => Promise<void>; webkitExitFullscreen?: () => void; webkitFullscreenElement?: Element | null }} */ (
+      document
+    );
+    const fsEl = d.fullscreenElement ?? d.webkitFullscreenElement;
+    try {
+      if (fsEl === el) {
+        if (d.exitFullscreen) await d.exitFullscreen();
+        else d.webkitExitFullscreen?.();
+      } else if (el.requestFullscreen) {
+        await el.requestFullscreen();
+      } else {
+        /** @type {{ webkitRequestFullscreen?: () => void }} */ (el).webkitRequestFullscreen?.();
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const benchmarkControls = (
     <div className="ticker-s23s24__controls">
@@ -383,46 +470,62 @@ export function TickerSection23Section24({
   return (
     <section className="ticker-s23s24">
       <div className="ticker-s23s24__card ticker-s23">
-        <div className="ticker-s23s24__head-row">
+        <div className="ticker-s23s24__head-row ticker-s23s24__head-row--title-only">
           <div className="ticker-card__h-with-tip">
-            <h3 className="ticker-subh ticker-subh--flex">Benchmark vs Ticker Table</h3>
+            <h3 className="ticker-subh ticker-subh--flex uppercase">Relative Strength</h3>
             <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
           </div>
-          {filtersMenuMode ? (
-            <ReturnsChartFiltersMenu className="ticker-s23s24__filters-menu">
-              {benchmarkControls}
-            </ReturnsChartFiltersMenu>
-          ) : null}
         </div>
-        {!filtersMenuMode ? benchmarkControls : null}
-        <table className="ticker-s23__table">
-          <thead>
-            <tr>
-              <th> Time</th>
-              <th>{ticker || 'Ticker'}</th>
-              <th>{activeGroup.benchLabel}</th>
-              <th>Difference</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.tf}>
-                <th scope="row">{r.tf}</th>
-                <td className={signedToneClass(r.bench)}>{fmtPct(r.bench)}</td>
-                <td className={signedToneClass(r.tick)}>{fmtPct(r.tick)}</td>
-                <td className={signedToneClass(r.diff)}>{fmtPct(r.diff)}</td>
+        <div className="ticker-s23__body">
+          <table className="ticker-s23__table">
+            <thead>
+              <tr>
+                <th> Time</th>
+                <th>{ticker || 'Ticker'}</th>
+                <th>{activeGroup.benchLabel}</th>
+                <th>Difference</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.tf}>
+                  <th scope="row">{r.tf}</th>
+                  <td className={signedToneClass(r.bench)}>{fmtPct(r.bench)}</td>
+                  <td className={signedToneClass(r.tick)}>{fmtPct(r.tick)}</td>
+                  <td className={signedToneClass(r.diff)}>{fmtPct(r.diff)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="ticker-s23s24__card ticker-s24">
-        <div className="ticker-card__h-with-tip">
-          <h3 className="ticker-subh ticker-subh--flex">Benchmark vs Ticker Bars</h3>
-          <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
+        <div className="ticker-s24__title-row">
+          <div className="ticker-card__h-with-tip">
+            <h3 className="ticker-subh ticker-subh--flex">Benchmark vs Ticker Bars</h3>
+            <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
+          </div>
+          <div className="ticker-s24__title-actions">
+            <button
+              type="button"
+              className="ticker-s24__fs-btn"
+              onClick={toggleS24Fullscreen}
+              aria-pressed={s24Fs}
+              aria-label={s24Fs ? 'Exit chart fullscreen' : 'Enter chart fullscreen'}
+              title={s24Fs ? 'Exit fullscreen' : 'Fullscreen'}
+            >
+              <span className={'ticker-s24__fs-ico' + (s24Fs ? ' ticker-s24__fs-ico--exit' : '')} aria-hidden>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M18 11l-6-6-6 6" />
+                </svg>
+              </span>
+            </button>
+            
+          </div>
         </div>
-        <div className="ticker-s24__chart">
+        {!filtersMenuMode ? benchmarkControls : null}
+        <div ref={s24FsRef} className="ticker-s24__chart-shell">
           {loadingReturns ? (
             <div className="chart-viz-loading-wrap ticker-s24__viz-loading">
               <TradingChartLoader
@@ -432,63 +535,87 @@ export function TickerSection23Section24({
             </div>
           ) : (
             <>
-          <svg viewBox="0 0 860 320" preserveAspectRatio="none" className="ticker-s24__svg">
-            {axis.ticks.map((t) => {
-              const y = 270 - ((t - axis.min) / (axis.max - axis.min || 1)) * 220;
-              return (
-                <g key={t}>
-                  <line x1="52" y1={y} x2="840" y2={y} stroke="rgba(148,163,184,0.28)" strokeWidth="1" />
-                  <text x="32" y={y + 4} textAnchor="end" fill="#64748b" fontSize="12" fontWeight="600">
-                    {t}%
-                  </text>
-                </g>
-              );
-            })}
-            {chartBars.map((b) => {
-              const baseY = 270 - ((0 - axis.min) / (axis.max - axis.min || 1)) * 220;
-              const yFor = (v) => 270 - ((v - axis.min) / (axis.max - axis.min || 1)) * 220;
-              const bw = 9;
-              const tw = 9;
-              const xBench = 52 + (b.x / 100) * 788 - 11;
-              const xTick = 52 + (b.x / 100) * 788 + 3;
-              const benchY = Number.isFinite(b.bench) ? yFor(b.bench) : baseY;
-              const tickY = Number.isFinite(b.tick) ? yFor(b.tick) : baseY;
-              const benchTop = Math.min(baseY, benchY);
-              const tickTop = Math.min(baseY, tickY);
-              const benchH = Math.max(1, Math.abs(baseY - benchY));
-              const tickH = Math.max(1, Math.abs(baseY - tickY));
-              const showLabel = ['1Y', '3Y', '5Y', '10Y', '20Y'].includes(b.tf);
-              return (
-                <g key={b.tf}>
-                  <rect x={xBench} y={benchTop} width={bw} height={benchH} fill="#3b82f6" />
-                  <rect x={xTick} y={tickTop} width={tw} height={tickH} fill="#f59e0b" />
-                  {showLabel && Number.isFinite(b.bench) ? (
-                    <text x={xBench + bw / 2} y={benchY - 5} textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="700">
-                      {Number(b.bench).toFixed(1)}%
-                    </text>
-                  ) : null}
-                  {showLabel && Number.isFinite(b.tick) ? (
-                    <text x={xTick + tw / 2} y={tickY - 5} textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="700">
-                      {Number(b.tick).toFixed(1)}%
-                    </text>
-                  ) : null}
-                  <text x={52 + (b.x / 100) * 788 - 1} y={295} textAnchor="end" fill="#64748b" fontSize="11" transform={`rotate(-45 ${52 + (b.x / 100) * 788 - 1} 295)`}>
-                    {b.tf}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-          <div className="ticker-s24__legend">
-            <span>
-              <i className="ticker-s24__dot ticker-s24__dot--bench" />
-              {activeGroup.benchLabel}
-            </span>
-            <span>
-              <i className="ticker-s24__dot ticker-s24__dot--tick" />
-              {ticker || 'Ticker'}
-            </span>
-          </div>
+              <div
+                className="ticker-s24__chart ticker-s17__chart"
+                style={{
+                  '--ticker-s17-cols': String(s24NCols),
+                  '--ticker-s17-gap': `${s24GapPx}px`,
+                  '--ticker-s17-bar-max': `${s24BarMaxPx}px`
+                }}
+              >
+                <div className="ticker-s17__yaxis">
+                  <div className="ticker-s17__yaxis-area">
+                    {s24Ticks.map((t) => (
+                      <span key={t.key} className="ticker-s17__yval" style={{ top: `${t.topPct}%` }}>
+                        {formatS24AxisPct(t.value)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="ticker-s17__plot">
+                  <div className="ticker-s17__plot-area">
+                    <div className="ticker-s17__viz">
+                      {s24Ticks.map((t) => (
+                        <span key={`g-${t.key}`} className="ticker-s17__grid" style={{ top: `${t.topPct}%` }} />
+                      ))}
+                      <span className="ticker-s17__zero" style={{ top: `${s24ZeroTopPct}%` }} />
+                      <div className="ticker-s17__bars">
+                        {s24Cols.map((c) => (
+                          <div key={c.tf} className="ticker-s17__col">
+                            <div className="ticker-s24__pair-zones">
+                              <div className="ticker-s17__bar-zone ticker-s24__bar-zone--twin">
+                                <div
+                                  className={
+                                    'ticker-s24__pillar ticker-s24__pillar--bench ticker-s24__pillar--' +
+                                    c.bench.dir +
+                                    (c.bench.empty ? ' ticker-s24__pillar--empty' : '')
+                                  }
+                                  style={{ top: `${c.bench.topPct}%`, height: `${c.bench.heightPct}%` }}
+                                  title={
+                                    c.bench.empty
+                                      ? `${activeGroup.benchLabel}: —`
+                                      : `${activeGroup.benchLabel}: ${fmtPct(c.benchV)}`
+                                  }
+                                />
+                              </div>
+                              <div className="ticker-s17__bar-zone ticker-s24__bar-zone--twin">
+                                <div
+                                  className={
+                                    'ticker-s24__pillar ticker-s24__pillar--tick ticker-s24__pillar--' +
+                                    c.tick.dir +
+                                    (c.tick.empty ? ' ticker-s24__pillar--empty' : '')
+                                  }
+                                  style={{ top: `${c.tick.topPct}%`, height: `${c.tick.heightPct}%` }}
+                                  title={
+                                    c.tick.empty ? `${ticker || 'Ticker'}: —` : `${ticker || 'Ticker'}: ${fmtPct(c.tickV)}`
+                                  }
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="ticker-s17__xlabels">
+                      {s24Cols.map((c) => (
+                        <span key={`lab-${c.tf}`} className="ticker-s17__lab">
+                          {c.tf}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="ticker-s24__legend">
+                <span>
+                  <i className="ticker-s24__dot ticker-s24__dot--bench" />
+                  {activeGroup.benchLabel}
+                </span>
+                <span>
+                  <i className="ticker-s24__dot ticker-s24__dot--tick" />
+                  {ticker || 'Ticker'}
+                </span>
+              </div>
             </>
           )}
         </div>

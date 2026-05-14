@@ -80,6 +80,34 @@ function signedToneClass(v) {
   return Number(v) > 0 ? 'app-num--up' : Number(v) < 0 ? 'app-num--down' : '';
 }
 
+function IcoDownload() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path
+        d="M7.00049 2.48828V9.05078"
+        stroke="white"
+        strokeWidth="0.875"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4.53955 6.58984L7.00049 9.05078L9.46143 6.58984"
+        stroke="white"
+        strokeWidth="0.875"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M13.1528 9.05078V9.87109C13.1528 10.3062 12.98 10.7235 12.6723 11.0312C12.3646 11.3389 11.9473 11.5117 11.5122 11.5117H2.48877C2.05365 11.5117 1.63635 11.3389 1.32867 11.0312C1.021 10.7235 0.848145 10.3062 0.848145 9.87109V9.05078"
+        stroke="white"
+        strokeWidth="0.875"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function sortNormalizedDesc(rows) {
   return [...rows].sort((a, b) => (a.sortKey > b.sortKey ? -1 : a.sortKey < b.sortKey ? 1 : 0));
 }
@@ -563,8 +591,13 @@ export default function HistoricalDataPage() {
             />
           </div>
           <div className="historical-data__actions">
-            <button type="button" className="historical-data__btn" onClick={onDownloadCsv} disabled={!sortedRows.length}>
-              Download CSV
+            <button
+              type="button"
+              className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+              onClick={onDownloadCsv}
+              disabled={!sortedRows.length}
+            >
+              <IcoDownload /> Download CSV
             </button>
           </div>
         </div>

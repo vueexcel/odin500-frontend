@@ -1,5 +1,7 @@
 import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { StatsCmpChartSkeleton } from './ChartSkeletons.jsx';
+import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
+import { StatsCmpIcoDownload, StatsCmpIcoTable } from './statsCmpChartToolbarIcons.jsx';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
 function fmtEx(v) {
@@ -29,6 +31,11 @@ export function ExcessReturnLineChart({
   benchmarkOptions = [],
   onBenchmarkChange = () => {},
   controls = null,
+  toolbarVariant = 'inline',
+  showDataTable = false,
+  onToggleDataTable,
+  onDownloadCsv,
+  csvDisabled = false,
   loading = false,
   /** When set by `TickerChartResizeScope` via cloneElement. */
   plotHeight = null
@@ -62,22 +69,65 @@ export function ExcessReturnLineChart({
   const svgPlotStyle = resizeChrome && hPx != null ? tickerSvgPlotStyle(hPx) : undefined;
   const rootClass = ['stats-cmp-chart', resizeChrome ? 'stats-cmp-chart--plot-resize' : ''].filter(Boolean).join(' ');
 
-  return (
-    <section className={rootClass}>
+  const benchmarkDd = (
+    <ThemedDropdown
+      size="sm"
+      className={
+        'stats-cmp-chart__benchmark-dd' +
+        (toolbarVariant === 'filtersMenu' ? ' stats-cmp-chart__benchmark-dd--panel' : '')
+      }
+      value={benchmarkIndex}
+      options={benchmarkOptions}
+      onChange={onBenchmarkChange}
+      title="Benchmark"
+      ariaLabelPrefix="Benchmark"
+      labelFallback={benchmarkIndex}
+      wideLabel
+    />
+  );
+
+  const dataToolbar =
+    typeof onToggleDataTable === 'function' && typeof onDownloadCsv === 'function' ? (
+      <>
+        <button
+          type="button"
+          className="ticker-annual-figma__btn ticker-annual-figma__btn--primary"
+          onClick={() => onToggleDataTable()}
+        >
+          <StatsCmpIcoTable /> {showDataTable ? 'Hide data table' : 'Show data table'}
+        </button>
+        <button
+          type="button"
+          className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+          onClick={() => onDownloadCsv()}
+          disabled={csvDisabled}
+        >
+          <StatsCmpIcoDownload /> Download CSV
+        </button>
+      </>
+    ) : null;
+
+  const chartHead =
+    toolbarVariant === 'filtersMenu' ? (
+      <div className="stats-cmp-chart__head stats-cmp-chart__head--filters-menu">
+        <ReturnsChartFiltersMenu className="stats-cmp-chart__returns-filters">
+          <div className="stats-cmp-chart__filters-panel-inner">
+            {controls}
+            {benchmarkDd}
+            {dataToolbar}
+          </div>
+        </ReturnsChartFiltersMenu>
+      </div>
+    ) : (
       <div className="stats-cmp-chart__head">
         <div className="stats-cmp-chart__controls">{controls}</div>
-        <ThemedDropdown
-          size="sm"
-          className="stats-cmp-chart__benchmark-dd"
-          value={benchmarkIndex}
-          options={benchmarkOptions}
-          onChange={onBenchmarkChange}
-          title="Benchmark"
-          ariaLabelPrefix="Benchmark"
-          labelFallback={benchmarkIndex}
-          wideLabel
-        />
+        {benchmarkDd}
       </div>
+    );
+
+  return (
+    <section className={rootClass}>
+      {chartHead}
       {loading ? (
         <StatsCmpChartSkeleton variant="line" />
       ) : !rows.length ? (

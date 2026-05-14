@@ -59,7 +59,7 @@ export function AppMainTopBar({ theme = 'dark', onToggleTheme }) {
           <span className="app-main-topbar__theme-knob">{isLight ? <IconSun /> : <IconMoon />}</span>
         </span>
       </button>
-      <HelpCenterDropdown />
+      {/* <HelpCenterDropdown /> */}
       </div>
     </header>
   );

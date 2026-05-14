@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { fetchJsonCached, fetchWithAuth, peekJsonCached, resolveTickerSymbols } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
+import {
+  mergeResolvedSymbolsIntoPicks,
+  parseTickerSymbolsFromCsvText,
+  resolveTickerSymbolsBatched
+} from '../utils/watchlistCsv.js';
 import { WatchlistTickerMultiselect } from './WatchlistTickerMultiselect.jsx';
 
 /**
@@ -222,6 +227,8 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
   const [createTickers, setCreateTickers] = useState(/** @type {{ id: string, symbol: string, company_name?: string }[]} */ ([]));
   const [createBusy, setCreateBusy] = useState(false);
   const [createErr, setCreateErr] = useState('');
+  /** When true, create modal was opened via Copy Watchlist (different title only). */
+  const [createFromCopy, setCreateFromCopy] = useState(false);
   const [updateEditId, setUpdateEditId] = useState('');
   const [updateEditName, setUpdateEditName] = useState('');
   const [updateEditTickers, setUpdateEditTickers] = useState([]);
@@ -231,6 +238,17 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
   const [quickAddBusyId, setQuickAddBusyId] = useState('');
   const [updatePickErr, setUpdatePickErr] = useState('');
   const [pendingAddSymbol, setPendingAddSymbol] = useState('');
+  const [createCsvBusy, setCreateCsvBusy] = useState(false);
+  const [createCsvMsg, setCreateCsvMsg] = useState('');
+  const [updateCsvBusy, setUpdateCsvBusy] = useState(false);
+  const [updateCsvMsg, setUpdateCsvMsg] = useState('');
+  const createCsvInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+  const updateCsvInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+  const createTickersRef = useRef(createTickers);
+  createTickersRef.current = createTickers;
+  const updateEditTickersRef = useRef(updateEditTickers);
+  updateEditTickersRef.current = updateEditTickers;
 
   const closeManageUi = useCallback(() => {
     setManagePanel(null);
@@ -242,6 +260,11 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
     setUpdateBusy(false);
     setQuickAddBusyId('');
     setDeleteBusyId('');
+    setCreateFromCopy(false);
+    setCreateCsvMsg('');
+    setUpdateCsvMsg('');
+    setCreateCsvBusy(false);
+    setUpdateCsvBusy(false);
   }, []);
 
   const primePendingAddSymbol = useCallback((raw) => {
@@ -384,9 +407,11 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
 
   const openCreatePanel = () => {
     setSettingsOpen(false);
+    setCreateFromCopy(false);
     setCreateName('');
     setCreateTickers([]);
     setCreateErr('');
+    setCreateCsvMsg('');
     setManagePanel('create');
   };
 
@@ -413,6 +438,7 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
       }));
     setUpdateEditTickers(picks);
     setUpdateErr('');
+    setUpdateCsvMsg('');
     setManagePanel('update-edit');
   };
 
@@ -612,6 +638,152 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
     [options, selectedKey]
   );
 
+  /** Pre-fill create modal with tickers from the watchlist currently selected in the dropdown. */
+  const copyWatchlist = useCallback(async () => {
+    setSettingsOpen(false);
+    setCreateFromCopy(true);
+    setCreateName('');
+    setCreateErr('');
+    setCreateCsvMsg('');
+    const opt = selected;
+    if (!opt?.tickers?.length) {
+      setCreateTickers([]);
+      setManagePanel('create');
+      return;
+    }
+
+    const withId = [];
+    const symbolsNeedResolve = [];
+    for (const t of opt.tickers) {
+      const sym = String(t.symbol || '').trim().toUpperCase();
+      if (!sym) continue;
+      if (t.tickerId) {
+        withId.push({ id: String(t.tickerId), symbol: sym, company_name: t.companyName || '' });
+      } else {
+        symbolsNeedResolve.push(sym);
+      }
+    }
+
+    let picks = [...withId];
+    if (symbolsNeedResolve.length) {
+      try {
+        const uniq = [...new Set(symbolsNeedResolve)];
+        const resolved = await resolveTickerSymbols(uniq);
+        for (const sym of uniq) {
+          const hit = resolved.get(sym);
+          if (hit?.id) {
+            const row = opt.tickers.find((x) => String(x.symbol || '').trim().toUpperCase() === sym);
+            picks.push({
+              id: String(hit.id),
+              symbol: sym,
+              company_name: hit.company_name || row?.companyName || ''
+            });
+          }
+        }
+      } catch {
+        setCreateErr('Could not resolve some tickers. Add any missing symbols in the list below.');
+      }
+    }
+
+    setCreateTickers(picks);
+    setManagePanel('create');
+  }, [selected]);
+
+  const downloadWatchlistCsv = useCallback(() => {
+    setSettingsOpen(false);
+    const opt = selected;
+    const rows = opt?.tickers || [];
+    const lines = ['symbol'];
+    for (const t of rows) {
+      const sym = String(t.symbol || '').trim();
+      if (sym) lines.push(sym);
+    }
+    const body = lines.join('\r\n');
+    const blob = new Blob([body], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const rawTitle = String(opt?.name || 'watchlist').trim() || 'watchlist';
+    const safe = rawTitle.replace(/[/\\?%*:|"<>]/g, '-').slice(0, 80);
+    a.download = safe + '-tickers.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [selected]);
+
+  const onCreateCsvFileChange = async (e) => {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    setCreateCsvBusy(true);
+    setCreateCsvMsg('');
+    try {
+      const text = await file.text();
+      const syms = parseTickerSymbolsFromCsvText(text);
+      if (syms.length === 0) {
+        setCreateCsvMsg('No tickers found in that file.');
+        return;
+      }
+      const resolved = await resolveTickerSymbolsBatched(syms);
+      const prev = createTickersRef.current;
+      const { next, missing, added } = mergeResolvedSymbolsIntoPicks(prev, syms, resolved);
+      setCreateTickers(next);
+      if (missing.length) {
+        setCreateCsvMsg(
+          (added ? `Added ${added} from CSV. ` : '') +
+            `Could not resolve: ${missing.slice(0, 14).join(', ')}` +
+            (missing.length > 14 ? '…' : '')
+        );
+      } else if (added > 0) {
+        setCreateCsvMsg(`Added ${added} ticker(s) from CSV.`);
+      } else {
+        setCreateCsvMsg('All tickers from CSV were already selected.');
+      }
+    } catch (err) {
+      setCreateCsvMsg(err?.message || 'Could not read CSV file.');
+    } finally {
+      setCreateCsvBusy(false);
+    }
+  };
+
+  const onUpdateCsvFileChange = async (e) => {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    setUpdateCsvBusy(true);
+    setUpdateCsvMsg('');
+    try {
+      const text = await file.text();
+      const syms = parseTickerSymbolsFromCsvText(text);
+      if (syms.length === 0) {
+        setUpdateCsvMsg('No tickers found in that file.');
+        return;
+      }
+      const resolved = await resolveTickerSymbolsBatched(syms);
+      const prev = updateEditTickersRef.current;
+      const { next, missing, added } = mergeResolvedSymbolsIntoPicks(prev, syms, resolved);
+      setUpdateEditTickers(next);
+      if (missing.length) {
+        setUpdateCsvMsg(
+          (added ? `Added ${added} from CSV. ` : '') +
+            `Could not resolve: ${missing.slice(0, 14).join(', ')}` +
+            (missing.length > 14 ? '…' : '')
+        );
+      } else if (added > 0) {
+        setUpdateCsvMsg(`Added ${added} ticker(s) from CSV.`);
+      } else {
+        setUpdateCsvMsg('All tickers from CSV were already selected.');
+      }
+    } catch (err) {
+      setUpdateCsvMsg(err?.message || 'Could not read CSV file.');
+    } finally {
+      setUpdateCsvBusy(false);
+    }
+  };
+
   const sortedRows = useMemo(() => {
     const tickers = selected?.tickers || [];
     const rows = [...tickers];
@@ -689,6 +861,16 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
                 <li role="none">
                   <button type="button" className="wl-flyout__settings-item" role="menuitem" onClick={openUpdatePickPanel}>
                     Update Watchlist
+                  </button>
+                </li>
+                <li role="none">
+                  <button type="button" className="wl-flyout__settings-item" role="menuitem" onClick={copyWatchlist}>
+                    Copy Watchlist
+                  </button>
+                </li>
+                <li role="none">
+                  <button type="button" className="wl-flyout__settings-item" role="menuitem" onClick={downloadWatchlistCsv}>
+                    Download CSV
                   </button>
                 </li>
               </ul>
@@ -853,7 +1035,7 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
           <div className="wl-manage-modal" role="dialog" aria-labelledby="wl-create-title">
             <div className="wl-manage-modal__head">
               <h3 id="wl-create-title" className="wl-manage-modal__title">
-                Create watchlist
+                {createFromCopy ? 'Watchlist Copy' : 'Create watchlist'}
               </h3>
               <button type="button" className="wl-manage-modal__close" onClick={closeManageUi} aria-label="Close">
                 <IcoClose className="wl-flyout__iconbtn-svg" />
@@ -873,6 +1055,30 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
                 disabled={createBusy}
                 autoComplete="off"
               />
+              <div className="wl-manage-csv-row">
+                <p className="wl-manage-muted wl-manage-csv-row__hint">
+                  Add tickers from a CSV file (a <code className="wl-manage-code">symbol</code> column or one ticker per
+                  line). Merges with the list below.
+                </p>
+                <input
+                  ref={createCsvInputRef}
+                  type="file"
+                  accept=".csv,text/csv,text/plain"
+                  className="wl-manage-file-input"
+                  aria-hidden
+                  tabIndex={-1}
+                  onChange={onCreateCsvFileChange}
+                />
+                <button
+                  type="button"
+                  className="wl-manage-btn wl-manage-btn--ghost wl-manage-btn--compact"
+                  disabled={createBusy || createCsvBusy}
+                  onClick={() => createCsvInputRef.current?.click()}
+                >
+                  {createCsvBusy ? 'Reading…' : 'Add from CSV'}
+                </button>
+              </div>
+              {createCsvMsg ? <p className="wl-manage-csv-msg">{createCsvMsg}</p> : null}
               <WatchlistTickerMultiselect
                 idPrefix="wl-create"
                 selected={createTickers}
@@ -1032,6 +1238,30 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
                 disabled={updateBusy}
                 autoComplete="off"
               />
+              <div className="wl-manage-csv-row">
+                <p className="wl-manage-muted wl-manage-csv-row__hint">
+                  Add tickers from a CSV file (a <code className="wl-manage-code">symbol</code> column or one ticker per
+                  line). Merges with the list below.
+                </p>
+                <input
+                  ref={updateCsvInputRef}
+                  type="file"
+                  accept=".csv,text/csv,text/plain"
+                  className="wl-manage-file-input"
+                  aria-hidden
+                  tabIndex={-1}
+                  onChange={onUpdateCsvFileChange}
+                />
+                <button
+                  type="button"
+                  className="wl-manage-btn wl-manage-btn--ghost wl-manage-btn--compact"
+                  disabled={updateBusy || updateCsvBusy}
+                  onClick={() => updateCsvInputRef.current?.click()}
+                >
+                  {updateCsvBusy ? 'Reading…' : 'Add from CSV'}
+                </button>
+              </div>
+              {updateCsvMsg ? <p className="wl-manage-csv-msg">{updateCsvMsg}</p> : null}
               <WatchlistTickerMultiselect
                 idPrefix="wl-upd"
                 selected={updateEditTickers}

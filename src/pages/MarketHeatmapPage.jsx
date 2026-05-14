@@ -137,7 +137,7 @@ function formatPriceEu(n) {
 function formatPctEuSigned(n) {
   if (n == null || !Number.isFinite(Number(n))) return '—';
   const v = Number(n);
-  const s = (v >= 0 ? '+' : '') + Math.abs(v).toFixed(1).replace('.', ',') + '%';
+  const s = (v >= 0 ? '+' : '') + Math.abs(v).toFixed(1).replace('.', '.') + '%';
   return s;
 }
 
@@ -897,26 +897,7 @@ export default function MarketHeatmapPage() {
                         </span>
                       </button>
                     </th>
-                    <th aria-sort={bottomThAriaSort('weight')}>
-                      <button
-                        type="button"
-                        className="heatmap-table__sort-btn"
-                        onClick={() => handleBottomSortClick('weight')}
-                      >
-                        <span className="heatmap-table__sort-text">Weight</span>
-                        <span
-                          className={
-                            'heatmap-table__sort-ico' +
-                            (isBottomSortColumnActive('weight')
-                              ? ' heatmap-table__sort-ico--active'
-                              : ' heatmap-table__sort-ico--idle')
-                          }
-                          aria-hidden
-                        >
-                          {isBottomSortColumnActive('weight') ? '▲' : '▼'}
-                        </span>
-                      </button>
-                    </th>
+                    
                   </tr>
                 </thead>
                 <tbody>
@@ -955,15 +936,13 @@ export default function MarketHeatmapPage() {
                         >
                           {formatPctEuSigned(t.totalReturnPercentage)}
                         </td>
-                        <td title={weight != null ? `Raw weight: ${weight}` : 'No raw weight available'}>
-                          {tileSize != null ? tileSize.toFixed(3) : 'N/A'}
-                        </td>
+                        
                       </tr>
                     );
                   })}
                   {!loading && !tableRows.length ? (
                     <tr>
-                      <td colSpan={8} className="heatmap-table__empty">
+                      <td colSpan={6} className="heatmap-table__empty">
                         No tickers found for this index/period.
                       </td>
                     </tr>

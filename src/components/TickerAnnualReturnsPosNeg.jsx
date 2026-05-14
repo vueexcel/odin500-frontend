@@ -30,7 +30,8 @@ function bucketsForTheme(theme) {
   return theme === 'light' ? BUCKETS_LIGHT : BUCKETS_DARK;
 }
 
-const DONUT_GAP_DEG = 2.35;
+/** Angular gap between donut slices (deg). 0 = segments meet with no visible gap. */
+const DONUT_GAP_DEG = 0;
 const R0 = 56;
 const R1 = 90;
 const LABEL_R = (R0 + R1) / 2 + 6;
@@ -374,10 +375,6 @@ export function TickerAnnualReturnsPosNeg({
     </>
   );
 
-  const posNegModeToggleForFilters = (
-    <div className="ticker-annual-donut__toggle ticker-annual-donut__toggle--in-filters">{posNegModeToggleButtons}</div>
-  );
-
   const posNegModeToggleForSubrow = <div className="ticker-annual-donut__toggle">{posNegModeToggleButtons}</div>;
 
   const asOfLine = asOfDate ? (
@@ -412,20 +409,15 @@ export function TickerAnnualReturnsPosNeg({
         <div className="ticker-annual-figma__toolbar">
           <PosNegToolbarBadgeWithIcon periodMode={periodMode} pn={pn} />
           {filtersMenuMode ? (
-            <ReturnsChartFiltersMenu>
-              {posNegPrimaryToolbar}
-              {posNegModeToggleForFilters}
-            </ReturnsChartFiltersMenu>
+            <ReturnsChartFiltersMenu>{posNegPrimaryToolbar}</ReturnsChartFiltersMenu>
           ) : (
             <div className="ticker-annual-figma__actions ticker-annual-posneg__actions">{posNegPrimaryToolbar}</div>
           )}
         </div>
-        {!filtersMenuMode ? (
-          <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
-            <div className="ticker-annual-figma__left" />
-            {posNegModeToggleForSubrow}
-          </div>
-        ) : null}
+        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
+          <div className="ticker-annual-figma__left" />
+          {posNegModeToggleForSubrow}
+        </div>
 
         <div className="ticker-annual-donut__stage">
           <div className="ticker-annual-donut__split">

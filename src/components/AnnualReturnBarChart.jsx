@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { StatsCmpChartSkeleton } from './ChartSkeletons.jsx';
+import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
+import { StatsCmpIcoDownload, StatsCmpIcoTable } from './statsCmpChartToolbarIcons.jsx';
 import { useTickerPlotResize } from '../hooks/useTickerPlotResize.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 
@@ -24,6 +26,12 @@ export function AnnualReturnBarChart({
   benchmarkOptions = [],
   onBenchmarkChange = () => {},
   controls = null,
+  /** `'filtersMenu'` wraps range controls, benchmark, and data actions in the shared Filters dropdown. */
+  toolbarVariant = 'inline',
+  showDataTable = false,
+  onToggleDataTable,
+  onDownloadCsv,
+  csvDisabled = false,
   loading = false,
   /** Optional: shorten / format x-axis period labels (Relative Strength only). */
   formatXAxisLabel = null,
@@ -85,22 +93,65 @@ export function AnnualReturnBarChart({
     .filter(Boolean)
     .join(' ');
 
-  return (
-    <section className={rootClass} style={scopeStyle}>
+  const benchmarkDd = (
+    <ThemedDropdown
+      size="sm"
+      className={
+        'stats-cmp-chart__benchmark-dd' +
+        (toolbarVariant === 'filtersMenu' ? ' stats-cmp-chart__benchmark-dd--panel' : '')
+      }
+      value={benchmarkIndex}
+      options={benchmarkOptions}
+      onChange={onBenchmarkChange}
+      title="Benchmark"
+      ariaLabelPrefix="Benchmark"
+      labelFallback={benchmarkIndex}
+      wideLabel
+    />
+  );
+
+  const dataToolbar =
+    typeof onToggleDataTable === 'function' && typeof onDownloadCsv === 'function' ? (
+      <>
+        <button
+          type="button"
+          className="ticker-annual-figma__btn ticker-annual-figma__btn--primary"
+          onClick={() => onToggleDataTable()}
+        >
+          <StatsCmpIcoTable /> {showDataTable ? 'Hide data table' : 'Show data table'}
+        </button>
+        <button
+          type="button"
+          className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
+          onClick={() => onDownloadCsv()}
+          disabled={csvDisabled}
+        >
+          <StatsCmpIcoDownload /> Download CSV
+        </button>
+      </>
+    ) : null;
+
+  const chartHead =
+    toolbarVariant === 'filtersMenu' ? (
+      <div className="stats-cmp-chart__head stats-cmp-chart__head--filters-menu">
+        <ReturnsChartFiltersMenu className="stats-cmp-chart__returns-filters">
+          <div className="stats-cmp-chart__filters-panel-inner">
+            {controls}
+            {benchmarkDd}
+            {dataToolbar}
+          </div>
+        </ReturnsChartFiltersMenu>
+      </div>
+    ) : (
       <div className="stats-cmp-chart__head">
         <div className="stats-cmp-chart__controls">{controls}</div>
-        <ThemedDropdown
-          size="sm"
-          className="stats-cmp-chart__benchmark-dd"
-          value={benchmarkIndex}
-          options={benchmarkOptions}
-          onChange={onBenchmarkChange}
-          title="Benchmark"
-          ariaLabelPrefix="Benchmark"
-          labelFallback={benchmarkIndex}
-          wideLabel
-        />
+        {benchmarkDd}
       </div>
+    );
+
+  return (
+    <section className={rootClass} style={scopeStyle}>
+      {chartHead}
       {loading ? (
         <StatsCmpChartSkeleton variant="groupedBar" />
       ) : !rows.length ? (
