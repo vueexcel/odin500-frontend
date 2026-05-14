@@ -260,17 +260,23 @@ export function TickerSection16Section17({
                 ))}
                 <span className="ticker-s17__zero" style={{ top: `${chart.zeroTopPct ?? 50}%` }} />
                 <div className="ticker-s17__bars">
-                  {chart.bars?.map((b) => (
+                  {chart.bars?.map((b) => {
+                    const tipText =
+                      b.value == null ? `${b.label}: no data` : `${b.label}: ${b.value.toFixed(2)}%`;
+                    return (
                     <div key={b.key} className="ticker-s17__col">
                       <div className="ticker-s17__bar-zone">
                         <div
                           className={'ticker-s17__bar ticker-s17__bar--' + b.tone + (b.value == null ? ' ticker-s17__bar--empty' : '')}
                           style={{ top: `${b.topPct}%`, height: `${b.heightPct}%` }}
-                          title={b.value == null ? `${b.label}: no data` : `${b.label}: ${b.value.toFixed(2)}%`}
                         />
+                        <span className="ticker-s17__bar-tip" role="tooltip">
+                          {tipText}
+                        </span>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               </div>
               <div className="ticker-s17__xlabels">

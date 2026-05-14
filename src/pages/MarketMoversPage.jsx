@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Download, Filter, Hexagon, Maximize2, Minimize2, Settings, Upload, Users } from 'lucide-react';
+import { Download, Filter, Hexagon, Maximize2, Minimize2, Settings, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
@@ -1419,7 +1419,20 @@ export default function MarketMoversPage() {
         <div className="market-movers-page__card-toolbar">
           <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start sm:gap-x-6 sm:gap-y-2">
             <div className="market-movers-page__index-dd min-w-0 w-full sm:w-auto sm:shrink-0">
-              <Users size={18} strokeWidth={2} className="market-movers-page__users-ico" aria-hidden />
+              <svg
+                className="market-movers-page__users-ico"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M9 21H4.6C4.03995 21 3.75992 21 3.54601 20.891C3.35785 20.7951 3.20487 20.6422 3.10899 20.454C3 20.2401 3 19.9601 3 19.4V4.6C3 4.03995 3 3.75992 3.10899 3.54601C3.20487 3.35785 3.35785 3.20487 3.54601 3.10899C3.75992 3 4.03995 3 4.6 3H7.4C7.96005 3 8.24008 3 8.45399 3.10899C8.64215 3.20487 8.79513 3.35785 8.89101 3.54601C9 3.75992 9 4.03995 9 4.6V7M9 21H15M9 21L9 7M9 7H13.4C13.9601 7 14.2401 7 14.454 7.10899C14.6422 7.20487 14.7951 7.35785 14.891 7.54601C15 7.75992 15 8.03995 15 8.6V21M15 11H19.4C19.9601 11 20.2401 11 20.454 11.109C20.6422 11.2049 20.7951 11.3578 20.891 11.546C21 11.7599 21 12.0399 21 12.6V19.4C21 19.9601 21 20.2401 20.891 20.454C20.7951 20.6422 20.6422 20.7951 20.454 20.891C20.2401 21 19.9601 21 19.4 21H15" />
+              </svg>
               <ThemedDropdown
                 className="market-movers-page__mm-dd market-movers-page__mm-dd--index"
                 value={indexMenuId}
@@ -1432,7 +1445,7 @@ export default function MarketMoversPage() {
             </div>
             <label className="market-movers-page__sector-filter min-w-0 w-full sm:w-auto sm:min-w-[220px] sm:max-w-md">
               <Filter size={16} strokeWidth={2} className="market-movers-page__filter-ico" aria-hidden />
-              <span className="market-movers-page__sector-label">Sector Filter</span>
+              {/* <span className="market-movers-page__sector-label">Sector Filter</span> */}
               <ThemedDropdown
                 className="market-movers-page__mm-dd market-movers-page__mm-dd--sector"
                 value={sectorFilter}
