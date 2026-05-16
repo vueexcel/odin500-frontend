@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
@@ -7,8 +7,12 @@ import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 import { getReturnsChartViewMoreHref } from '../utils/returnsViewMoreNavigation.js';
+import { ReturnsChartClickableTitle } from './ReturnsChartClickableTitle.jsx';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
 import { WaterfallDonutChartSkeleton } from './ChartSkeletons.jsx';
+import { ChartSectionIconActions } from './ChartSectionIconActions.jsx';
+import { ReturnsChartToolbar } from './ReturnsChartToolbar.jsx';
+import { buildTickerChartExportFilename } from '../utils/chartExportFilename.js';
 
 const DEFAULT_YEAR = 2025;
 const COL_INC = '#2563eb';
@@ -111,6 +115,9 @@ export function TickerMonthlyReturnsWaterfallDonut({
   const navigate = useNavigate();
   const location = useLocation();
   const isMonthlyMode = periodMode === 'monthly';
+  const sectionRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const chartFsShellRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const chartCardRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
   const [showTable, setShowTable] = useState(false);
   const [monthRangeApplied, setMonthRangeApplied] = useState({ start: '', end: '' });
@@ -421,6 +428,7 @@ export function TickerMonthlyReturnsWaterfallDonut({
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
   }, [navigate, location.pathname, location.search, periodMode, symbol]);
+
   const onOpenPeriodPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
     const suffix = '/' + encodeURIComponent(symPart);
@@ -435,18 +443,43 @@ export function TickerMonthlyReturnsWaterfallDonut({
   const hasMonthlySource = monthRows.length > 0;
   const hasMonthly = displayMonthRows.length > 0;
   const monthlyFilteredEmpty = hasMonthlySource && !hasMonthly;
+  const buildExportFilename = useCallback(
+    () => buildTickerChartExportFilename(`${periodMode}-waterfall-returns`, symbol),
+    [periodMode, symbol]
+  );
+  const chartExportDisabled = loading || !hasMonthly;
   if (loading && !monthRows.length) {
     return <WaterfallDonutChartSkeleton periodMode={periodMode} />;
   }
   return (
     <div className="ticker-monthly-adv">
       
-      <div className="ticker-annual-figma__section">
+      <div ref={sectionRef} className="ticker-annual-figma__section">
         <div className="ticker-annual-figma__toolbar">
-          <span className="ticker-annual-figma__badge uppercase">Monthly returns — waterfall &amp; month mix</span>
+          <ReturnsChartClickableTitle className="ticker-annual-figma__badge uppercase" onClick={onViewMore}>
+            Monthly returns — waterfall &amp; month mix
+          </ReturnsChartClickableTitle>
+          <div className="ticker-annual-figma__toolbar-end">
+            <ReturnsChartToolbar
+              showViewMore={false}
+              onToggleTable={() => setShowTable((v) => !v)}
+              showTable={showTable}
+              onDownload={onDownloadCsv}
+              downloadDisabled={!selectedYearRows.length}
+            />
+            <ChartSectionIconActions
+              snapshotRootRef={sectionRef}
+              plotHostRef={chartCardRef}
+              fullscreenTargetRef={chartFsShellRef}
+              buildFilename={buildExportFilename}
+              disabled={chartExportDisabled}
+              exportPreviewAlt={`${periodMode} waterfall returns for ${symU}`}
+            />
+          </div>
         </div>
 
-        <div className="ticker-monthly-adv__split">
+        <div ref={chartFsShellRef} className="ticker-chart-fs-shell">
+        <div ref={chartCardRef} className="ticker-monthly-adv__split">
           <div className="ticker-monthly-adv__panel ticker-annual-figma__chart-card">
             <div className="ticker-monthly-adv__panel-head">
               <div className="ticker-monthly-adv__title-block">
@@ -621,6 +654,7 @@ export function TickerMonthlyReturnsWaterfallDonut({
               </span>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>

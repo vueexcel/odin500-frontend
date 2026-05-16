@@ -250,6 +250,15 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
   const updateEditTickersRef = useRef(updateEditTickers);
   updateEditTickersRef.current = updateEditTickers;
 
+  const clearPendingAddFlow = useCallback(() => {
+    setPendingAddSymbol('');
+    try {
+      sessionStorage.removeItem('watchlist_add_symbol');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const closeManageUi = useCallback(() => {
     setManagePanel(null);
     setSettingsOpen(false);
@@ -265,7 +274,8 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
     setUpdateCsvMsg('');
     setCreateCsvBusy(false);
     setUpdateCsvBusy(false);
-  }, []);
+    clearPendingAddFlow();
+  }, [clearPendingAddFlow]);
 
   const primePendingAddSymbol = useCallback((raw) => {
     const sym = String(raw || '').trim().toUpperCase();
@@ -274,6 +284,11 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
     setUpdatePickErr('');
     setSettingsOpen(false);
     setManagePanel('update-pick');
+    try {
+      sessionStorage.removeItem('watchlist_add_symbol');
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   useEffect(() => {
@@ -558,6 +573,12 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
 
   useEffect(() => {
     if (!open) return;
+    try {
+      const pending = sessionStorage.getItem('watchlist_add_symbol');
+      if (pending) primePendingAddSymbol(pending);
+    } catch {
+      /* ignore */
+    }
     const ttlMs = 2 * 60 * 1000;
     const d = peekJsonCached({ path: '/api/watchlists/defaults', auth: false, ttlMs });
     const m = peekJsonCached({ path: '/api/watchlists', auth: true, ttlMs });
@@ -571,7 +592,7 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
       }
     }
     void load();
-  }, [open, load]);
+  }, [open, load, primePendingAddSymbol]);
 
   useEffect(() => {
     function onWatchlistAddTicker(e) {
@@ -581,16 +602,6 @@ export function WatchlistRailFlyout({ open, onClose, docked = false }) {
     window.addEventListener('watchlist:add-ticker', onWatchlistAddTicker);
     return () => window.removeEventListener('watchlist:add-ticker', onWatchlistAddTicker);
   }, [primePendingAddSymbol]);
-
-  useEffect(() => {
-    if (!open) return;
-    try {
-      const pending = sessionStorage.getItem('watchlist_add_symbol');
-      if (pending) primePendingAddSymbol(pending);
-    } catch {
-      /* ignore */
-    }
-  }, [open, primePendingAddSymbol]);
 
   useEffect(() => {
     if (open) return;

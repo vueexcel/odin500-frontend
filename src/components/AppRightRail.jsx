@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRightRailDock } from '../context/WatchlistDockContext.jsx';
-import { clearApiCache, clearAuthToken, fetchWithAuth } from '../store/apiStore.js';
-import { apiUrl } from '../utils/apiOrigin.js';
+import { useHeaderProfile } from '../hooks/useHeaderProfile.js';
 
 /**
  * Fixed narrow right rail (Figma): always visible, not expandable.
@@ -111,35 +110,9 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
   const navigate = useNavigate();
   const dock = useRightRailDock();
   const [profileOpen, setProfileOpen] = useState(false);
-  const [displayName, setDisplayName] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
   const profileWrapRef = useRef(null);
-
-  const fallbackName = (() => {
-    try {
-      const em = String(localStorage.getItem('market_api_email') || '').trim();
-      if (!em) return 'Profile';
-      const at = em.indexOf('@');
-      return (at > 0 ? em.slice(0, at) : em) || 'Profile';
-    } catch {
-      return 'Profile';
-    }
-  })();
-  const profileName = (displayName || fallbackName || 'Profile').trim();
-  const initials =
-    profileName
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((s) => s[0])
-      .join('')
-      .toUpperCase() || 'P';
-
-  const handleSignOut = () => {
-    clearAuthToken();
-    clearApiCache();
-    navigate('/login', { replace: true });
-  };
+  const { loggedIn, profileName, initials, avatarUrl, handleSignOut, goToSignIn } =
+    useHeaderProfile();
 
   useEffect(() => {
     const onDown = (e) => {
@@ -148,26 +121,6 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadProfile = async () => {
-      try {
-        const res = await fetchWithAuth(apiUrl('/api/user/profile'), { method: 'GET' });
-        const payload = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        const apiName = payload?.userName || payload?.displayName || '';
-        if (res.ok && apiName) setDisplayName(String(apiName));
-        if (res.ok) setAvatarUrl(String(payload?.avatarUrl || ''));
-      } catch {
-        /* ignore */
-      }
-    };
-    void loadProfile();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const closeAll = () => {
@@ -235,29 +188,44 @@ export function AppRightRail({ mobileOpen = false, onRequestClose = null }) {
                   )}
                   <span className="header-pop__profile-name">{profileName}</span>
                 </div>
-                <button
-                  type="button"
-                  className="header-pop__item"
-                  onClick={() => {
-                    setProfileOpen(false);
-                    navigate('/about');
-                  }}
-                >
-                  Your Profile
-                </button>
-                <button type="button" className="header-pop__item" onClick={() => setProfileOpen(false)}>
-                  Setting
-                </button>
-                <button
-                  type="button"
-                  className="header-pop__item header-pop__item--danger"
-                  onClick={() => {
-                    setProfileOpen(false);
-                    handleSignOut();
-                  }}
-                >
-                  Sign out
-                </button>
+                {loggedIn ? (
+                  <>
+                    <button
+                      type="button"
+                      className="header-pop__item"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        navigate('/about');
+                      }}
+                    >
+                      Your Profile
+                    </button>
+                    <button type="button" className="header-pop__item" onClick={() => setProfileOpen(false)}>
+                      Setting
+                    </button>
+                    <button
+                      type="button"
+                      className="header-pop__item header-pop__item--danger"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        handleSignOut();
+                      }}
+                    >
+                      Sign out
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="header-pop__item"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      goToSignIn();
+                    }}
+                  >
+                    Sign in
+                  </button>
+                )}
               </div>
             ) : null}
           </div>

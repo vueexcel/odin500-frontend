@@ -11,15 +11,15 @@ export const AuthShellThemeContext = createContext('dark');
 export function AuthHeroVisual() {
   return (
     <div
-      className="auth-split-hero__viz relative min-h-[260px] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#030b14] shadow-lg ring-1 ring-black/20 lg:h-[min(100vh-4rem,720px)] lg:min-h-[320px] lg:rounded-3xl lg:rounded-r-[2rem]"
+      className="auth-split-hero__viz relative aspect-[3/4] w-full max-h-[min(72vh,480px)] overflow-hidden rounded-2xl border border-white/10 bg-[#030b14] shadow-lg ring-1 ring-black/20 sm:max-h-[520px] lg:aspect-auto lg:max-h-none lg:h-[min(100vh-4rem,720px)] lg:min-h-[320px] lg:rounded-3xl lg:rounded-r-[2rem]"
       aria-hidden
     >
       <img
         src={heroImage}
         alt=""
-        className="h-[260px] w-full object-cover object-center lg:absolute lg:inset-0 lg:h-full lg:min-h-full"
+        className="pointer-events-none absolute inset-0 h-full w-full origin-center scale-[1.12] object-cover object-center"
         decoding="async"
-        fetchpriority="high"
+        fetchPriority="high"
       />
     </div>
   );
@@ -148,26 +148,34 @@ export function AuthSplitShell({ title = 'Welcome Back!', children }) {
                 type="button"
                 onClick={toggleTheme}
                 className={`absolute right-0 top-0 flex h-10 w-[76px] items-center rounded-full p-1 transition-colors ${
-                  isDark ? 'bg-slate-800/95 ring-1 ring-white/12' : 'bg-slate-200/95 ring-1 ring-slate-300/90'
+                  isDark ? 'bg-slate-800/95 ring-2 ring-white/12' : 'bg-slate-200/95 ring-1 ring-slate-300/90'
                 }`}
                 aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 <span
-                  className={`absolute left-1 top-1 flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ${
+                  className={`pointer-events-none absolute left-1.5 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center ${
+                    isDark ? 'text-slate-500/35' : 'text-slate-700'
+                  }`}
+                  aria-hidden
+                >
+                  <Moon className="h-4 w-4" strokeWidth={2.2} />
+                </span>
+                <span
+                  className={`pointer-events-none absolute right-1.5 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center ${
+                    isDark ? 'text-amber-400' : 'text-slate-400/35'
+                  }`}
+                  aria-hidden
+                >
+                  <Sun className="h-4 w-4" strokeWidth={2.2} />
+                </span>
+                <span
+                  className={`absolute left-1 top-1 z-[2] flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ${
                     isDark
                       ? 'translate-x-0 bg-slate-700 text-slate-100'
                       : 'translate-x-[36px] bg-white text-amber-500 shadow-md'
                   }`}
                 >
                   {isDark ? <Moon className="h-4 w-4" strokeWidth={2.2} /> : <Sun className="h-4 w-4" strokeWidth={2.2} />}
-                </span>
-                <span
-                  className={`pointer-events-none ml-auto flex h-8 w-8 items-center justify-center rounded-full ${
-                    isDark ? 'text-amber-400/50' : 'text-slate-400/70'
-                  }`}
-                  aria-hidden
-                >
-                  {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </span>
               </button>
             </div>
@@ -201,20 +209,21 @@ export function AuthSplitShell({ title = 'Welcome Back!', children }) {
               <div className={`h-px flex-1 ${isDark ? 'bg-white/10' : 'bg-slate-300/90'}`} />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {/* <div className="grid grid-cols-1 gap-3 sm:grid-cols-3"> */}
+            <div className="flex justify-center">
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                className={`flex items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold transition-colors ${
+                className={`flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-[13px] font-semibold transition-colors ${
                   isDark
                     ? 'bg-[#0f1f33] text-white ring-1 ring-white/10 hover:bg-slate-800/90'
-                    : 'bg-[#e8ecf2] text-slate-800 ring-1 ring-slate-200/90 hover:bg-slate-200/95'
+                    : 'bg-[#e8ecf2] text-white ring-1 ring-slate-200/90 hover:bg-slate-200/95'
                 }`}
               >
                 <GoogleMark />
                 Google
               </button>
-              <button
+              {/* <button
                 type="button"
                 className={`flex items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold transition-colors ${
                   isDark
@@ -235,7 +244,7 @@ export function AuthSplitShell({ title = 'Welcome Back!', children }) {
               >
                 <AppleMark className={isDark ? 'text-white' : 'text-slate-900'} />
                 Apple
-              </button>
+              </button> */}
             </div>
           </div>
         </div>
@@ -368,7 +377,7 @@ export function AuthField({
             className={
               isDark
                 ? 'flex w-10 items-center justify-center self-stretch rounded-lg bg-[#3b82f6] text-white shadow-sm transition-colors hover:bg-[#2563eb]'
-                : 'flex w-10 items-center justify-center self-stretch rounded-lg bg-slate-200 text-slate-600 ring-1 ring-slate-300/80 transition-colors hover:bg-slate-300/90'
+                : 'flex w-10 items-center justify-center self-stretch rounded-lg bg-slate-200 text-white ring-1 ring-slate-300/80 transition-colors hover:bg-slate-300/90'
             }
             aria-label={showPassword ? 'Hide password' : 'Show password'}
           >

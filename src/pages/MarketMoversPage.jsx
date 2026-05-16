@@ -4,8 +4,10 @@ import { Link } from 'react-router-dom';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
 import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
-import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import {fetchJsonCached, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { MarketMoversSplitBarsSkeleton } from '../components/ChartSkeletons.jsx';
+import { useGatedCsvDownload } from '../hooks/useGatedCsvDownload.js';
+import { notifyChartFullscreenLayout } from '../utils/chartFullscreenLayout.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL, sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 
@@ -27,12 +29,12 @@ const TOP_MOVERS_BAR_COUNT_OPTIONS = [5, 10, 15, 20, 25, 30, 40, 50].map((n) => 
 }));
 
 /** Bar chart, scatter, leader header strips (not table Last/Chg/Chg%). */
-const MARKET_MOVERS_GAIN_CHART_HEX = '#406AAF';
-const MARKET_MOVERS_LOSS_CHART_HEX = '#CF4B00';
+const MARKET_MOVERS_GAIN_CHART_HEX = '#2563eb';
+const MARKET_MOVERS_LOSS_CHART_HEX = '#f59e0b';
 
 /** Table numerals (Last, Chg, Chg %) only. */
-const MARKET_MOVERS_GAIN_HEX = '#5D9C59';
-const MARKET_MOVERS_LOSS_HEX = '#990000';
+const MARKET_MOVERS_GAIN_HEX = '#22c55e';
+const MARKET_MOVERS_LOSS_HEX = 'rgb(255, 59, 48)';
 
 /** Return windows — `apiPeriod` is sent to POST /api/market/index-market-movers as `period`. */
 const MARKET_MOVERS_INTERVALS = [
@@ -186,12 +188,32 @@ function formatBarPctLabel(v) {
   return `${v.toFixed(1)}%`;
 }
 
+function useMediaMaxWidth(px) {
+  const query = `(max-width: ${px}px)`;
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const sync = () => setMatches(mq.matches);
+    sync();
+    if (typeof mq.addEventListener === 'function') mq.addEventListener('change', sync);
+    else mq.addListener(sync);
+    return () => {
+      if (typeof mq.removeEventListener === 'function') mq.removeEventListener('change', sync);
+      else mq.removeListener(sync);
+    };
+  }, [query]);
+  return matches;
+}
+
 function MarketMoversBarPanel({ bars, yCap, side, title, axisReturnTitle, exportFilePrefix }) {
   const W = 560;
   const H = 360;
   const PAD2 = { top: 26, right: 24, bottom: 72, left: 54 };
   const plotH = H - PAD2.top - PAD2.bottom;
-  const shouldScroll = bars.length > TOP_MOVERS_SCROLL_THRESHOLD;
+  const isNarrowViewport = useMediaMaxWidth(900);
+  const shouldScroll = bars.length > TOP_MOVERS_SCROLL_THRESHOLD || isNarrowViewport;
   const shouldInteractive = bars.length > TOP_MOVERS_INTERACTIVE_THRESHOLD;
   const [zoom, setZoom] = useState(1);
   const scrollRef = useRef(null);
@@ -205,6 +227,7 @@ function MarketMoversBarPanel({ bars, yCap, side, title, axisReturnTitle, export
       const root = fsHostRef.current;
       const doc = /** @type {Document & { webkitFullscreenElement?: Element | null }} */ (document);
       setInFs(!!root && (document.fullscreenElement === root || doc.webkitFullscreenElement === root));
+      notifyChartFullscreenLayout();
     };
     document.addEventListener('fullscreenchange', sync);
     document.addEventListener('webkitfullscreenchange', sync);
@@ -234,6 +257,7 @@ function MarketMoversBarPanel({ bars, yCap, side, title, axisReturnTitle, export
     } catch {
       /* ignore */
     }
+    notifyChartFullscreenLayout();
   }, []);
 
   const exportBarsCsv = useCallback(() => {
@@ -257,6 +281,8 @@ function MarketMoversBarPanel({ bars, yCap, side, title, axisReturnTitle, export
     a.click();
     URL.revokeObjectURL(url);
   }, [bars, exportFilePrefix, side]);
+
+  const exportBarsCsvClick = useGatedCsvDownload(exportBarsCsv);
 
   useEffect(() => {
     setZoom(1);
@@ -330,7 +356,7 @@ function MarketMoversBarPanel({ bars, yCap, side, title, axisReturnTitle, export
             <button
               type="button"
               className="market-movers-page__bar-panel-icon-btn"
-              onClick={exportBarsCsv}
+              onClick={exportBarsCsvClick}
               disabled={!bars.length}
               aria-label={`Export ${title} as CSV`}
               title="Export CSV"
@@ -1313,7 +1339,7 @@ export default function MarketMoversPage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!getAuthToken()) {
+      if (!canFetchProtectedApi()) {
         setError('Sign in to load market movers.');
         return;
       }
@@ -1409,6 +1435,8 @@ export default function MarketMoversPage() {
     URL.revokeObjectURL(url);
   }, [filteredPoints, activeMenu.id, meta.asOfDate, moverIntervalId]);
 
+  const exportCsvClick = useGatedCsvDownload(exportCsv);
+
   return (
     <div className="market-movers-page">
       <header className="market-movers-page__header">
@@ -1443,7 +1471,7 @@ export default function MarketMoversPage() {
                 wideLabel
               />
             </div>
-            <label className="market-movers-page__sector-filter min-w-0 w-full sm:w-auto sm:min-w-[220px] sm:max-w-md">
+            <label className="market-movers-page__sector-filter min-w-0 w-full sm:w-auto sm:max-w-md">
               <Filter size={16} strokeWidth={2} className="market-movers-page__filter-ico" aria-hidden />
               {/* <span className="market-movers-page__sector-label">Sector Filter</span> */}
               <ThemedDropdown
@@ -1466,13 +1494,18 @@ export default function MarketMoversPage() {
             </h2>
             <ChartInfoTip tip={CHART_INFO_TIPS.marketMoversScatter} align="start" />
           </div>
-          <button type="button" className="market-movers-page__export" onClick={exportCsv}>
+          <button
+            type="button"
+            className="market-movers-page__export"
+            onClick={exportCsvClick}
+            title="Export CSV"
+          >
             <Upload size={16} strokeWidth={2} aria-hidden />
             EXPORT
           </button>
         </div>
 
-        <div className="market-movers-page__interval-row">
+        <div className="market-movers-page__interval-row min-w-0 w-full max-w-full">
           <div className="market-movers-page__interval-tabs" role="tablist" aria-label="Return period">
             {MARKET_MOVERS_INTERVALS.map((it) => (
               <button

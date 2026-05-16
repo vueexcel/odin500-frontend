@@ -1,4 +1,5 @@
-import { useCallback, useId, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ChartDateApplyRow } from './ChartDateApplyRow.jsx';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { periodModeNouns } from '../utils/periodModeNouns.js';
@@ -6,8 +7,11 @@ import { filterReturnsRows } from '../utils/returnsDateRange.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 import { PosNegReturnsChartSkeleton } from './ChartSkeletons.jsx';
-import { useReturnsChartFiltersMenuMode } from '../context/WatchlistDockContext.jsx';
-import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
+import { ReturnsChartToolbar } from './ReturnsChartToolbar.jsx';
+import { ReturnsChartClickableTitle } from './ReturnsChartClickableTitle.jsx';
+import { getReturnsChartViewMoreHref } from '../utils/returnsViewMoreNavigation.js';
+import { ChartSectionIconActions } from './ChartSectionIconActions.jsx';
+import { buildTickerChartExportFilename } from '../utils/chartExportFilename.js';
 
 const BUCKETS_DARK = [
   { key: 'b01', legend: '0-1%', color: '#38bdf8' },
@@ -170,23 +174,6 @@ function BucketDonut({ counts, buckets, theme, plotHeight, emptyPeriodLower = 'y
   );
 }
 
-function IcoTable() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="4" y="4" width="16" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.75" />
-      <path d="M4 9h16M4 14h16M12 9v11" stroke="currentColor" strokeWidth="1.75" />
-    </svg>
-  );
-}
-
-function IcoDownload() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M12 4v10m0 0l4-4m-4 4L8 10M6 18h12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function csvEscape(s) {
   const t = String(s ?? '');
   if (/[",\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
@@ -194,7 +181,7 @@ function csvEscape(s) {
 }
 
 /** Pie icon + period returns badge (layout: Tailwind only). */
-function PosNegToolbarBadgeWithIcon({ periodMode, pn }) {
+function PosNegToolbarBadgeWithIcon({ periodMode, pn, onClick }) {
   const clipId = useId().replace(/:/g, '');
   return (
     <div className="inline-flex min-w-0 shrink-0 items-center ">
@@ -229,9 +216,9 @@ function PosNegToolbarBadgeWithIcon({ periodMode, pn }) {
           </clipPath>
         </defs>
       </svg>
-      <span className="ticker-annual-figma__badge uppercase">
+      <ReturnsChartClickableTitle className="ticker-annual-figma__badge uppercase" onClick={onClick}>
         {`${periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive & negative ${pn.lower}`}
-      </span>
+      </ReturnsChartClickableTitle>
     </div>
   );
 }
@@ -249,8 +236,12 @@ export function TickerAnnualReturnsPosNeg({
   suppressChartDateFilter = false,
   loading = false
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const chartTheme = useSyncExternalStore(subscribeDocumentTheme, getDocumentTheme, () => 'dark');
-  const filtersMenuMode = useReturnsChartFiltersMenuMode();
+  const sectionRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const chartFsShellRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const chartCardRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const buckets = useMemo(() => bucketsForTheme(chartTheme), [chartTheme]);
   const [rightMode, setRightMode] = useState('positive');
   const [showTable, setShowTable] = useState(false);
@@ -298,6 +289,19 @@ export function TickerAnnualReturnsPosNeg({
   const negativeTabLabel = `Negative ${pn.title}`;
   const rightTitle = rightMode === 'positive' ? `Positive ${pn.lower}` : `Negative ${pn.lower}`;
 
+  const onViewMore = useCallback(() => {
+    const to = getReturnsChartViewMoreHref({
+      pathname: location.pathname,
+      search: location.search,
+      periodMode,
+      symbol
+    });
+    navigate(to);
+    queueMicrotask(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+  }, [navigate, location.pathname, location.search, periodMode, symbol]);
+
   const onDownloadCsv = useCallback(() => {
     if (!filteredRows.length) return;
     const headers = ['period', 'year', 'startDate', 'endDate', 'totalReturn'];
@@ -318,35 +322,26 @@ export function TickerAnnualReturnsPosNeg({
 
   const symU = String(symbol || 'ticker').toUpperCase();
 
-  const posNegPrimaryToolbar = (
-    <>
-      {!suppressChartDateFilter ? (
-        <div className="ticker-annual-posneg__range-inline">
-          <ChartDateApplyRow
-            idPrefix="annual-posneg"
-            maxDate={asOfDate}
-            mode={periodMode === 'daily' ? 'date' : 'year'}
-            minYear={1980}
-            maxYear={2026}
-            initialStart={periodMode === 'daily' ? '' : '2018'}
-            initialEnd={periodMode === 'daily' ? '' : String(asOfDate || '').slice(0, 4)}
-            onApply={({ start, end }) => setRangeApplied({ start, end })}
-          />
-        </div>
-      ) : null}
-      <button
-        type="button"
-        className="ticker-annual-figma__btn"
-        onClick={() => setShowTable((v) => !v)}
-        aria-pressed={showTable}
-      >
-        <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
-      </button>
-      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
-        <IcoDownload /> Download CSV
-      </button>
-    </>
+  const buildExportFilename = useCallback(
+    () => buildTickerChartExportFilename(`${periodMode}-posneg-returns`, symbol),
+    [periodMode, symbol]
   );
+  const chartExportDisabled = loading || !filteredRows.length;
+
+  const posNegRangeControls = !suppressChartDateFilter ? (
+    <div className="ticker-annual-posneg__range-inline">
+      <ChartDateApplyRow
+        idPrefix="annual-posneg"
+        maxDate={asOfDate}
+        mode={periodMode === 'daily' ? 'date' : 'year'}
+        minYear={1980}
+        maxYear={2026}
+        initialStart={periodMode === 'daily' ? '' : '2018'}
+        initialEnd={periodMode === 'daily' ? '' : String(asOfDate || '').slice(0, 4)}
+        onApply={({ start, end }) => setRangeApplied({ start, end })}
+      />
+    </div>
+  ) : null;
 
   const posNegModeToggleButtons = (
     <>
@@ -389,14 +384,24 @@ export function TickerAnnualReturnsPosNeg({
     }
     return (
       <div className="ticker-annual-donut">
-        <div className="ticker-annual-figma__section">
+        <div ref={sectionRef} className="ticker-annual-figma__section">
           <div className="ticker-annual-figma__toolbar">
-            <PosNegToolbarBadgeWithIcon periodMode={periodMode} pn={pn} />
+            <PosNegToolbarBadgeWithIcon periodMode={periodMode} pn={pn} onClick={onViewMore} />
+            <ChartSectionIconActions
+              snapshotRootRef={sectionRef}
+              plotHostRef={chartCardRef}
+              fullscreenTargetRef={chartFsShellRef}
+              buildFilename={buildExportFilename}
+              disabled
+              exportPreviewAlt={`${pn.title} pos/neg for ${symU}`}
+            />
           </div>
-          <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
-            <p className="ticker-annual-figma__empty">
-              No {periodMode === 'quarterly' ? 'quarterly' : periodMode === 'monthly' ? 'monthly' : periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'annual'} return data for <strong>{symU}</strong>.
-            </p>
+          <div ref={chartFsShellRef} className="ticker-chart-fs-shell">
+            <div ref={chartCardRef} className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
+              <p className="ticker-annual-figma__empty">
+                No {periodMode === 'quarterly' ? 'quarterly' : periodMode === 'monthly' ? 'monthly' : periodMode === 'weekly' ? 'weekly' : periodMode === 'daily' ? 'daily' : 'annual'} return data for <strong>{symU}</strong>.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -405,14 +410,28 @@ export function TickerAnnualReturnsPosNeg({
 
   return (
     <div className="ticker-annual-donut">
-      <div className="ticker-annual-figma__section ticker-annual-donut__section">
+      <div ref={sectionRef} className="ticker-annual-figma__section ticker-annual-donut__section">
         <div className="ticker-annual-figma__toolbar">
-          <PosNegToolbarBadgeWithIcon periodMode={periodMode} pn={pn} />
-          {filtersMenuMode ? (
-            <ReturnsChartFiltersMenu>{posNegPrimaryToolbar}</ReturnsChartFiltersMenu>
-          ) : (
-            <div className="ticker-annual-figma__actions ticker-annual-posneg__actions">{posNegPrimaryToolbar}</div>
-          )}
+          <PosNegToolbarBadgeWithIcon periodMode={periodMode} pn={pn} onClick={onViewMore} />
+          <div className="ticker-annual-figma__toolbar-end">
+            <ReturnsChartToolbar
+              className="ticker-annual-posneg__toolbar min-w-0"
+              rangeControls={posNegRangeControls}
+              showViewMore={false}
+              onToggleTable={() => setShowTable((v) => !v)}
+              showTable={showTable}
+              onDownload={onDownloadCsv}
+              downloadDisabled={!filteredRows.length}
+            />
+            <ChartSectionIconActions
+              snapshotRootRef={sectionRef}
+              plotHostRef={chartCardRef}
+              fullscreenTargetRef={chartFsShellRef}
+              buildFilename={buildExportFilename}
+              disabled={chartExportDisabled}
+              exportPreviewAlt={`${pn.title} pos/neg chart for ${symU}`}
+            />
+          </div>
         </div>
         <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
           <div className="ticker-annual-figma__left" />
@@ -420,7 +439,8 @@ export function TickerAnnualReturnsPosNeg({
         </div>
 
         <div className="ticker-annual-donut__stage">
-          <div className="ticker-annual-donut__split">
+          <div ref={chartFsShellRef} className="ticker-chart-fs-shell">
+          <div ref={chartCardRef} className="ticker-annual-donut__split">
             <div className="ticker-annual-donut__panel ticker-annual-figma__chart-card">
               <div className="ticker-annual-donut__panel-head">
                 <span className="ticker-annual-donut__panel-spacer" aria-hidden />
@@ -527,6 +547,7 @@ export function TickerAnnualReturnsPosNeg({
                 ))}
               </div>
             </div>
+          </div>
           </div>
         </div>
         {showTable ? (

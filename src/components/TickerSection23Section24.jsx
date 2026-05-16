@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import TradingChartLoader from './TradingChartLoader.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
-import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import {fetchJsonCached, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { useReturnsChartFiltersMenuMode } from '../context/WatchlistDockContext.jsx';
 import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
+import { ReturnsChartClickableHeading } from './ReturnsChartClickableTitle.jsx';
+import { notifyChartFullscreenLayout } from '../utils/chartFullscreenLayout.js';
+import { buildRelativeStrengthTickerHref } from '../utils/relativeStrengthNavigation.js';
 
 const GROUPS = [
   { id: 'sp500', apiIndex: 'SP500', label: 'S&P 500', benchmark: 'SPX', benchLabel: 'S&P 500' },
@@ -134,8 +138,10 @@ export function TickerSection23Section24({
   prefetchedLongBenchSymbol = '',
   prefetchedLongBusy = false,
   onSectionBenchmarkSymbolChange,
-  initialSp500Rows = DEFAULT_INITIAL_SP500_ROWS
+  initialSp500Rows = DEFAULT_INITIAL_SP500_ROWS,
+  onViewMore: onViewMoreProp
 }) {
+  const navigate = useNavigate();
   const [groupId, setGroupId] = useState('sp500');
   const [groupRows, setGroupRows] = useState([]);
   const [ticker, setTicker] = useState(String(pageSymbol || '').toUpperCase());
@@ -147,6 +153,18 @@ export function TickerSection23Section24({
   const filtersMenuMode = useReturnsChartFiltersMenuMode();
 
   const activeGroup = useMemo(() => GROUPS.find((g) => g.id === groupId) || GROUPS[0], [groupId]);
+
+  const onViewMore = useCallback(() => {
+    if (typeof onViewMoreProp === 'function') {
+      onViewMoreProp();
+      return;
+    }
+    const sym = String(pageSymbol || ticker || '').trim();
+    navigate(buildRelativeStrengthTickerHref(sym));
+    queueMicrotask(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+  }, [navigate, onViewMoreProp, pageSymbol, ticker]);
 
   /** Avoid effect loops: default prop `initialSp500Rows = []` is a new [] every render when omitted. */
   const initialSp500RowsSig = useMemo(() => {
@@ -179,7 +197,7 @@ export function TickerSection23Section24({
   useEffect(() => {
     let cancelled = false;
     async function loadGroupRows() {
-      if (!getAuthToken()) return;
+      if (!canFetchProtectedApi()) return;
       setLoadingGroup(true);
       try {
         const rowsFromProp =
@@ -230,7 +248,7 @@ export function TickerSection23Section24({
     const prefB = String(prefetchedLongBenchSymbol || '').toUpperCase().trim();
     const usePrefetch = tick === symPage && bench === prefB;
 
-    if (!getAuthToken() || !tick || !bench) {
+    if (!canFetchProtectedApi() || !tick || !bench) {
       setLocalTickerReturns(null);
       setLocalBenchReturns(null);
       setLocalReturnsBusy(false);
@@ -404,6 +422,7 @@ export function TickerSection23Section24({
       const el = s24FsRef.current;
       const d = /** @type {Document & { webkitFullscreenElement?: Element | null }} */ (document);
       setS24Fs(!!el && (document.fullscreenElement === el || d.webkitFullscreenElement === el));
+      notifyChartFullscreenLayout();
     };
     document.addEventListener('fullscreenchange', sync);
     document.addEventListener('webkitfullscreenchange', sync);
@@ -433,6 +452,7 @@ export function TickerSection23Section24({
     } catch {
       /* ignore */
     }
+    notifyChartFullscreenLayout();
   }, []);
 
   const benchmarkControls = (
@@ -472,7 +492,9 @@ export function TickerSection23Section24({
       <div className="ticker-s23s24__card ticker-s23">
         <div className="ticker-s23s24__head-row ticker-s23s24__head-row--title-only">
           <div className="ticker-card__h-with-tip">
-            <h3 className="ticker-subh ticker-subh--flex uppercase">Relative Strength</h3>
+            <ReturnsChartClickableHeading className="ticker-subh ticker-subh--flex uppercase" onClick={onViewMore}>
+              Relative Strength
+            </ReturnsChartClickableHeading>
             <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
           </div>
         </div>
@@ -503,7 +525,9 @@ export function TickerSection23Section24({
       <div className="ticker-s23s24__card ticker-s24">
         <div className="ticker-s24__title-row">
           <div className="ticker-card__h-with-tip">
-            <h3 className="ticker-subh ticker-subh--flex">Benchmark vs Ticker Bars</h3>
+            <ReturnsChartClickableHeading className="ticker-subh ticker-subh--flex" onClick={onViewMore}>
+              Benchmark vs Ticker Bars
+            </ReturnsChartClickableHeading>
             <ChartInfoTip tip={CHART_INFO_TIPS.tickerCompareBars} align="start" />
           </div>
           <div className="ticker-s24__title-actions">

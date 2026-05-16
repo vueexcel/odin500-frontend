@@ -3,6 +3,7 @@
  */
 
 import { useId } from 'react';
+import { ReturnsChartClickableTitle } from './ReturnsChartClickableTitle.jsx';
 import { periodModeNouns } from '../utils/periodModeNouns.js';
 
 export function badgeLabelForPeriodMode(periodMode) {
@@ -30,9 +31,9 @@ export function AnnualReturnsFigmaChartSkeleton({
       <div className="ticker-annual-figma__section ticker-annual-figma__section--skeleton">
         <div className="ticker-annual-figma__toolbar">
           <span className="ticker-annual-figma__badge">{badgeLabelForPeriodMode(periodMode)}</span>
-          <div className="ticker-annual-figma__actions ticker-annual-figma__actions--skeleton">
+          <div className="returns-chart-toolbar ticker-annual-figma__actions--skeleton">
             {enableInlineYearDropdowns && (periodMode === 'annual' || periodMode === 'quarterly' || periodMode === 'monthly') ? (
-              <div className="ticker-annual-figma__range-controls ticker-annual-figma__skel-inline">
+              <div className="returns-chart-toolbar__range ticker-annual-figma__skel-inline">
                 <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--sm" />
                 <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--dd" />
                 <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--sm" />
@@ -41,10 +42,12 @@ export function AnnualReturnsFigmaChartSkeleton({
             ) : (
               <div className="ticker-annual-figma__external-controls">{toolbarControls}</div>
             )}
-            <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--btn" />
-            {showOpenPeriodPageButton ? <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--btn" /> : null}
-            <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--btn-wide" />
-            <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--btn" />
+            <div className="returns-chart-toolbar__actions">
+              <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--icon" />
+              {showOpenPeriodPageButton ? <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--icon" /> : null}
+              <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--icon" />
+              <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--icon" />
+            </div>
           </div>
         </div>
         <div
@@ -193,14 +196,20 @@ export function PosNegReturnsChartSkeleton({ periodMode = 'annual' }) {
 }
 
 /** `TickerMonthlyReturnsChart` header + plot. */
-export function MonthlyReturnsChartSkeleton({ periodMode = 'monthly' }) {
+export function MonthlyReturnsChartSkeleton({ periodMode = 'monthly', plotHeightPx, resizeEnabled = false }) {
   const title = periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Monthly returns';
   const barCount = periodMode === 'daily' ? 16 : 12;
   const heightsPct = [42, 68, 55, 72, 38, 61, 48, 75, 52, 66, 44, 58, 50, 63, 41, 56].slice(0, barCount);
+  const h = Math.max(200, Math.min(520, Number(plotHeightPx) || 278));
 
   return (
     <div className="ticker-monthly ticker-monthly--skeleton">
-      <div className="ticker-annual-figma__section">
+      <div
+        className={
+          'ticker-annual-figma__section ticker-annual-figma__section--skeleton' +
+          (resizeEnabled ? ' ticker-annual-figma__section--resize' : '')
+        }
+      >
         <div className="ticker-monthly__head">
           <div className="ticker-monthly__title-block">
             <span className="ticker-monthly__title uppercase">{title}</span>
@@ -212,8 +221,13 @@ export function MonthlyReturnsChartSkeleton({ periodMode = 'monthly' }) {
             <span className="ticker-annual-figma__skel-pill ticker-annual-figma__skel-pill--btn" />
           </div>
         </div>
-        <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--skeleton" style={{ minHeight: 268 }} aria-busy="true" aria-label="Loading chart">
-          <div className="ticker-annual-figma__skel-chart" style={{ height: 268 }}>
+        <div
+          className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--skeleton"
+          style={{ minHeight: h }}
+          aria-busy="true"
+          aria-label="Loading chart"
+        >
+          <div className="ticker-annual-figma__skel-chart" style={{ height: h }}>
             <div className="ticker-annual-figma__skel-y-axis" aria-hidden>
               {[25, 10, 0, -10, -15].map((t) => (
                 <span key={t} className="ticker-annual-figma__skel-y-tick-label">
@@ -250,7 +264,7 @@ export function MonthlyReturnsChartSkeleton({ periodMode = 'monthly' }) {
 }
 
 /** Pie icon + “Quarterly returns” (matches TickerAnnualReturnsFigma toolbar badge). */
-export function QuarterlyReturnsToolbarBadge() {
+export function QuarterlyReturnsToolbarBadge({ onClick } = {}) {
   const clipId = useId().replace(/:/g, '');
   return (
     <div className="inline-flex shrink-0 items-center">
@@ -285,7 +299,9 @@ export function QuarterlyReturnsToolbarBadge() {
           </clipPath>
         </defs>
       </svg>
-      <span className="ticker-annual-figma__badge uppercase">Quarterly returns</span>
+      <ReturnsChartClickableTitle className="ticker-annual-figma__badge uppercase" onClick={onClick}>
+        Quarterly returns
+      </ReturnsChartClickableTitle>
     </div>
   );
 }

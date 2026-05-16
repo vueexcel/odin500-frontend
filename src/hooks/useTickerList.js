@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiUrl } from '../utils/apiOrigin.js';
-import { fetchWithAuth, getAuthToken } from '../store/apiStore.js';
+import { canFetchProtectedApi, fetchWithAuth } from '../store/apiStore.js';
 
 export function useTickerList() {
   const [allTickers, setAllTickers] = useState([]);
@@ -13,8 +13,7 @@ export function useTickerList() {
   }, []);
 
   useEffect(() => {
-    const accessToken = getAuthToken();
-    if (!accessToken) {
+    if (!canFetchProtectedApi()) {
       setAllTickers([]);
       return;
     }

@@ -61,8 +61,8 @@ function chartOptionsForTheme(theme, height) {
 /** @typedef {'line' | 'area' | 'candles' | 'bars'} TickerChartType */
 
 export const TICKER_CHART_TYPE_OPTIONS = [
-  { id: 'line', label: 'Line' },
   { id: 'area', label: 'Area' },
+  { id: 'line', label: 'Line' },
   { id: 'candles', label: 'Candles' },
   { id: 'bars', label: 'Bars' }
 ];

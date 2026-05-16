@@ -6,8 +6,9 @@ import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import { ChartPanel } from '../components/ChartPanel.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
 import { useTickerPlotResize } from '../hooks/useTickerPlotResize.js';
-import { fetchJsonCached } from '../store/apiStore.js';
-import { fetchWithAuth, getAuthToken } from '../store/apiStore.js';
+import { useGatedCsvDownload } from '../hooks/useGatedCsvDownload.js';
+import { notifyChartFullscreenLayout } from '../utils/chartFullscreenLayout.js';
+import { canFetchProtectedApi, fetchJsonCached, fetchWithAuth } from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { mapRowsToCandles } from '../utils/chartData.js';
 import { toDateInput } from '../utils/misc.js';
@@ -192,7 +193,7 @@ export default function OdinSignalsPage() {
     const ac = new AbortController();
 
     async function run() {
-      if (!getAuthToken()) {
+      if (!canFetchProtectedApi()) {
         setError('Sign in to load the chart.');
         setLoading(false);
         return;
@@ -328,7 +329,7 @@ export default function OdinSignalsPage() {
         .filter((r) => r.symbol);
 
     async function loadIndexRows() {
-      if (!getAuthToken()) return;
+      if (!canFetchProtectedApi()) return;
       setIndexLoading(true);
       try {
         let list = [];
@@ -422,6 +423,7 @@ export default function OdinSignalsPage() {
     if (!el) return;
     if (!document.fullscreenElement) el.requestFullscreen?.();
     else document.exitFullscreen?.();
+    notifyChartFullscreenLayout();
   }, []);
 
   const downloadOdinHeatmapCsv = useCallback(() => {
@@ -448,6 +450,8 @@ export default function OdinSignalsPage() {
     a.click();
     URL.revokeObjectURL(url);
   }, [odinTreemapRows, activeIndex.id]);
+
+  const downloadOdinHeatmapCsvClick = useGatedCsvDownload(downloadOdinHeatmapCsv);
 
   return (
     <div className="odin-signals-page">
@@ -693,7 +697,7 @@ export default function OdinSignalsPage() {
                   <button
                     type="button"
                     className="heatmap-icon-btn"
-                    onClick={downloadOdinHeatmapCsv}
+                    onClick={downloadOdinHeatmapCsvClick}
                     title="Download CSV"
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

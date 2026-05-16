@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { createPortal } from 'react-dom';
-import html2canvas from 'html2canvas';
+import { Upload } from 'lucide-react';
 import { createChart, PriceScaleMode } from 'lightweight-charts';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import TradingChartLoader from './TradingChartLoader.jsx';
-import { fetchWithAuth, getAuthToken } from '../store/apiStore.js';
+import {fetchWithAuth, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { DEFAULT_SELECTED_KEYS, META_BY_KEY, TICKER_BY_KEY } from './marketSeriesRegistry.js';
 import { TF_OPTIONS, tfRange, normalizeRows } from '../utils/marketCalculations.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
+import { ChartFullscreenToggleIcon } from './ChartFullscreenToggleIcon.jsx';
+import { ChartSnapshotExportModal } from './ChartSnapshotExportModal.jsx';
+import { useChartSnapshotExport } from '../hooks/useChartSnapshotExport.js';
+import { notifyChartFullscreenLayout } from '../utils/chartFullscreenLayout.js';
 
 function fmtPct(v) {
   const n = Number(v || 0);
@@ -189,13 +192,7 @@ export function NormalizedPerformanceCard({
   const [error, setError] = useState('');
   const [series, setSeries] = useState({});
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [exportingSnapshot, setExportingSnapshot] = useState(false);
-  const [exportModalOpen, setExportModalOpen] = useState(false);
-  const [exportModalStatus, setExportModalStatus] = useState('idle');
-  const [exportPreviewUrl, setExportPreviewUrl] = useState(null);
-  const [exportFilename, setExportFilename] = useState('');
   const [exportPageUrl, setExportPageUrl] = useState('');
-  const [exportModalError, setExportModalError] = useState('');
   const [exportShareHint, setExportShareHint] = useState('');
   const cardRef = useRef(null);
   const snapshotExportRef = useRef(null);
@@ -209,9 +206,45 @@ export function NormalizedPerformanceCard({
   const activeKeys = Array.isArray(selectedKeys) ? selectedKeys : activeKeysLocal;
   const setActiveKeys = onSelectedKeysChange || setActiveKeysLocal;
 
+  const buildNpExportFilename = useCallback(() => {
+    const datePart = new Date().toISOString().slice(0, 10);
+    const tfPart = String(tf || 'range').toLowerCase();
+    return `normalized-performance-${tfPart}-${datePart}.png`;
+  }, [tf]);
+
+  const {
+    exportingSnapshot,
+    exportModalOpen,
+    exportModalStatus,
+    exportPreviewUrl,
+    exportFilename,
+    exportModalError,
+    openExportModal,
+    closeExportModal,
+    downloadFromExportModal
+  } = useChartSnapshotExport({
+    snapshotRootRef: snapshotExportRef,
+    plotHostRef: chartHostRef,
+    buildFilename: buildNpExportFilename,
+    disabled: loading,
+    getBackgroundColor: getNpChartBgColor,
+    getFallbackCanvas: () => {
+      const chart = chartRef.current;
+      if (chart && typeof chart.takeScreenshot === 'function') {
+        try {
+          return chart.takeScreenshot();
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    },
+    onclone: applyNpSnapshotCloneFixes
+  });
+
   useEffect(() => {
     let cancelled = false;
-    if (!getAuthToken()) {
+    if (!canFetchProtectedApi()) {
       setError('Sign in to load performance data.');
       return () => {
         cancelled = true;
@@ -524,112 +557,14 @@ export function NormalizedPerformanceCard({
     } catch {
       // Ignore user gesture/fullscreen API failures.
     }
+    notifyChartFullscreenLayout();
   }, []);
 
-  const closeExportModal = useCallback(() => {
-    setExportModalOpen(false);
-    setExportModalStatus('idle');
-    setExportPreviewUrl(null);
-    setExportFilename('');
-    setExportPageUrl('');
-    setExportModalError('');
+  const handleOpenExportModal = useCallback(() => {
+    setExportPageUrl(typeof window !== 'undefined' ? window.location.href : '');
     setExportShareHint('');
-  }, []);
-
-  const downloadFromExportModal = useCallback(() => {
-    if (!exportPreviewUrl || !exportFilename) return;
-    const link = document.createElement('a');
-    link.href = exportPreviewUrl;
-    link.download = exportFilename;
-    link.click();
-  }, [exportPreviewUrl, exportFilename]);
-
-  const openExportModal = useCallback(async () => {
-    const root = snapshotExportRef.current;
-    const host = chartHostRef.current;
-    const chart = chartRef.current;
-    if (!host || loading) return;
-
-    const datePart = new Date().toISOString().slice(0, 10);
-    const tfPart = String(tf || 'range').toLowerCase();
-    const filename = `normalized-performance-${tfPart}-${datePart}.png`;
-    const pageUrl = typeof window !== 'undefined' ? window.location.href : '';
-
-    setExportModalOpen(true);
-    setExportModalStatus('capturing');
-    setExportPreviewUrl(null);
-    setExportFilename(filename);
-    setExportPageUrl(pageUrl);
-    setExportModalError('');
-    setExportShareHint('');
-
-    const fallbackCanvas = () => {
-      let canvas = null;
-      if (chart && typeof chart.takeScreenshot === 'function') {
-        try {
-          canvas = chart.takeScreenshot();
-        } catch {
-          canvas = null;
-        }
-      }
-      if (!canvas) canvas = host.querySelector('canvas');
-      return canvas;
-    };
-
-    setExportingSnapshot(true);
-    try {
-      await new Promise((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(resolve));
-      });
-
-      let canvas = null;
-      if (root) {
-        const isLight = chartTheme === 'light';
-        let exportBg = getNpChartBgColor(isLight);
-        if (typeof window !== 'undefined' && root) {
-          const c = window.getComputedStyle(root).backgroundColor;
-          if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') exportBg = c;
-        }
-        /* scale 1 avoids subpixel text clipping html2canvas often shows at DPR 2+ */
-        const scale = 1;
-        try {
-          canvas = await html2canvas(root, {
-            backgroundColor: exportBg,
-            scale,
-            useCORS: true,
-            allowTaint: false,
-            logging: false,
-            foreignObjectRendering: false,
-            imageTimeout: 20000,
-            onclone: (clonedDoc, clonedRoot) => {
-              applyNpSnapshotCloneFixes(clonedDoc, clonedRoot);
-            }
-          });
-        } catch (e) {
-          console.warn('[NormalizedPerformanceCard] html2canvas export failed', e);
-          canvas = null;
-        }
-      }
-
-      if (!canvas || canvas.width < 8 || canvas.height < 8) {
-        canvas = fallbackCanvas();
-      }
-      if (!canvas || canvas.width < 8 || canvas.height < 8) {
-        setExportModalError('Could not capture the chart. Try again after the chart finishes loading.');
-        setExportModalStatus('error');
-        return;
-      }
-
-      setExportPreviewUrl(canvas.toDataURL('image/png'));
-      setExportModalStatus('ready');
-    } catch (e) {
-      console.warn('[NormalizedPerformanceCard] export capture failed', e);
-      setExportModalError(e?.message || 'Capture failed.');
-      setExportModalStatus('error');
-    } finally {
-      setExportingSnapshot(false);
-    }
-  }, [chartTheme, loading, tf]);
+    openExportModal();
+  }, [openExportModal]);
 
   const exportShareText = useMemo(
     () => `Normalized performance chart (${tf}) — Odin500`,
@@ -717,30 +652,13 @@ export function NormalizedPerformanceCard({
   }, [exportPreviewUrl, exportFilename, exportShareText]);
 
   useEffect(() => {
-    if (!exportModalOpen) return;
-    const onKey = (e) => {
-      if (e.key === 'Escape') closeExportModal();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [exportModalOpen, closeExportModal]);
-
-  useEffect(() => {
-    if (!exportModalOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [exportModalOpen]);
-
-  useEffect(() => {
     const onFsChange = () => {
       const el = cardRef.current;
       /** @type {Document & { webkitFullscreenElement?: Element | null }} */
       const d = document;
       const fsEl = d.fullscreenElement ?? d.webkitFullscreenElement;
       setIsFullscreen(Boolean(el && fsEl === el));
+      notifyChartFullscreenLayout();
     };
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);
@@ -756,12 +674,6 @@ export function NormalizedPerformanceCard({
     snapshotExportRef.current = node;
   }, []);
 
-  const showNativeShare =
-    typeof navigator !== 'undefined' &&
-    typeof navigator.share === 'function' &&
-    exportModalStatus === 'ready' &&
-    Boolean(exportPreviewUrl);
-
   return (
     <>
       <section ref={assignCardRefs} className="np-card" aria-label="Normalized performance">
@@ -772,19 +684,22 @@ export function NormalizedPerformanceCard({
         <div className="np-card__head-actions">
           <button
             type="button"
-            className="np-card__linkbtn"
-            onClick={openExportModal}
+            className="np-card__iconbtn"
+            onClick={handleOpenExportModal}
             disabled={loading || exportingSnapshot}
+            aria-label={exportingSnapshot ? 'Exporting chart' : 'Export chart snapshot'}
+            title={exportingSnapshot ? 'Exporting…' : 'Export chart'}
           >
-            {exportingSnapshot ? 'Exporting…' : 'Export'}
+            <Upload size={16} strokeWidth={2} aria-hidden />
           </button>
           <button
             type="button"
             className="np-card__iconbtn"
-            aria-label={isFullscreen ? 'Exit full screen chart' : 'Open full screen chart'}
+            aria-label={isFullscreen ? 'Exit chart fullscreen' : 'Enter chart fullscreen'}
+            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
             onClick={toggleFullscreen}
           >
-            {isFullscreen ? '×' : '↗'}
+            <ChartFullscreenToggleIcon isFullscreen={isFullscreen} />
           </button>
         </div>
       </header>
@@ -887,125 +802,16 @@ export function NormalizedPerformanceCard({
         </div>
     </section>
 
-      {exportModalOpen &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <div
-            className="np-export-overlay"
-            role="presentation"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) closeExportModal();
-            }}
-          >
-            <div
-              className="np-export-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="np-export-modal-title"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="np-export-modal__head">
-                <h2 id="np-export-modal-title" className="np-export-modal__title">
-                  Export chart
-                </h2>
-                <button
-                  type="button"
-                  className="np-export-modal__close"
-                  onClick={closeExportModal}
-                  aria-label="Close"
-                >
-                  ×
-                </button>
-              </div>
-              <div className="np-export-modal__body">
-                {exportModalStatus === 'capturing' ? (
-                  <div className="np-export-modal__status">Generating preview…</div>
-                ) : null}
-                {exportModalStatus === 'error' ? (
-                  <div className="np-export-modal__status np-export-modal__status--error" role="alert">
-                    {exportModalError || 'Something went wrong.'}
-                  </div>
-                ) : null}
-                {exportPreviewUrl ? (
-                  <div className="np-export-modal__preview-wrap">
-                    <img
-                      src={exportPreviewUrl}
-                      alt="Exported normalized performance chart"
-                      className="np-export-modal__preview"
-                    />
-                  </div>
-                ) : null}
-                {/* {exportModalStatus === 'ready' && exportPreviewUrl ? (
-                  <div className="np-export-modal__share">
-                    <p className="np-export-modal__share-label">Share</p>
-                    <p className="np-export-modal__share-note">
-                      Social buttons share this page link. Copy image to paste the screenshot elsewhere.
-                    </p>
-                    <div className="np-export-modal__share-grid">
-                      {showNativeShare ? (
-                        <button type="button" className="np-export-modal__share-btn" onClick={nativeShareImage}>
-                          Share…
-                        </button>
-                      ) : null}
-                      <button type="button" className="np-export-modal__share-btn" onClick={shareTwitter}>
-                        X
-                      </button>
-                      <button
-                        type="button"
-                        className="np-export-modal__share-btn"
-                        onClick={shareFacebook}
-                        disabled={!exportPageUrl}
-                      >
-                        Facebook
-                      </button>
-                      <button
-                        type="button"
-                        className="np-export-modal__share-btn"
-                        onClick={shareLinkedIn}
-                        disabled={!exportPageUrl}
-                      >
-                        LinkedIn
-                      </button>
-                      <button
-                        type="button"
-                        className="np-export-modal__share-btn"
-                        onClick={shareReddit}
-                        disabled={!exportPageUrl}
-                      >
-                        Reddit
-                      </button>
-                      <button type="button" className="np-export-modal__share-btn" onClick={copyPageLink}>
-                        Copy link
-                      </button>
-                      <button type="button" className="np-export-modal__share-btn" onClick={copyChartImage}>
-                        Copy image
-                      </button>
-                    </div>
-                    {exportShareHint ? (
-                      <p className="np-export-modal__share-hint" role="status">
-                        {exportShareHint}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null} */}
-              </div>
-              <div className="np-export-modal__foot">
-                <button type="button" className="np-export-modal__btn np-export-modal__btn--ghost" onClick={closeExportModal}>
-                  Close
-                </button>
-                <button
-                  type="button"
-                  className="np-export-modal__btn np-export-modal__btn--primary"
-                  onClick={downloadFromExportModal}
-                  disabled={!exportPreviewUrl}
-                >
-                  Download
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      <ChartSnapshotExportModal
+        open={exportModalOpen}
+        status={exportModalStatus}
+        error={exportModalError}
+        previewUrl={exportPreviewUrl}
+        onClose={closeExportModal}
+        onDownload={downloadFromExportModal}
+        titleId="np-export-modal-title"
+        previewAlt="Exported normalized performance chart"
+      />
     </>
   );
 }

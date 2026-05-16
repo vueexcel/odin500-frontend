@@ -9,7 +9,7 @@ import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx
 import { AnnualReturnBarChart } from '../components/AnnualReturnBarChart.jsx';
 import { ExcessReturnLineChart } from '../components/ExcessReturnLineChart.jsx';
 import { PeriodicReturnBarChart } from '../components/PeriodicReturnBarChart.jsx';
-import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import {fetchJsonCached, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { pickRelatedByCategory, RELATED_INDEX_LINKS } from '../utils/relatedTickers.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
@@ -373,7 +373,7 @@ export default function TickerAnnualPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!getAuthToken()) {
+    if (!canFetchProtectedApi()) {
       setError('Sign in to load ticker data.');
       setAnnualReturnsRaw([]);
       return () => {

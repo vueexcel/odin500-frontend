@@ -4,9 +4,10 @@ import { FigmaDataTable } from '../components/FigmaDataTable.jsx';
 import { FigmaPagination } from '../components/FigmaPagination.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
-import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import {fetchJsonCached, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
+import { useGatedCsvDownload } from '../hooks/useGatedCsvDownload.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 
 const DEFAULT_SYMBOL = 'AAPL';
@@ -348,6 +349,8 @@ function ReturnTable({
     URL.revokeObjectURL(url);
   };
 
+  const onDownloadCsvClick = useGatedCsvDownload(onDownloadCsv);
+
   return (
     <section
       id={sectionKey ? `stat-section-${sectionKey}` : undefined}
@@ -372,7 +375,13 @@ function ReturnTable({
               />
             </label>
           ) : null}
-          <button type="button" className="statistic-data__csv-btn" onClick={onDownloadCsv} disabled={!sortedRows.length || loading}>
+          <button
+            type="button"
+            className="statistic-data__csv-btn"
+            onClick={onDownloadCsvClick}
+            disabled={!sortedRows.length || loading}
+            title="Download CSV"
+          >
             Download CSV
           </button>
         </div>
@@ -531,7 +540,7 @@ export default function StatisticDataPage() {
   useEffect(() => {
     const clean = sanitizeTickerPageInput(symbol) || DEFAULT_SYMBOL;
     let cancelled = false;
-    if (!getAuthToken()) {
+    if (!canFetchProtectedApi()) {
       setError('Sign in to load statistics.');
       setOhlcRows([]);
       setDataCoverage({ minDate: '', maxDate: '' });

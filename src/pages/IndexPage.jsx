@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Upload } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DataInfoTip } from '../components/DataInfoTip.jsx';
 import { FigmaPagination as NewsSectionPagination } from '../components/FigmaPagination.jsx';
@@ -6,20 +7,27 @@ import { TickerAnnualReturnsFigma } from '../components/TickerAnnualReturnsFigma
 import { TickerMonthlyReturnsChart } from '../components/TickerMonthlyReturnsChart.jsx';
 import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
-import { ReturnsChartFiltersMenu } from '../components/ReturnsChartFiltersMenu.jsx';
+import { ReturnsChartToolbar } from '../components/ReturnsChartToolbar.jsx';
+import { ReturnsChartClickableHeading } from '../components/ReturnsChartClickableTitle.jsx';
+import { buildRelativeStrengthTickerHref } from '../utils/relativeStrengthNavigation.js';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
 import {
   IconChartTypeDropdown,
   TICKER_CHART_TYPE_OPTIONS,
   TickerLightweightChart
 } from '../components/TickerLightweightChart.jsx';
+import { useWatchlistDock } from '../context/WatchlistDockContext.jsx';
 import { useGeneralNewsFeed } from '../hooks/useGeneralNewsFeed.js';
-import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import {fetchJsonCached, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
+import { notifyChartFullscreenLayout } from '../utils/chartFullscreenLayout.js';
 import { DEFAULT_INDEX_ROUTE_SLUG } from '../utils/tickerUrlSync.js';
 import { MARKET_SERIES } from '../components/marketSeriesRegistry.js';
 import { rowMatchesSectorEtf } from '../utils/sectorEtfMatch.js';
+import { ChartFullscreenToggleIcon } from '../components/ChartFullscreenToggleIcon.jsx';
+import { ChartSnapshotExportModal } from '../components/ChartSnapshotExportModal.jsx';
+import { applyTickerChartSnapshotCloneFixes, useChartSnapshotExport } from '../hooks/useChartSnapshotExport.js';
 
 const TIMEFRAMES = ['1D', '5D', '1M', '3M', '6M', '1Y', '3Y', '5Y', '10Y', '20Y'];
 const MAX_SIGNAL_RANGE_DAYS = 40000;
@@ -31,6 +39,7 @@ const CHART_H_MAX = 1400;
 
 const RESIZE_KEY_ANNUAL_FIGMA = 'odin_index_resize_annual_figma';
 const RESIZE_KEY_QUARTERLY_FIGMA = 'odin_index_resize_quarterly_figma';
+const RESIZE_KEY_MONTHLY_RETURNS = 'odin_index_resize_monthly_returns';
 
 const MAX_NEWS_ITEMS = 120;
 const NEWS_PAGE_SIZE = 5;
@@ -72,7 +81,7 @@ const INDEX_ROUTE_DROPDOWN_OPTIONS = INDEX_ROUTE_CHOICES.map((opt) => ({ id: opt
 const SECTOR_ROUTE_CHOICES = MARKET_SERIES.filter((s) => s.group === 'sector');
 const SECTOR_ROUTE_DROPDOWN_OPTIONS = SECTOR_ROUTE_CHOICES.map((s) => ({
   id: s.key.toLowerCase(),
-  label: `${s.label} (${s.ticker})`
+  label: `${s.label} ${s.addon}`
 }));
 const DEFAULT_SECTOR_ROUTE_SLUG = 'xlk';
 
@@ -632,6 +641,7 @@ export default function IndexPage() {
   const location = useLocation();
   const { indexSlug: indexSlugParam, sectorKey: sectorKeyParam } = useParams();
   const navigate = useNavigate();
+  const watchlistDock = useWatchlistDock();
   const isSectorDataRoute = location.pathname.startsWith('/sector-data');
   const sectorSlugResolved = useMemo(
     () => (isSectorDataRoute ? sanitizeSectorSlug(sectorKeyParam) : null),
@@ -663,7 +673,7 @@ export default function IndexPage() {
       return {
         slug: activeSector.key.toLowerCase(),
         label: activeSector.label,
-        apiIndex: 'Dow Jones',
+        apiIndex: 'sp500',
         sectorEtfKey: activeSector.key
       };
     }
@@ -678,7 +688,7 @@ export default function IndexPage() {
       ? `${activeMeta.label} (${activeSector?.ticker ?? ''}) · Sector data | Odin500`
       : `${activeMeta.label} Signals & Heatmap | Odin500`,
     description: isSectorDataRoute
-      ? `Sector ETF ${activeSector?.ticker ?? ''} and Dow Jones constituents in ${activeMeta.label}.`
+      ? `Sector ETF ${activeSector?.ticker ?? ''} and S&P 500 constituents in ${activeMeta.label}.`
       : `Daily Odin500 signal distribution, heatmap views, and constituent analytics for ${activeMeta.label}.`,
     canonicalPath: isSectorDataRoute
       ? `/sector-data/${sectorSlugResolved || DEFAULT_SECTOR_ROUTE_SLUG}`
@@ -711,7 +721,7 @@ export default function IndexPage() {
   const [relativeSeriesByKey, setRelativeSeriesByKey] = useState({});
   const [relativeBusy, setRelativeBusy] = useState(false);
   const [relativeLeftKey, setRelativeLeftKey] = useState(`IDX:${slug}`);
-  const [relativeRightKey, setRelativeRightKey] = useState('SPX');
+  const [relativeRightKey, setRelativeRightKey] = useState(`IDX:${slug}`);
   const [indexTickersRows, setIndexTickersRows] = useState([]);
   const [indexTickersBusy, setIndexTickersBusy] = useState(false);
   const [indexTickersPage, setIndexTickersPage] = useState(1);
@@ -825,7 +835,7 @@ export default function IndexPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!getAuthToken()) {
+    if (!canFetchProtectedApi()) {
       setError('Sign in to load index data.');
       setMetaBusy(false);
       setIndexPayload(null);
@@ -1055,7 +1065,7 @@ export default function IndexPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!getAuthToken()) {
+    if (!canFetchProtectedApi()) {
       setOhlcTickerBounds(null);
       return () => {
         cancelled = true;
@@ -1127,6 +1137,29 @@ export default function IndexPage() {
 
   const displaySym = returnsSym?.ticker || activeMeta.label;
 
+  /** Tradable symbol for watchlist add (same sources as OHLC / returns, never the index display name). */
+  const watchlistTickerSymbol = useMemo(() => {
+    if (isSectorDataRoute && activeSector?.ticker) {
+      return String(activeSector.ticker).toUpperCase().trim();
+    }
+    if (ohlcSymbol) return ohlcSymbol;
+    return '';
+  }, [isSectorDataRoute, activeSector?.ticker, ohlcSymbol]);
+
+  const onAddTickerToWatchlist = useCallback(() => {
+    const ticker = watchlistTickerSymbol;
+    if (!ticker) return;
+    watchlistDock.open();
+    try {
+      sessionStorage.setItem('watchlist_add_symbol', ticker);
+    } catch {
+      /* ignore */
+    }
+    queueMicrotask(() => {
+      window.dispatchEvent(new CustomEvent('watchlist:add-ticker', { detail: { symbol: ticker } }));
+    });
+  }, [watchlistDock, watchlistTickerSymbol]);
+
   const newsTotalPages = useMemo(
     () => Math.max(1, Math.ceil(liveNews.length / NEWS_PAGE_SIZE)),
     [liveNews.length]
@@ -1172,7 +1205,7 @@ export default function IndexPage() {
 
   const loadRelativeSeries = useCallback(
     async (option) => {
-      if (!option || !getAuthToken()) return null;
+      if (!option || !canFetchProtectedApi()) return null;
       if (option.kind === 'ticker') {
         const ret = await fetchJsonCached({
           path: '/api/market/ticker-returns',
@@ -1257,6 +1290,7 @@ export default function IndexPage() {
       const el = chartBodyRef.current;
       const doc = /** @type {Document & { webkitFullscreenElement?: Element | null }} */ (document);
       setChartFs(!!el && (document.fullscreenElement === el || doc.webkitFullscreenElement === el));
+      notifyChartFullscreenLayout();
     };
     document.addEventListener('fullscreenchange', sync);
     document.addEventListener('webkitfullscreenchange', sync);
@@ -1327,6 +1361,33 @@ export default function IndexPage() {
     setUserChartHeight(null);
   }, []);
 
+  const buildIndexChartExportFilename = useCallback(() => {
+    const symPart = String(displaySym || 'index')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    const tfPart = String(timeframe || 'range').toLowerCase();
+    const datePart = new Date().toISOString().slice(0, 10);
+    return `${symPart || 'index'}-chart-${tfPart}-${datePart}.png`;
+  }, [displaySym, timeframe]);
+
+  const {
+    exportingSnapshot: chartExportingSnapshot,
+    exportModalOpen: chartExportModalOpen,
+    exportModalStatus: chartExportModalStatus,
+    exportPreviewUrl: chartExportPreviewUrl,
+    exportModalError: chartExportModalError,
+    openExportModal: openChartExportModal,
+    closeExportModal: closeChartExportModal,
+    downloadFromExportModal: downloadChartExport
+  } = useChartSnapshotExport({
+    snapshotRootRef: chartBodyRef,
+    plotHostRef: chartPlotHostRef,
+    buildFilename: buildIndexChartExportFilename,
+    disabled: metaBusy || !sortedChart.length,
+    onclone: applyTickerChartSnapshotCloneFixes
+  });
+
   const toggleChartFullscreen = useCallback(async () => {
     const el = chartBodyRef.current;
     if (!el) return;
@@ -1347,6 +1408,7 @@ export default function IndexPage() {
     } catch {
       /* ignore */
     }
+    notifyChartFullscreenLayout();
   }, []);
 
   const lastRow = sortedChart.length ? sortedChart[sortedChart.length - 1] : null;
@@ -1417,7 +1479,7 @@ export default function IndexPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!getAuthToken()) return () => {};
+    if (!canFetchProtectedApi()) return () => {};
     const keys = [relativeLeftKey, relativeRightKey].filter(Boolean);
     const missing = keys.filter((k) => !relativeSeriesByKey[k]);
     if (!missing.length) return () => {};
@@ -1441,7 +1503,7 @@ export default function IndexPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!getAuthToken()) {
+    if (!canFetchProtectedApi()) {
       setIndexTickersRows([]);
       setIndexTickersBusy(false);
       return () => {
@@ -1490,12 +1552,32 @@ export default function IndexPage() {
     RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeLeftKey)?.label || displaySym;
   const relativeRightLabel =
     RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeRightKey)?.label || BENCHMARK;
+  const onOpenRelativeStrengthPage = useCallback(() => {
+    navigate(buildRelativeStrengthTickerHref());
+  }, [navigate]);
+
+  const onOpenNewsPage = useCallback(() => {
+    navigate(`/news?ticker=${encodeURIComponent(displaySym)}`);
+  }, [navigate, displaySym]);
   const indexTickersTotalPages = Math.max(1, Math.ceil(indexTickersRows.length / INDEX_TICKERS_PAGE_SIZE));
   const indexTickersPageSafe = Math.min(Math.max(1, indexTickersPage), indexTickersTotalPages);
   const indexTickersPageRows = useMemo(() => {
     const start = (indexTickersPageSafe - 1) * INDEX_TICKERS_PAGE_SIZE;
     return indexTickersRows.slice(start, start + INDEX_TICKERS_PAGE_SIZE);
   }, [indexTickersRows, indexTickersPageSafe]);
+
+  /** Sector-data page: show all S&P 500 names in this sector, grouped A–Z by first symbol letter. */
+  const sectorConstituentLetterGroups = useMemo(() => {
+    if (!isSectorDataRoute) return [];
+    const sorted = [...indexTickersRows].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    const byLetter = new Map();
+    for (const row of sorted) {
+      const letter = (row.symbol[0] || '#').toUpperCase();
+      if (!byLetter.has(letter)) byLetter.set(letter, []);
+      byLetter.get(letter).push(row);
+    }
+    return [...byLetter.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [isSectorDataRoute, indexTickersRows]);
   const section16Rows = useMemo(() => {
     const compact = COMPARE_ROWS.filter((r) =>
       ['1D', '5D', 'MTD', '1M', 'QTD', '3M', '6M', 'YTD', '1Y', '3Y', '5Y', '10Y', '20Y'].includes(r.key)
@@ -1605,7 +1687,7 @@ export default function IndexPage() {
           </div>
           <div className="ticker-page__header-actions">
             
-            <button type="button" className="ticker-outline-btn">
+            <button type="button" className="ticker-outline-btn" onClick={onAddTickerToWatchlist}>
               <IconPlus className="ticker-outline-btn__ico" /> In My Watchlists
             </button>
           </div>
@@ -1653,9 +1735,9 @@ export default function IndexPage() {
 
           <div className="ticker-page__header-metric">
             <div className="ticker-page__metric-value-row">
-              <span className="ticker-page__metric-value">{apiIndexLabel}</span>
+              <span className="ticker-page__metric-value">{isSectorDataRoute ? 'S&P 500' : apiIndexLabel}</span>
             </div>
-            <p className="ticker-page__metric-label">API index</p>
+            <p className="ticker-page__metric-label">{isSectorDataRoute ? 'Constituent universe' : 'API index'}</p>
           </div>
 
         </div>
@@ -1819,19 +1901,22 @@ export default function IndexPage() {
                 <button
                   type="button"
                   className="ticker-chart-footer-icons__btn"
+                  onClick={openChartExportModal}
+                  disabled={metaBusy || !sortedChart.length || chartExportingSnapshot}
+                  aria-label={chartExportingSnapshot ? 'Exporting chart' : 'Export chart snapshot'}
+                  title={chartExportingSnapshot ? 'Exporting…' : 'Export chart'}
+                >
+                  <Upload size={16} strokeWidth={2} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="ticker-chart-footer-icons__btn"
                   onClick={() => toggleChartFullscreen()}
                   aria-pressed={chartFs}
                   aria-label={chartFs ? 'Exit chart fullscreen' : 'Enter chart fullscreen'}
+                  title={chartFs ? 'Exit fullscreen' : 'Fullscreen'}
                 >
-                  {chartFs ? (
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M4 14v6h6M20 14v6h-6M4 10V4h6M20 10V4h-6" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M9 3H3v6M15 3h6v6M3 15v6h6M21 15v6h-6" />
-                    </svg>
-                  )}
+                  <ChartFullscreenToggleIcon isFullscreen={chartFs} />
                 </button>
               </div>
               {!chartFs ? (
@@ -1842,7 +1927,7 @@ export default function IndexPage() {
                   aria-valuemax={CHART_H_MAX}
                   aria-valuenow={basePixelHeight}
                   className="ticker-chart-resize"
-                  title="Drag to resize chart height. Double-click to reset."
+                title="Drag to resize chart heightDouble-click to reset."
                   onPointerDown={onChartResizePointerDown}
                   onDoubleClick={onChartResizeDoubleClick}
                 />
@@ -1863,25 +1948,20 @@ export default function IndexPage() {
                   </svg>
                 </div>
                 <div className="ticker-subh-left">
-                  <h3 id="index-news-h" className="ticker-subh ticker-subh--flex">
+                  <ReturnsChartClickableHeading
+                    id="index-news-h"
+                    className="ticker-subh ticker-subh--flex"
+                    onClick={onOpenNewsPage}
+                  >
                     News
-                  </h3>
+                  </ReturnsChartClickableHeading>
                   <DataInfoTip align="start">
                     <p className="ticker-data-tip__p">
-                      Headlines for <strong>{displaySym}</strong> from the live feed. Use <strong>View More</strong> to open the
-                      full news page with this ticker pre-selected.
+                      Headlines for <strong>{displaySym}</strong> from the live feed. Click <strong>News</strong> to open the full
+                      news page with this ticker pre-selected.
                     </p>
                   </DataInfoTip>
                 </div>
-              </div>
-              <div className="ticker-rs-selector-head__right">
-                <button
-                  type="button"
-                  className="ticker-annual-figma__btn ticker-annual-figma__btn--outline shrink-0"
-                  onClick={() => navigate(`/news?ticker=${encodeURIComponent(displaySym)}`)}
-                >
-                  View More
-                </button>
               </div>
             </div>
             {newsBusy ? <p className="ticker-page__news-sample-note">Loading ticker news…</p> : null}
@@ -1950,6 +2030,8 @@ export default function IndexPage() {
             symbol={displaySym}
             monthlyReturns={monthlyReturnsRaw}
             asOfDate={asOfDate}
+            resizeStorageKey={RESIZE_KEY_MONTHLY_RETURNS}
+            resizeDefaultHeight={278}
             suppressChartDateFilter
             useThemedYearDropdown
             defaultToLatestYear
@@ -1984,9 +2066,13 @@ export default function IndexPage() {
                   </svg>
                 </div>
                 <div className="ticker-subh-left">
-                  <h3 id="index-rs-selector-h" className="ticker-subh ticker-subh--flex">
+                  <ReturnsChartClickableHeading
+                    id="index-rs-selector-h"
+                    className="ticker-subh ticker-subh--flex"
+                    onClick={onOpenRelativeStrengthPage}
+                  >
                     Relative Strength selector
-                  </h3>
+                  </ReturnsChartClickableHeading>
                   <DataInfoTip align="start">
                     <p className="ticker-data-tip__p">
                       Choose two indices; table and bars show return% difference (left minus right).
@@ -1995,40 +2081,42 @@ export default function IndexPage() {
                 </div>
               </div>
               <div className="ticker-rs-selector-head__right">
-                <ReturnsChartFiltersMenu className="ticker-rs-selector-head__filters">
-                  <div className="ticker-rs-controls ticker-rs-controls--in-filters-panel">
-                    <ThemedDropdown
-                      wideLabel
-                      style={{ minWidth: 0, maxWidth: '100%' }}
-                      value={relativeLeftKey}
-                      options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
-                      onChange={setRelativeLeftKey}
-                      title="Relative strength left"
-                      ariaLabelPrefix="Left index"
-                      labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeLeftKey)?.label ?? ''}
-                    />
-                    <ThemedDropdown
-                      wideLabel
-                      style={{ minWidth: 0, maxWidth: '100%' }}
-                      value={relativeRightKey}
-                      options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
-                      onChange={setRelativeRightKey}
-                      title="Relative strength right"
-                      ariaLabelPrefix="Right index"
-                      labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeRightKey)?.label ?? ''}
-                    />
-                    <button
-                      type="button"
-                      className="ticker-annual-figma__btn ticker-annual-figma__btn--outline shrink-0"
-                      onClick={() => navigate('/relative-strength/ticker')}
-                    >
-                      View More
-                    </button>
-                    {relativeBusy ? (
+                <ReturnsChartToolbar
+                  className="ticker-rs-selector-head__toolbar"
+                  rangeControls={
+                    <div className="ticker-rs-controls ticker-rs-controls--inline">
+                      <ThemedDropdown
+                        wideLabel
+                        style={{ minWidth: 0, maxWidth: '100%' }}
+                        value={relativeLeftKey}
+                        options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
+                        onChange={setRelativeLeftKey}
+                        title="Relative strength left"
+                        ariaLabelPrefix="Left index"
+                        labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeLeftKey)?.label ?? ''}
+                      />
+                      <ThemedDropdown
+                        wideLabel
+                        style={{ minWidth: 0, maxWidth: '100%' }}
+                        value={relativeRightKey}
+                        options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
+                        onChange={setRelativeRightKey}
+                        title="Relative strength right"
+                        ariaLabelPrefix="Right index"
+                        labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeRightKey)?.label ?? 'S&P 500'}
+                      />
+                    </div>
+                  }
+                  onViewMore={onOpenRelativeStrengthPage}
+                  showViewMore={false}
+                  showTableToggle={false}
+                  showDownload={false}
+                  extraActions={
+                    relativeBusy ? (
                       <span className="ticker-page__loading-pill">Loading relative strength…</span>
-                    ) : null}
-                  </div>
-                </ReturnsChartFiltersMenu>
+                    ) : null
+                  }
+                />
               </div>
             </div>
             <TickerSection16Section17
@@ -2098,9 +2186,7 @@ export default function IndexPage() {
             <header className="mkt-mini-card__head">
               <span className="mkt-mini-card__k" id="index-constituents-h">
                 {isSectorDataRoute ? (
-                  <span className="mkt-mini-card__k">
-                    {activeSector ? `${activeSector.label.toUpperCase()} TICKERS` : 'SECTOR TICKERS'}
-                  </span>
+                  <>{activeSector ? `${activeSector.label.toUpperCase()} · S&P 500` : 'SECTOR · S&P 500'}</>
                 ) : (
                   <>
                     {activeMeta.label}
@@ -2111,8 +2197,20 @@ export default function IndexPage() {
               <span className="mkt-mini-card__head-actions">
                 <DataInfoTip align="start">
                   <p className="ticker-data-tip__p">
-                    Source: <code className="ticker-data-tip__code">POST /api/market/ticker-details</code> with period{' '}
-                    <code className="ticker-data-tip__code">last-date</code>. Return % is 1D.
+                    {isSectorDataRoute ? (
+                      <>
+                        <strong>Sector data</strong>: constituents are <strong>S&amp;P 500</strong> names whose GICS sector matches{' '}
+                        <strong>{activeSector?.label ?? 'this sector'}</strong> (same mapping as the sector ETF heatmap). Source:{' '}
+                        <code className="ticker-data-tip__code">POST /api/market/ticker-details</code> with{' '}
+                        <code className="ticker-data-tip__code">index: sp500</code>, period <code className="ticker-data-tip__code">last-date</code>.
+                        Return % is 1D.
+                      </>
+                    ) : (
+                      <>
+                        Source: <code className="ticker-data-tip__code">POST /api/market/ticker-details</code> with period{' '}
+                        <code className="ticker-data-tip__code">last-date</code>. Return % is 1D.
+                      </>
+                    )}
                   </p>
                 </DataInfoTip>
               </span>
@@ -2128,31 +2226,61 @@ export default function IndexPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {indexTickersPageRows.map((row) => (
-                      <tr key={row.symbol}>
-                        <td>
-                          <button
-                            type="button"
-                            className="index-constituents-link"
-                            onClick={() => navigate(`/ticker/${encodeURIComponent(row.symbol)}?ticker=${encodeURIComponent(row.symbol)}`)}
-                          >
-                            {row.symbol}
-                          </button>
-                        </td>
-                        <td>{formatPx(row.close)}</td>
-                        <td className={pctClass(row.ret1d)}>{formatPct(row.ret1d)}</td>
-                      </tr>
-                    ))}
-                    {!indexTickersBusy && !indexTickersPageRows.length ? (
+                    {isSectorDataRoute
+                      ? sectorConstituentLetterGroups.flatMap(([letter, rows]) => [
+                          <tr key={`sec-${letter}`} className="index-constituents-section-row">
+                            <td colSpan={3} className="index-constituents-section-cell">
+                              {letter}
+                            </td>
+                          </tr>,
+                          ...rows.map((row) => (
+                            <tr key={row.symbol}>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="index-constituents-link"
+                                  onClick={() =>
+                                    navigate(`/ticker/${encodeURIComponent(row.symbol)}?ticker=${encodeURIComponent(row.symbol)}`)
+                                  }
+                                >
+                                  {row.symbol}
+                                </button>
+                              </td>
+                              <td>{formatPx(row.close)}</td>
+                              <td className={pctClass(row.ret1d)}>{formatPct(row.ret1d)}</td>
+                            </tr>
+                          ))
+                        ])
+                      : indexTickersPageRows.map((row) => (
+                          <tr key={row.symbol}>
+                            <td>
+                              <button
+                                type="button"
+                                className="index-constituents-link"
+                                onClick={() =>
+                                  navigate(`/ticker/${encodeURIComponent(row.symbol)}?ticker=${encodeURIComponent(row.symbol)}`)
+                                }
+                              >
+                                {row.symbol}
+                              </button>
+                            </td>
+                            <td>{formatPx(row.close)}</td>
+                            <td className={pctClass(row.ret1d)}>{formatPct(row.ret1d)}</td>
+                          </tr>
+                        ))}
+                    {!indexTickersBusy &&
+                    (isSectorDataRoute ? !sectorConstituentLetterGroups.length : !indexTickersPageRows.length) ? (
                       <tr>
-                        <td colSpan={3} className="index-constituents-empty">No constituents found.</td>
+                        <td colSpan={3} className="index-constituents-empty">
+                          No constituents found.
+                        </td>
                       </tr>
                     ) : null}
                   </tbody>
                 </table>
                 {indexTickersBusy ? <p className="ticker-page__news-sample-note">Loading constituents…</p> : null}
               </div>
-              {indexTickersTotalPages > 1 ? (
+              {indexTickersTotalPages > 1 && !isSectorDataRoute ? (
                 <FigmaPagination page={indexTickersPageSafe} totalPages={indexTickersTotalPages} onPageChange={setIndexTickersPage} />
               ) : null}
             </div>
@@ -2165,7 +2293,7 @@ export default function IndexPage() {
               </span>
             </header>
             <div className="index-aside-mini__body">
-              <p className="ticker-kd-comp">
+              <p className={'ticker-kd-comp' + (isSectorDataRoute ? ' index-other-sectors-list' : '')}>
                 {relatedIndexLinks.length ? (
                   relatedIndexLinks.map((x) => (
                     <Link key={x.slug} to={x.to} className="ticker-kd-comp__a">
@@ -2235,6 +2363,16 @@ export default function IndexPage() {
           </section>
         </aside>
       </div>
+      <ChartSnapshotExportModal
+        open={chartExportModalOpen}
+        status={chartExportModalStatus}
+        error={chartExportModalError}
+        previewUrl={chartExportPreviewUrl}
+        onClose={closeChartExportModal}
+        onDownload={downloadChartExport}
+        titleId="index-chart-export-modal-title"
+        previewAlt={`Exported chart for ${displaySym}`}
+      />
     </div>
   );
 }

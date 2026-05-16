@@ -5,7 +5,7 @@ import { ProtectedLayout } from './components/ProtectedLayout.jsx';
 import { PageRouteFallback } from './components/PageRouteFallback.jsx';
 import { RouteErrorBoundary } from './components/RouteErrorBoundary.jsx';
 import './index.css';
-import { initAuthSessionOnLoad } from './store/apiStore.js';
+import { initAuthSessionOnLoad, isAuthDisabled } from './store/apiStore.js';
 import { DEFAULT_INDEX_ROUTE_SLUG, DEFAULT_TICKER_ROUTE_SYMBOL } from './utils/tickerUrlSync.js';
 
 const App = lazy(() => import('./App.jsx'));
@@ -36,6 +36,8 @@ const AccountsPage = lazy(() => import('./pages/AccountsPage.jsx'));
 
 initAuthSessionOnLoad();
 
+const AUTH_DISABLED = isAuthDisabled();
+
 /** Old `/ticker-annual/SYM` (etc.) → `/statistic/ticker-annual/SYM` */
 function LegacyTickerStatRedirect({ kind }) {
   const { symbol } = useParams();
@@ -44,6 +46,7 @@ function LegacyTickerStatRedirect({ kind }) {
 }
 
 function ProtectedRoute({ children }) {
+  if (AUTH_DISABLED) return children;
   const token = localStorage.getItem('auth_token');
   return token ? children : <Navigate to="/login" replace />;
 }

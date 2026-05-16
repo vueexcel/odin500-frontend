@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChartInfoTip } from '../components/ChartInfoTip.jsx';
+import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { SectorTreemap } from '../components/SectorTreemap.jsx';
 import { resolveTreemapRows } from '../components/SectorTreemap.jsx';
 import TradingChartLoader from '../components/TradingChartLoader.jsx';
-import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import {fetchJsonCached, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { CHART_INFO_TIPS } from '../components/chartInfoTips.js';
 import { returnToHeatColor } from '../utils/heatmapColors.js';
+import { useGatedCsvDownload } from '../hooks/useGatedCsvDownload.js';
+import { notifyChartFullscreenLayout } from '../utils/chartFullscreenLayout.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 
 /** `apiIndex` must match `market_groups.name` from Supabase (see GET /api/market/indices). */
@@ -210,7 +213,7 @@ export default function MarketHeatmapPage() {
   useEffect(() => {
     let cancelled = false;
     async function loadMeta() {
-      if (!getAuthToken()) return;
+      if (!canFetchProtectedApi()) return;
       try {
         const [ir, pr] = await Promise.all([
           fetchJsonCached({ path: '/api/market/indices', method: 'GET', ttlMs: 60 * 60 * 1000 }),
@@ -256,7 +259,7 @@ export default function MarketHeatmapPage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!getAuthToken()) {
+      if (!canFetchProtectedApi()) {
         setError('Sign in to load market data.');
         return;
       }
@@ -346,6 +349,11 @@ export default function MarketHeatmapPage() {
     }));
   }, [periodOptions]);
 
+  const periodDropdownOptions = useMemo(
+    () => periodSelectOptions.map((o) => ({ id: o.value, label: o.label })),
+    [periodSelectOptions]
+  );
+
   useEffect(() => {
     if (!periodSelectOptions.length) return;
     if (!periodSelectOptions.some((o) => o.value === periodValue)) {
@@ -412,6 +420,7 @@ export default function MarketHeatmapPage() {
     } else {
       document.exitFullscreen?.();
     }
+    notifyChartFullscreenLayout();
   }, []);
 
   const downloadCsv = useCallback(() => {
@@ -444,6 +453,8 @@ export default function MarketHeatmapPage() {
     a.click();
     URL.revokeObjectURL(url);
   }, [bottomSortedRows, fetchIndex, periodValue]);
+
+  const downloadCsvClick = useGatedCsvDownload(downloadCsv);
 
   const zoomIn = () => setZoom((z) => Math.min(2.25, Math.round((z + 0.25) * 100) / 100));
   const zoomOut = () => setZoom((z) => Math.max(0.75, Math.round((z - 0.25) * 100) / 100));
@@ -499,18 +510,16 @@ export default function MarketHeatmapPage() {
             <label className="heatmap-field-label" htmlFor="heatmap-period">
               Choose period
             </label>
-            <select
-              id="heatmap-period"
-              className="heatmap-select"
+            <ThemedDropdown
+              buttonId="heatmap-period"
+              className="heatmap-period-dd"
               value={periodValue}
-              onChange={(e) => setPeriodValue(e.target.value)}
-            >
-              {periodSelectOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+              options={periodDropdownOptions}
+              onChange={setPeriodValue}
+              title="Choose period"
+              ariaLabelPrefix="Period"
+              wideLabel
+            />
           </section>
 
           <section className="heatmap-card heatmap-card--table">
@@ -605,7 +614,12 @@ export default function MarketHeatmapPage() {
                   <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
                 </svg>
               </button>
-              <button type="button" className="heatmap-icon-btn" onClick={downloadCsv} title="Download CSV">
+              <button
+                type="button"
+                className="heatmap-icon-btn"
+                onClick={downloadCsvClick}
+                title="Download CSV"
+              >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 3v12m0 0l4-4m-4 4L8 11M5 21h14" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -762,7 +776,8 @@ export default function MarketHeatmapPage() {
                   type="button"
                   className="historical-data__btn"
                   disabled={loading || !bottomSortedRows.length}
-                  onClick={downloadCsv}
+                  title="Download CSV"
+                  onClick={downloadCsvClick}
                 >
                   Download CSV
                 </button>

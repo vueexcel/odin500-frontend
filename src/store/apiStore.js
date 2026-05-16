@@ -170,6 +170,10 @@ export function initAuthSessionOnLoad() {
   if (typeof window === 'undefined') return;
 
   memoryStore.token = localStorage.getItem(TOKEN_KEY) || '';
+  if (!memoryStore.token) {
+    localStorage.removeItem('market_api_email');
+    localStorage.removeItem('odin_login_remember');
+  }
 
   const rt = getRefreshToken();
   const expSec = getExpiresAtSec();
@@ -261,6 +265,44 @@ export function getAuthToken() {
   return token;
 }
 
+export function isAuthDisabled() {
+  return (
+    import.meta.env.VITE_AUTH_DISABLED === 'true' ||
+    import.meta.env.VITE_AUTH_DISABLED === '1'
+  );
+}
+
+/** Logged in, or temporary auth bypass — safe to call protected market/ticker APIs. */
+export function canFetchProtectedApi() {
+  return isAuthDisabled() || Boolean(getAuthToken());
+}
+
+/** Local part of email saved at login; only valid while a session exists. */
+export function getProfileEmailLocalPart() {
+  if (!getAuthToken()) return '';
+  try {
+    const em = String(localStorage.getItem('market_api_email') || '').trim();
+    if (!em) return '';
+    const at = em.indexOf('@');
+    return (at > 0 ? em.slice(0, at) : em) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function profileInitialsFromName(name, guestInitial = 'G') {
+  const label = String(name || '').trim();
+  if (!label || label === 'Guest') return guestInitial;
+  const letters = label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0])
+    .join('')
+    .toUpperCase();
+  return letters || guestInitial;
+}
+
 export function clearAuthToken() {
   clearProactiveTimer();
   memoryStore.token = '';
@@ -268,6 +310,8 @@ export function clearAuthToken() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(EXPIRES_AT_KEY);
+  localStorage.removeItem('market_api_email');
+  localStorage.removeItem('odin_login_remember');
   dispatchAuthUpdated();
 }
 

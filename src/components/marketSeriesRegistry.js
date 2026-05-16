@@ -4,17 +4,17 @@ export const MARKET_SERIES = [
   { key: 'INDU', label: 'Dow Jones', ticker: 'DIA', symbol: 'DJI', color: '#ff6b00', badge: '#9a3412', tone: 'orange', group: 'us' },
   { key: 'SPX', label: 'S&P 500', ticker: 'SPY', symbol: 'SPX', color: '#56208E', badge: '#1e40af', tone: 'blue', group: 'us' },
 
-  { key: 'XLB', label: 'Materials', ticker: 'XLB', color: '#6b7280', badge: '#374151', tone: 'gray', group: 'sector' },
-  { key: 'XLK', label: 'Technology', ticker: 'XLK', color: '#00b894', badge: '#065f46', tone: 'teal', group: 'sector' },
-  { key: 'XLF', label: 'Financials', ticker: 'XLF', color: '#ff3b3b', badge: '#7f1d1d', tone: 'red', group: 'sector' },
+  { key: 'XLB', label: 'Materials', ticker: 'XLB', addon: 'Select Sector SPDR Fund', color: '#6b7280', badge: '#374151', tone: 'gray', group: 'sector' },
+  { key: 'XLK', label: 'Technology', ticker: 'XLK', addon: 'Select Sector SPDR Fund', color: '#00b894', badge: '#065f46', tone: 'teal', group: 'sector' },
+  { key: 'XLF', label: 'Financials', ticker: 'XLF', addon: 'Select Sector SPDR Fund', color: '#ff3b3b', badge: '#7f1d1d', tone: 'red', group: 'sector' },
   { key: 'XLV', label: 'Healthcare', ticker: 'XLV', color: '#812046', badge: '#075985', tone: 'sky', group: 'sector' },
-  { key: 'XLI', label: 'Industrials', ticker: 'XLI', color: '#a16207', badge: '#422006', tone: 'brown', group: 'sector' },
-  { key: 'XLE', label: 'Energy', ticker: 'XLE', color: '#d4af37', badge: '#78350f', tone: 'gold', group: 'sector' },
-  { key: 'XLY', label: 'Consumer Discretionary', ticker: 'XLY', color: '#95658A', badge: '#7c2d12', tone: 'orange', group: 'sector' },
-  { key: 'XLP', label: 'Consumer Staples', ticker: 'XLP', color: '#22c55e', badge: '#14532d', tone: 'green', group: 'sector' },
-  { key: 'XLU', label: 'Utilities', ticker: 'XLU', color: '#a78bfa', badge: '#4c1d95', tone: 'purple', group: 'sector' },
-  { key: 'XLRE', label: 'Real Estate', ticker: 'XLRE', color: '#ec4899', badge: '#831843', tone: 'pink', group: 'sector' },
-  { key: 'XLC', label: 'Communication Services', ticker: 'XLC', color: '#06b6d4', badge: '#155e75', tone: 'cyan', group: 'sector' },
+  { key: 'XLI', label: 'Industrials', ticker: 'XLI', addon: 'Select Sector SPDR Fund', color: '#a16207', badge: '#422006', tone: 'brown', group: 'sector' },
+  { key: 'XLE', label: 'Energy', ticker: 'XLE', addon: 'Select Sector SPDR Fund', color: '#d4af37', badge: '#78350f', tone: 'gold', group: 'sector' },
+  { key: 'XLY', label: 'Consumer Discretionary', ticker: 'XLY', addon: 'Select Sector SPDR Fund', color: '#95658A', badge: '#7c2d12', tone: 'orange', group: 'sector' },
+  { key: 'XLP', label: 'Consumer Staples', ticker: 'XLP', addon: 'Select Sector SPDR Fund', color: '#22c55e', badge: '#14532d', tone: 'green', group: 'sector' },
+  { key: 'XLU', label: 'Utilities', ticker: 'XLU', addon: 'Select Sector SPDR Fund', color: '#a78bfa', badge: '#4c1d95', tone: 'purple', group: 'sector' },
+  { key: 'XLRE', label: 'Real Estate', ticker: 'XLRE', addon: 'Select Sector SPDR Fund', color: '#ec4899', badge: '#831843', tone: 'pink', group: 'sector' },
+  { key: 'XLC', label: 'Communication Services', ticker: 'XLC', addon: 'Select Sector SPDR Fund', color: '#06b6d4', badge: '#155e75', tone: 'cyan', group: 'sector' },
 
   /** Client list — Other Markets (ETFs); `ticker` = OHLC symbol. */
 

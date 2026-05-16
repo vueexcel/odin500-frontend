@@ -1,6 +1,11 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
+import { ReturnsChartClickableHeading } from './ReturnsChartClickableTitle.jsx';
+import { buildRelativeStrengthTickerHref } from '../utils/relativeStrengthNavigation.js';
+import { useChartFullscreen } from './ChartSectionIconActions.jsx';
+import { ChartFullscreenToggleIcon } from './ChartFullscreenToggleIcon.jsx';
 
 /** Green / red text for diff column (reuses ticker theme tokens). */
 function valueToneClass(v) {
@@ -26,6 +31,12 @@ function formatAxisPct(v) {
   if (a >= 100) return `${v.toFixed(0)}%`;
   if (a >= 10) return `${v.toFixed(1)}%`;
   return `${v.toFixed(2)}%`;
+}
+
+function formatBarValuePct(v) {
+  if (!Number.isFinite(v)) return '';
+  const n = Number(v);
+  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
 /** Linear map: axisMax → 0%, axisMin → 100%. */
@@ -149,8 +160,22 @@ export function TickerSection16Section17({
   relativeStrengthTitle = 'Relative Strength (SP500)',
   relativeStrengthHeader = 'Relative Strength (SP500)',
   /** Rendered on the right-hand “bars” card header (e.g. Filters menu with RS dropdowns). */
-  chartHeaderExtra = null
+  chartHeaderExtra = null,
+  /** Ticker passed to Relative Strength “view more” when `onViewMore` is omitted. */
+  viewMoreTicker = '',
+  onViewMore: onViewMoreProp
 }) {
+  const navigate = useNavigate();
+  const onViewMore = useCallback(() => {
+    if (typeof onViewMoreProp === 'function') {
+      onViewMoreProp();
+      return;
+    }
+    navigate(buildRelativeStrengthTickerHref(viewMoreTicker));
+    queueMicrotask(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+  }, [navigate, onViewMoreProp, viewMoreTicker]);
   const displayRows = useMemo(() => (Array.isArray(rows) ? rows.filter((r) => r && r.label) : []), [rows]);
   const chartRows = useMemo(() => {
     if (displayRows.length) return displayRows;
@@ -163,6 +188,9 @@ export function TickerSection16Section17({
   }, [displayRows, compareRows]);
 
   const chart = useMemo(() => buildRelativeStrengthChart(chartRows), [chartRows]);
+
+  const s17ChartFsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const { isFullscreen: s17Fs, toggleFullscreen: toggleS17Fullscreen } = useChartFullscreen(s17ChartFsRef);
   const fmtTick = chart.fmtTick || formatAxisPct;
   const nCols = Math.max(1, chartRows.length);
   const chartGapPx = nCols > 12 ? 4 : nCols > 8 ? 6 : 8;
@@ -198,7 +226,9 @@ export function TickerSection16Section17({
                 </defs>
               </svg>
             </div>
-            <h3 className="ticker-subh ticker-subh--flex">{relativeStrengthTitle}</h3>
+            <ReturnsChartClickableHeading className="ticker-subh ticker-subh--flex" onClick={onViewMore}>
+              {relativeStrengthTitle}
+            </ReturnsChartClickableHeading>
             <ChartInfoTip tip={CHART_INFO_TIPS.tickerRelativeStrength} align="start" />
           </div>
         </div>
@@ -230,11 +260,26 @@ export function TickerSection16Section17({
       <div className="ticker-s16s17__card ticker-s17">
         <div className="ticker-s16s17__head-row">
           <div className="ticker-card__h-with-tip">
-            <h3 className="ticker-subh ticker-subh--flex">Relative Strength Bars</h3>
+            <ReturnsChartClickableHeading className="ticker-subh ticker-subh--flex" onClick={onViewMore}>
+              Relative Strength Bars
+            </ReturnsChartClickableHeading>
             <ChartInfoTip tip={CHART_INFO_TIPS.tickerRelativeStrength} align="start" />
           </div>
-          {chartHeaderExtra ? <div className="ticker-s16s17__chart-head-tools">{chartHeaderExtra}</div> : null}
+          <div className="ticker-s16s17__chart-head-tools">
+            {chartHeaderExtra}
+            <button
+              type="button"
+              className="ticker-chart-footer-icons__btn"
+              onClick={toggleS17Fullscreen}
+              aria-pressed={s17Fs}
+              aria-label={s17Fs ? 'Exit chart fullscreen' : 'Enter chart fullscreen'}
+              title={s17Fs ? 'Exit fullscreen' : 'Fullscreen'}
+            >
+              <ChartFullscreenToggleIcon isFullscreen={s17Fs} />
+            </button>
+          </div>
         </div>
+        <div ref={s17ChartFsRef} className="ticker-chart-fs-shell ticker-s17__chart-shell">
         <div
           className="ticker-s17__chart"
           style={{
@@ -270,6 +315,19 @@ export function TickerSection16Section17({
                           className={'ticker-s17__bar ticker-s17__bar--' + b.tone + (b.value == null ? ' ticker-s17__bar--empty' : '')}
                           style={{ top: `${b.topPct}%`, height: `${b.heightPct}%` }}
                         />
+                        {b.value != null ? (
+                          <span
+                            className={'ticker-s17__bar-val ticker-s17__bar-val--' + b.tone}
+                            style={{
+                              top:
+                                b.tone === 'down'
+                                  ? `${b.topPct + b.heightPct}%`
+                                  : `${b.topPct}%`
+                            }}
+                          >
+                            {formatBarValuePct(b.value)}
+                          </span>
+                        ) : null}
                         <span className="ticker-s17__bar-tip" role="tooltip">
                           {tipText}
                         </span>
@@ -288,6 +346,7 @@ export function TickerSection16Section17({
               </div>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </section>

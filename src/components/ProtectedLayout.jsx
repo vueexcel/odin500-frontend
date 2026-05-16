@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import { fetchJsonCached, getAuthToken, isAuthDisabled } from '../store/apiStore.js';
 import { warmWatchlistDefaults } from '../hooks/useWatchlistDefaults.js';
+import { LoginGateProvider } from '../context/LoginGateContext.jsx';
 import { WatchlistDockProvider, useRightRailDock } from '../context/WatchlistDockContext.jsx';
 import { AppMainTopBar } from './AppMainTopBar.jsx';
 import { AppSidebar } from './AppSidebar.jsx';
@@ -47,12 +48,14 @@ function ProtectedLayoutShell() {
 
   useEffect(() => {
     const warmWatchlistCache = () => {
-      if (!getAuthToken()) return;
       const ttlMs = 2 * 60 * 1000;
-      void Promise.all([
-        warmWatchlistDefaults(ttlMs),
-        fetchJsonCached({ path: '/api/watchlists', auth: true, ttlMs })
-      ]).catch(() => {});
+      const tasks = [warmWatchlistDefaults(ttlMs)];
+      if (getAuthToken()) {
+        tasks.push(fetchJsonCached({ path: '/api/watchlists', auth: true, ttlMs }));
+      } else if (!isAuthDisabled()) {
+        return;
+      }
+      void Promise.all(tasks).catch(() => {});
     };
     warmWatchlistCache();
     window.addEventListener('odin-auth-updated', warmWatchlistCache);
@@ -114,7 +117,16 @@ function ProtectedLayoutShell() {
           onRequestClose={() => setMobileLeftOpen(false)}
         />
         <div className={'app-main-column' + (isDockOpen ? ' app-main-column--watchlist-open' : '')}>
-          <AppMainTopBar theme={theme} onToggleTheme={toggleTheme} />
+          <AppMainTopBar
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            isMobile={isMobile}
+            mobileNavOpen={mobileLeftOpen}
+            onToggleMobileNav={() => {
+              setMobileRightOpen(false);
+              setMobileLeftOpen((v) => !v);
+            }}
+          />
           <div className="app-main-after-topbar">
             <div className="app-main-scroll" ref={mainScrollRef}>
               <Outlet />
@@ -145,42 +157,6 @@ function ProtectedLayoutShell() {
           </div>
         </div>
         <AppRightRail mobileOpen={isMobile && mobileRightOpen} onRequestClose={() => setMobileRightOpen(false)} />
-        {isMobile ? (
-          <>
-            <button
-              type="button"
-              className="app-mobile-fab app-mobile-fab--left app-mobile-fab--nav"
-              aria-label={mobileLeftOpen ? 'Close navigation menu' : 'Open navigation menu'}
-              aria-expanded={mobileLeftOpen}
-              aria-controls="app-sidebar-main"
-              onClick={() => {
-                setMobileRightOpen(false);
-                setMobileLeftOpen((v) => !v);
-              }}
-            >
-              <span className="app-mobile-fab__nav-ico" aria-hidden>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  {mobileLeftOpen ? (
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  ) : (
-                    <path d="M4 7h16M4 12h16M4 17h16" />
-                  )}
-                </svg>
-              </span>
-            </button>
-            <button
-              type="button"
-              className="app-mobile-fab app-mobile-fab--right"
-              aria-label="Open quick tools"
-              onClick={() => {
-                setMobileLeftOpen(false);
-                setMobileRightOpen((v) => !v);
-              }}
-            >
-              <span className="app-mobile-fab__dots" aria-hidden>⋮</span>
-            </button>
-          </>
-        ) : null}
       </div>
     </div>
   );
@@ -188,8 +164,10 @@ function ProtectedLayoutShell() {
 
 export function ProtectedLayout() {
   return (
-    <WatchlistDockProvider>
-      <ProtectedLayoutShell />
-    </WatchlistDockProvider>
+    <LoginGateProvider>
+      <WatchlistDockProvider>
+        <ProtectedLayoutShell />
+      </WatchlistDockProvider>
+    </LoginGateProvider>
   );
 }

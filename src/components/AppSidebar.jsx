@@ -3,8 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SidebarToggleGlyph } from './SidebarToggleGlyph.jsx';
 import odinLogo from '../assets/odin500-logo.svg';
 import odinLogoLight from '../assets/odin500-logo-light.svg';
-import { fetchWithAuth } from '../store/apiStore.js';
-import { apiUrl } from '../utils/apiOrigin.js';
+import { useHeaderProfile } from '../hooks/useHeaderProfile.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 import { prefetchRouteChunks } from '../utils/routePrefetch.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL, isMainTickerRoutePath } from '../utils/tickerUrlSync.js';
@@ -209,8 +208,10 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
   const isExpandedView = expanded || mobileOpen;
   const location = useLocation();
   const [theme, setTheme] = useState(() => getDocumentTheme());
-  const [displayName, setDisplayName] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
+  const { profileName, initials, avatarUrl } = useHeaderProfile({
+    guestLabel: 'Guest',
+    signedInFallback: 'Account'
+  });
   const accountWrapRef = useRef(null);
   const tickerPathMatch =
     location.pathname.match(/^\/ticker\/([^/?#]+)$/i) ||
@@ -240,51 +241,7 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
   const [indicesOpen, setIndicesOpen] = useState(isIndicesRoute);
   const [statsOpen, setStatsOpen] = useState(isStatsRoute);
 
-  const fallbackName = (() => {
-    try {
-      const em = String(localStorage.getItem('market_api_email') || '').trim();
-      if (!em) return 'Account';
-      const at = em.indexOf('@');
-      return (at > 0 ? em.slice(0, at) : em) || 'Account';
-    } catch {
-      return 'Account';
-    }
-  })();
-  const profileName = (displayName || fallbackName || 'Account').trim();
   const brandLogo = theme === 'light' ? odinLogoLight : odinLogo;
-  const initials =
-    profileName
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((s) => s[0])
-      .join('')
-      .toUpperCase() || 'A';
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadProfile = async () => {
-      try {
-        const res = await fetchWithAuth(apiUrl('/api/user/profile'), { method: 'GET' });
-        const payload = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        const apiName = payload?.userName || payload?.displayName || '';
-        if (res.ok && apiName) setDisplayName(String(apiName));
-        if (res.ok) setAvatarUrl(String(payload?.avatarUrl || ''));
-      } catch {
-        /* ignore */
-      }
-    };
-    void loadProfile();
-    const onAuth = () => {
-      void loadProfile();
-    };
-    window.addEventListener('odin-auth-updated', onAuth);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('odin-auth-updated', onAuth);
-    };
-  }, []);
 
   useEffect(() => {
     if (isIndicesRoute) setIndicesOpen(true);
@@ -481,7 +438,7 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
               ) : null}
               <NavRow to="/relative-strength/ticker" icon={IconLineChart} label="Relative strength" />
               {/* <NavRow icon={IconFocus} label="Odin Index Signals" onClick={() => {}} /> */}
-              <NavRow to="/odin-signals" icon={IconFocus} label="Odin Signals" />
+              {/* <NavRow to="/odin-signals" icon={IconFocus} label="Odin Signals" /> */}
               {/* <NavRow icon={IconWallet} label="Sample Odin Portfolios" onClick={() => {}} />
               <NavRow icon={IconMonitor} label="Odin Signals Performance" onClick={() => {}} /> */}
             </nav>
@@ -490,7 +447,7 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
             <nav className="app-sidebar__nav" aria-label="Data">
               <NavRow to="/historical-data" icon={IconDocSearch} label="Historical data" />
               {/* <NavRow icon={IconLineChart} label="Returns" onClick={() => {}} /> */}
-              <NavRow to="/statistic-data" icon={IconCamera} label="Statistic Table" />
+              {/* <NavRow to="/statistic-data" icon={IconCamera} label="Statistic Table" /> */}
             </nav>
 
             {/* <div className="app-sidebar__section-label">Premium</div>

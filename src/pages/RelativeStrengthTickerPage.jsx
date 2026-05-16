@@ -8,8 +8,6 @@ import {
   useSyncExternalStore,
   useDeferredValue
 } from 'react';
-import { createPortal } from 'react-dom';
-import html2canvas from 'html2canvas';
 import { createChart, PriceScaleMode } from 'lightweight-charts';
 import { useSearchParams } from 'react-router-dom';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
@@ -19,14 +17,15 @@ import { ExcessReturnLineChart } from '../components/ExcessReturnLineChart.jsx';
 import { PeriodicReturnBarChart } from '../components/PeriodicReturnBarChart.jsx';
 import { TickerSection16Section17 } from '../components/TickerSection16Section17.jsx';
 import { TickerSection23Section24 } from '../components/TickerSection23Section24.jsx';
-import { fetchWithAuth, getAuthToken } from '../store/apiStore.js';
+import {fetchWithAuth, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { getDocumentTheme, subscribeDocumentTheme } from '../utils/documentTheme.js';
 import { useTickerList } from '../hooks/useTickerList.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 import { LightweightChartAreaSkeleton } from '../components/ChartSkeletons.jsx';
-import { ReturnsChartFiltersMenu } from '../components/ReturnsChartFiltersMenu.jsx';
-import { StatsCmpIcoDownload, StatsCmpIcoTable } from '../components/statsCmpChartToolbarIcons.jsx';
+import { ReturnsChartToolbar } from '../components/ReturnsChartToolbar.jsx';
+import { ChartSectionIconActions } from '../components/ChartSectionIconActions.jsx';
+import { buildTickerChartExportFilename } from '../utils/chartExportFilename.js';
 import { TickerChartResizeScope } from '../components/TickerChartResizeScope.jsx';
 
 const INDEX_OPTIONS = ['SPY', 'QQQ', 'DIA'];
@@ -414,15 +413,6 @@ export default function RelativeStrengthTickerPage() {
   const [endYear, setEndYear] = useState(String(currentYear));
   const [activeChartKeys, setActiveChartKeys] = useState(() => [...RS_CHART_SERIES_KEYS]);
   const [axisBadgeTops, setAxisBadgeTops] = useState({});
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [exportingSnapshot, setExportingSnapshot] = useState(false);
-  const [exportModalOpen, setExportModalOpen] = useState(false);
-  const [exportModalStatus, setExportModalStatus] = useState('idle');
-  const [exportPreviewUrl, setExportPreviewUrl] = useState(null);
-  const [exportFilename, setExportFilename] = useState('');
-  const [exportModalError, setExportModalError] = useState('');
-  const [exportShareHint, setExportShareHint] = useState('');
-
   const defaultStatsYearStart = String(currentYear - 4);
   const defaultStatsYearEnd = String(currentYear);
   const [chartAnnualYearStart, setChartAnnualYearStart] = useState(defaultStatsYearStart);
@@ -585,7 +575,7 @@ export default function RelativeStrengthTickerPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!getAuthToken()) {
+    if (!canFetchProtectedApi()) {
       setError('Sign in to load relative strength data.');
       setSeriesData({});
       prevRsBlockingSigRef.current = '';
@@ -994,155 +984,37 @@ export default function RelativeStrengthTickerPage() {
 
   const chartMetaByKey = useMemo(() => new Map(chartSeries.map((s) => [s.key, s])), [chartSeries]);
 
-  const toggleChartFullscreen = useCallback(async () => {
-    const el = chartPanelRef.current;
-    if (!el) return;
-    const d = document;
-    const fsEl = d.fullscreenElement ?? d.webkitFullscreenElement;
-    try {
-      if (fsEl === el) {
-        if (d.exitFullscreen) await d.exitFullscreen();
-        else d.webkitExitFullscreen?.();
-      } else if (el.requestFullscreen) await el.requestFullscreen();
-      else el.webkitRequestFullscreen?.();
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  const buildMainRsExportFilename = useCallback(
+    () => buildTickerChartExportFilename(`relative-strength-${mode}`, tickerSymbol),
+    [mode, tickerSymbol]
+  );
 
-  const closeExportModal = useCallback(() => {
-    setExportModalOpen(false);
-    setExportModalStatus('idle');
-    setExportPreviewUrl(null);
-    setExportFilename('');
-    setExportModalError('');
-    setExportShareHint('');
-  }, []);
-
-  const downloadFromExportModal = useCallback(() => {
-    if (!exportPreviewUrl || !exportFilename) return;
-    const link = document.createElement('a');
-    link.href = exportPreviewUrl;
-    link.download = exportFilename;
-    link.click();
-  }, [exportPreviewUrl, exportFilename]);
-
-  const openRsChartExportModal = useCallback(async () => {
-    const root = chartPanelRef.current;
-    const host = chartHostRef.current;
+  const getMainRsExportFallbackCanvas = useCallback(() => {
     const chart = chartRef.current;
-    if (!host || loading) return;
-
-    const datePart = new Date().toISOString().slice(0, 10);
-    const modePart = String(mode || 'chart').toLowerCase();
-    const filename = `relative-strength-${modePart}-${datePart}.png`;
-
-    setExportModalOpen(true);
-    setExportModalStatus('capturing');
-    setExportPreviewUrl(null);
-    setExportFilename(filename);
-    setExportModalError('');
-    setExportShareHint('');
-
-    const fallbackCanvas = () => {
-      let canvas = null;
-      if (chart && typeof chart.takeScreenshot === 'function') {
-        try {
-          canvas = chart.takeScreenshot();
-        } catch {
-          canvas = null;
-        }
+    if (chart && typeof chart.takeScreenshot === 'function') {
+      try {
+        const canvas = chart.takeScreenshot();
+        if (canvas) return canvas;
+      } catch {
+        /* ignore */
       }
-      if (!canvas) canvas = host.querySelector('canvas');
-      return canvas;
-    };
-
-    setExportingSnapshot(true);
-    try {
-      await new Promise((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(resolve));
-      });
-
-      let canvas = null;
-      if (root) {
-        let exportBg = getRsChartBgColor(isLight);
-        if (typeof window !== 'undefined') {
-          const c = window.getComputedStyle(root).backgroundColor;
-          if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') exportBg = c;
-        }
-        const scale = 1;
-        try {
-          canvas = await html2canvas(root, {
-            backgroundColor: exportBg,
-            scale,
-            useCORS: true,
-            allowTaint: false,
-            logging: false,
-            foreignObjectRendering: false,
-            imageTimeout: 20000,
-            onclone: (clonedDoc, clonedRoot) => {
-              applyRsSnapshotCloneFixes(clonedDoc, clonedRoot);
-            }
-          });
-        } catch (e) {
-          console.warn('[RelativeStrength] Chart export failed', e);
-          canvas = null;
-        }
-      }
-
-      if (!canvas || canvas.width < 8 || canvas.height < 8) {
-        canvas = fallbackCanvas();
-      }
-      if (!canvas || canvas.width < 8 || canvas.height < 8) {
-        setExportModalError('Could not capture the chart. Try again after data finishes loading.');
-        setExportModalStatus('error');
-        return;
-      }
-
-      setExportPreviewUrl(canvas.toDataURL('image/png'));
-      setExportModalStatus('ready');
-    } catch (e) {
-      console.warn('[RelativeStrength] export capture failed', e);
-      setExportModalError(e?.message || 'Capture failed.');
-      setExportModalStatus('error');
-    } finally {
-      setExportingSnapshot(false);
     }
-  }, [loading, mode, isLight]);
-
-  useEffect(() => {
-    if (!exportModalOpen) return;
-    const onKey = (e) => {
-      if (e.key === 'Escape') closeExportModal();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [exportModalOpen, closeExportModal]);
-
-  useEffect(() => {
-    if (!exportModalOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [exportModalOpen]);
-
-  useEffect(() => {
-    const onFsChange = () => {
-      const el = chartPanelRef.current;
-      const d = document;
-      const fsEl = d.fullscreenElement ?? d.webkitFullscreenElement;
-      setIsFullscreen(Boolean(el && fsEl === el));
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    document.addEventListener('webkitfullscreenchange', onFsChange);
-    onFsChange();
-    return () => {
-      document.removeEventListener('fullscreenchange', onFsChange);
-      document.removeEventListener('webkitfullscreenchange', onFsChange);
-    };
+    const host = chartHostRef.current;
+    const canvas = host?.querySelector('canvas');
+    return canvas instanceof HTMLCanvasElement ? canvas : null;
   }, []);
+
+  const getMainRsExportBackground = useCallback(
+    (light) => {
+      const root = chartPanelRef.current;
+      if (root && typeof window !== 'undefined') {
+        const c = window.getComputedStyle(root).backgroundColor;
+        if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') return c;
+      }
+      return getRsChartBgColor(light);
+    },
+    []
+  );
 
   const modeDropdownOptions = MODE_OPTIONS;
 
@@ -1326,6 +1198,59 @@ export default function RelativeStrengthTickerPage() {
     statsDailyPeriodicEnd
   ]);
 
+  const mainRsRangeControls = useMemo(() => {
+    if (mode === 'daily') {
+      return (
+        <div className="relative-strength-page__date-row" aria-label="Relative strength chart date range">
+          <span className="ticker-page__label ticker-page__label--inline">Start date</span>
+          <input
+            className="relative-strength-page__date-inp"
+            type="date"
+            value={dailyStart}
+            max={dailyEnd}
+            onChange={(e) => setDailyStart(e.target.value)}
+            aria-label="Start date"
+          />
+          <span className="ticker-page__label ticker-page__label--inline">End date</span>
+          <input
+            className="relative-strength-page__date-inp"
+            type="date"
+            value={dailyEnd}
+            min={dailyStart}
+            onChange={(e) => setDailyEnd(e.target.value)}
+            aria-label="End date"
+          />
+        </div>
+      );
+    }
+    return (
+      <div className="relative-strength-page__year-row" aria-label="Relative strength chart year range">
+        <span className="ticker-page__label ticker-page__label--inline">Start</span>
+        <ThemedDropdown
+          className="relative-strength-page__year-dd"
+          value={startYear}
+          options={yearOptions}
+          onChange={setStartYear}
+          title="Start year"
+          ariaLabelPrefix="Start year"
+          size="sm"
+          wideLabel
+        />
+        <span className="ticker-page__label ticker-page__label--inline">End</span>
+        <ThemedDropdown
+          className="relative-strength-page__year-dd"
+          value={endYear}
+          options={yearOptions}
+          onChange={setEndYear}
+          title="End year"
+          ariaLabelPrefix="End year"
+          size="sm"
+          wideLabel
+        />
+      </div>
+    );
+  }, [mode, dailyStart, dailyEnd, startYear, endYear, yearOptions]);
+
   return (
     <>
     <section className="relative-strength-page">
@@ -1364,90 +1289,28 @@ export default function RelativeStrengthTickerPage() {
       </div>
 
       <div className="relative-strength-page__filter-row2">
-        <ReturnsChartFiltersMenu className="relative-strength-page__main-rs-filters returns-chart-filters-menu">
-          <div className="relative-strength-page__chart-filters-panel relative-strength-page__chart-filters-panel--main">
-            {mode === 'daily' ? (
-              <div className="relative-strength-page__date-row">
-                <span className="ticker-page__label ticker-page__label--inline">Start date</span>
-                <input
-                  className="relative-strength-page__date-inp"
-                  type="date"
-                  value={dailyStart}
-                  max={dailyEnd}
-                  onChange={(e) => setDailyStart(e.target.value)}
-                  aria-label="Start date"
-                />
-                <span className="ticker-page__label ticker-page__label--inline">End date</span>
-                <input
-                  className="relative-strength-page__date-inp"
-                  type="date"
-                  value={dailyEnd}
-                  min={dailyStart}
-                  onChange={(e) => setDailyEnd(e.target.value)}
-                  aria-label="End date"
-                />
-              </div>
-            ) : (
-              <div className="relative-strength-page__year-row">
-                <span className="ticker-page__label ticker-page__label--inline">Start</span>
-                <ThemedDropdown
-                  className="relative-strength-page__year-dd"
-                  value={startYear}
-                  options={yearOptions}
-                  onChange={setStartYear}
-                  title="Start year"
-                  ariaLabelPrefix="Start year"
-                  size="sm"
-                  wideLabel
-                />
-                <span className="ticker-page__label ticker-page__label--inline">End</span>
-                <ThemedDropdown
-                  className="relative-strength-page__year-dd"
-                  value={endYear}
-                  options={yearOptions}
-                  onChange={setEndYear}
-                  title="End year"
-                  ariaLabelPrefix="End year"
-                  size="sm"
-                  wideLabel
-                />
-              </div>
-            )}
-            <div className="relative-strength-page__chart-filters-actions-row">
-              <button
-                type="button"
-                className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
-                onClick={openRsChartExportModal}
-                disabled={loading || exportingSnapshot}
-              >
-                {exportingSnapshot ? 'Exporting…' : 'Export chart image'}
-              </button>
-              <button
-                type="button"
-                className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
-                aria-label={isFullscreen ? 'Exit full screen chart' : 'Open full screen chart'}
-                onClick={toggleChartFullscreen}
-              >
-                {isFullscreen ? 'Exit full screen' : 'Full screen'}
-              </button>
-              <button
-                type="button"
-                className="ticker-annual-figma__btn ticker-annual-figma__btn--primary"
-                onClick={() => setShowMainRsTable((v) => !v)}
-              >
-                <StatsCmpIcoTable /> {showMainRsTable ? 'Hide data table' : 'Show data table'}
-              </button>
-              <button
-                type="button"
-                className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
-                onClick={downloadMainRsLineCsv}
-                disabled={!mainRsLineTableRows.length}
-              >
-                <StatsCmpIcoDownload /> Download CSV
-              </button>
-            </div>
-          </div>
-        </ReturnsChartFiltersMenu>
+        <div className="relative-strength-page__filter-row2-main">{mainRsRangeControls}</div>
+        <div className="relative-strength-page__filter-row2-actions ticker-annual-figma__toolbar-end">
+          <ReturnsChartToolbar
+            className="relative-strength-page__main-rs-toolbar"
+            showViewMore={false}
+            onToggleTable={() => setShowMainRsTable((v) => !v)}
+            showTable={showMainRsTable}
+            onDownload={downloadMainRsLineCsv}
+            downloadDisabled={!mainRsLineTableRows.length}
+          />
+          <ChartSectionIconActions
+            snapshotRootRef={chartPanelRef}
+            plotHostRef={chartHostRef}
+            fullscreenTargetRef={chartPanelRef}
+            buildFilename={buildMainRsExportFilename}
+            disabled={loading}
+            getBackgroundColor={getMainRsExportBackground}
+            getFallbackCanvas={getMainRsExportFallbackCanvas}
+            onclone={applyRsSnapshotCloneFixes}
+            exportPreviewAlt="Exported relative strength chart"
+          />
+        </div>
       </div>
 
       <section
@@ -1587,7 +1450,6 @@ export default function RelativeStrengthTickerPage() {
                 benchmarkOptions={benchmarkDropdownOptions}
                 onBenchmarkChange={setBenchCmpAnnual}
                 controls={statsRangeControlsAnnual}
-                toolbarVariant="filtersMenu"
                 showDataTable={showStatsAnnualTable}
                 onToggleDataTable={() => setShowStatsAnnualTable((v) => !v)}
                 onDownloadCsv={downloadStatsAnnualCsv}
@@ -1635,7 +1497,6 @@ export default function RelativeStrengthTickerPage() {
                 benchmarkOptions={benchmarkDropdownOptions}
                 onBenchmarkChange={setBenchCmpExcess}
                 controls={statsRangeControlsExcess}
-                toolbarVariant="filtersMenu"
                 showDataTable={showStatsExcessTable}
                 onToggleDataTable={() => setShowStatsExcessTable((v) => !v)}
                 onDownloadCsv={downloadStatsExcessCsv}
@@ -1683,7 +1544,6 @@ export default function RelativeStrengthTickerPage() {
                 benchmarkOptions={benchmarkDropdownOptions}
                 onBenchmarkChange={setBenchCmpPeriodic}
                 controls={statsRangeControlsPeriodic}
-                toolbarVariant="filtersMenu"
                 showDataTable={showStatsPeriodicTable}
                 onToggleDataTable={() => setShowStatsPeriodicTable((v) => !v)}
                 onDownloadCsv={downloadStatsPeriodicCsv}
@@ -1780,72 +1640,6 @@ export default function RelativeStrengthTickerPage() {
       </div> */}
     </section>
 
-    {exportModalOpen &&
-      typeof document !== 'undefined' &&
-      createPortal(
-        <div
-          className="np-export-overlay"
-          role="presentation"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) closeExportModal();
-          }}
-        >
-          <div
-            className="np-export-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="rs-export-modal-title"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="np-export-modal__head">
-              <h2 id="rs-export-modal-title" className="np-export-modal__title">
-                Export chart
-              </h2>
-              <button type="button" className="np-export-modal__close" onClick={closeExportModal} aria-label="Close">
-                ×
-              </button>
-            </div>
-            <div className="np-export-modal__body">
-              {exportModalStatus === 'capturing' ? (
-                <div className="np-export-modal__status">Generating preview…</div>
-              ) : null}
-              {exportModalStatus === 'error' ? (
-                <div className="np-export-modal__status np-export-modal__status--error" role="alert">
-                  {exportModalError || 'Something went wrong.'}
-                </div>
-              ) : null}
-              {exportPreviewUrl ? (
-                <div className="np-export-modal__preview-wrap">
-                  <img
-                    src={exportPreviewUrl}
-                    alt="Exported relative strength chart"
-                    className="np-export-modal__preview"
-                  />
-                </div>
-              ) : null}
-              {exportShareHint ? (
-                <p className="np-export-modal__share-hint" role="status">
-                  {exportShareHint}
-                </p>
-              ) : null}
-            </div>
-            <div className="np-export-modal__foot">
-              <button type="button" className="np-export-modal__btn np-export-modal__btn--ghost" onClick={closeExportModal}>
-                Close
-              </button>
-              <button
-                type="button"
-                className="np-export-modal__btn np-export-modal__btn--primary"
-                onClick={downloadFromExportModal}
-                disabled={!exportPreviewUrl}
-              >
-                Download
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </>
   );
 }

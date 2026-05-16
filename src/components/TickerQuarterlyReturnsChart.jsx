@@ -1,12 +1,13 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DataInfoTip } from './DataInfoTip.jsx';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getReturnsChartViewMoreHref } from '../utils/returnsViewMoreNavigation.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
-import { useReturnsChartFiltersMenuMode } from '../context/WatchlistDockContext.jsx';
 import { QuarterlyDualPanelChartSkeleton, QuarterlyReturnsToolbarBadge } from './ChartSkeletons.jsx';
-import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
+import { ReturnsChartToolbar } from './ReturnsChartToolbar.jsx';
+import { ChartSectionIconActions, useChartFullscreen } from './ChartSectionIconActions.jsx';
+import { buildTickerChartExportFilename } from '../utils/chartExportFilename.js';
 
 const COL_GRID = 'rgba(148, 163, 184, 0.14)';
 const COL_GRID_ZERO = 'rgba(148, 163, 184, 0.35)';
@@ -55,23 +56,6 @@ function buildRows(quarterlyReturns) {
   return out;
 }
 
-function IcoTable() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="4" y="4" width="16" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.75" />
-      <path d="M4 9h16M4 14h16M12 9v11" stroke="currentColor" strokeWidth="1.75" />
-    </svg>
-  );
-}
-
-function IcoDownload() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M12 4v10m0 0l4-4m-4 4L8 10M6 18h12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function csvEscape(s) {
   const t = String(s ?? '');
   if (/[",\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
@@ -100,7 +84,10 @@ export function TickerQuarterlyReturnsChart({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const filtersMenuMode = useReturnsChartFiltersMenuMode();
+  const sectionRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const chartFsShellRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const chartCardRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const { isFullscreen: chartFs } = useChartFullscreen(chartFsShellRef);
   const rowsAll = useMemo(() => buildRows(quarterlyReturnsAll ?? quarterlyReturns), [quarterlyReturnsAll, quarterlyReturns]);
   const rows = useMemo(() => buildRows(quarterlyReturns), [quarterlyReturns]);
   const [showTable, setShowTable] = useState(false);
@@ -186,7 +173,7 @@ export function TickerQuarterlyReturnsChart({
         const y1 = yForValue(v, padT, ih, yMin, yMax);
         const top = Math.min(y0, y1);
         const h = Math.abs(y1 - y0);
-        const showLab = h >= 14;
+        const showLab = chartFs || h >= 14;
         const labY = v >= 0 ? top - 4 : top + h + 11;
         bars.push(
           <g key={`${yr}-Q${q}`}>
@@ -222,7 +209,7 @@ export function TickerQuarterlyReturnsChart({
         {xLabels}
       </svg>
     );
-  }, [years, byYear, yMin, yMax, plotHeight]);
+  }, [chartFs, years, byYear, yMin, yMax, plotHeight]);
 
   const rightSvg = useMemo(() => {
     if (!years.length) return null;
@@ -273,7 +260,7 @@ export function TickerQuarterlyReturnsChart({
         const y1 = yForValue(v, padT, ih, yMin, yMax);
         const top = Math.min(y0, y1);
         const h = Math.abs(y1 - y0);
-        const showLab = h >= 14 && barW >= 10;
+        const showLab = chartFs || (h >= 14 && barW >= 10);
         const labY = v >= 0 ? top - 3 : top + h + 10;
         bars.push(
           <g key={`Q${q}-${yr}`}>
@@ -309,7 +296,7 @@ export function TickerQuarterlyReturnsChart({
         {xLabels}
       </svg>
     );
-  }, [years, byQuarter, yearColors, yMin, yMax, plotHeight]);
+  }, [chartFs, years, byQuarter, yearColors, yMin, yMax, plotHeight]);
 
   const symU = String(symbol || 'ticker').toUpperCase();
 
@@ -344,34 +331,26 @@ export function TickerQuarterlyReturnsChart({
     });
   }, [navigate, location.pathname, location.search, symbol]);
 
+  const buildExportFilename = useCallback(
+    () => buildTickerChartExportFilename('quarterly-returns', symbol),
+    [symbol]
+  );
+  const chartExportDisabled = loading || !filteredRows.length;
+
   const onOpenQuarterlyPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
     navigate('/statistic/ticker-quarterly/' + encodeURIComponent(symPart));
   }, [navigate, symbol]);
 
-  const primaryToolbarButtons = (
-    <>
-      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onViewMore}>
-        View More
-      </button>
-      {showOpenPeriodPageButton ? (
-        <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onOpenQuarterlyPage}>
-          Open Quarterly Page
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="ticker-annual-figma__btn"
-        onClick={() => setShowTable((v) => !v)}
-        aria-pressed={showTable}
-      >
-        <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
-      </button>
-      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
-        <IcoDownload /> Download CSV
-      </button>
-    </>
-  );
+  const quarterlyRangeControls = toolbarControls ? (
+    <div className="ticker-annual-figma__external-controls">{toolbarControls}</div>
+  ) : null;
+
+  const quarterlyExtraActions = showOpenPeriodPageButton ? (
+    <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline shrink-0" onClick={onOpenQuarterlyPage}>
+      Open Quarterly Page
+    </button>
+  ) : null;
 
   if (!rowsAll.length) {
     if (loading) {
@@ -379,14 +358,24 @@ export function TickerQuarterlyReturnsChart({
     }
     return (
       <div className="ticker-quarterly">
-        <div className="ticker-annual-figma__section">
+        <div ref={sectionRef} className="ticker-annual-figma__section">
           <div className="ticker-annual-figma__toolbar">
-            <QuarterlyReturnsToolbarBadge />
+            <QuarterlyReturnsToolbarBadge onClick={onViewMore} />
+            <ChartSectionIconActions
+              snapshotRootRef={sectionRef}
+              plotHostRef={chartCardRef}
+              fullscreenTargetRef={chartFsShellRef}
+              buildFilename={buildExportFilename}
+              disabled
+              exportPreviewAlt={`Quarterly returns for ${symU}`}
+            />
           </div>
-          <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
-            <p className="ticker-annual-figma__empty">
-              No quarterly return data for <strong>{symU}</strong>.
-            </p>
+          <div ref={chartFsShellRef} className="ticker-chart-fs-shell">
+            <div ref={chartCardRef} className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
+              <p className="ticker-annual-figma__empty">
+                No quarterly return data for <strong>{symU}</strong>.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -395,30 +384,36 @@ export function TickerQuarterlyReturnsChart({
 
   return (
     <div className="ticker-quarterly">
-      <div className="ticker-annual-figma__section">
+      <div ref={sectionRef} className="ticker-annual-figma__section">
         <div className="ticker-annual-figma__toolbar">
-          <QuarterlyReturnsToolbarBadge />
-          {filtersMenuMode ? (
-            <ReturnsChartFiltersMenu>
-              {primaryToolbarButtons}
-              {toolbarControls ? <div className="returns-chart-filters-menu__extras">{toolbarControls}</div> : null}
-            </ReturnsChartFiltersMenu>
-          ) : (
-            <div className="ticker-annual-figma__actions">{primaryToolbarButtons}</div>
-          )}
-        </div>
-        {!filtersMenuMode ? (
-          <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--sub">
-            <div className="ticker-annual-figma__left">{toolbarControls}</div>
+          <QuarterlyReturnsToolbarBadge onClick={onViewMore} />
+          <div className="ticker-annual-figma__toolbar-end">
+            <ReturnsChartToolbar
+              rangeControls={quarterlyRangeControls}
+              showViewMore={false}
+              onToggleTable={() => setShowTable((v) => !v)}
+              showTable={showTable}
+              onDownload={onDownloadCsv}
+              downloadDisabled={!filteredRows.length}
+              extraActions={quarterlyExtraActions}
+            />
+            <ChartSectionIconActions
+              snapshotRootRef={sectionRef}
+              plotHostRef={chartCardRef}
+              fullscreenTargetRef={chartFsShellRef}
+              buildFilename={buildExportFilename}
+              disabled={chartExportDisabled}
+              exportPreviewAlt={`Quarterly returns chart for ${symU}`}
+            />
           </div>
-        ) : null}
-
+        </div>
         {rows.length > 0 && !filteredRows.length ? (
           <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
             <p className="ticker-annual-figma__empty">No quarterly rows overlap the selected date range.</p>
           </div>
         ) : (
-          <div className="ticker-quarterly__split">
+          <div ref={chartFsShellRef} className="ticker-chart-fs-shell">
+          <div ref={chartCardRef} className="ticker-quarterly__split">
           <div className="ticker-quarterly__panel ticker-annual-figma__chart-card">
             <div className="ticker-quarterly__panel-head">
               <span className="ticker-quarterly__panel-spacer" aria-hidden />
@@ -507,6 +502,7 @@ export function TickerQuarterlyReturnsChart({
               ))}
             </div>
           </div>
+        </div>
         </div>
         )}
         {showTable ? (

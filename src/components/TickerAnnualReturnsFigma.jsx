@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
 import { ThemedDropdown } from './ThemedDropdown.jsx';
@@ -9,9 +9,11 @@ import { periodModeNouns } from '../utils/periodModeNouns.js';
 import { tickerSvgPlotStyle } from '../utils/tickerChartResize.js';
 import { getReturnsChartViewMoreHref } from '../utils/returnsViewMoreNavigation.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL } from '../utils/tickerUrlSync.js';
-import { useReturnsChartFiltersMenuMode } from '../context/WatchlistDockContext.jsx';
 import { AnnualReturnsFigmaChartSkeleton, badgeLabelForPeriodMode } from './ChartSkeletons.jsx';
-import { ReturnsChartFiltersMenu } from './ReturnsChartFiltersMenu.jsx';
+import { ReturnsChartToolbar } from './ReturnsChartToolbar.jsx';
+import { ReturnsChartClickableTitle } from './ReturnsChartClickableTitle.jsx';
+import { ChartSectionIconActions, useChartFullscreen } from './ChartSectionIconActions.jsx';
+import { buildTickerChartExportFilename } from '../utils/chartExportFilename.js';
 
 /** Match `TickerLightweightChart` / dark ticker cards. */
 const COL_BAR = '#2563eb';
@@ -172,30 +174,6 @@ function labelOnDonut(r, degMid) {
   return { x: r * Math.cos(degMid * rad), y: r * Math.sin(degMid * rad) };
 }
 
-function IcoTable() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-<path d="M12.0586 2.13281C12.6602 2.13281 13.1523 2.625 13.1523 3.22656V5.41406H0.847656V3.22656C0.847656 2.625 1.33984 2.13281 1.94141 2.13281H12.0586Z" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-<path d="M4.94922 5.41406V11.8672H1.94141C1.33984 11.8672 0.847656 11.375 0.847656 10.7734V5.41406H4.94922Z" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-<path d="M0.847656 8.69531H4.94922" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-<path d="M9.05078 5.41406H4.94922V11.8672H9.05078V5.41406Z" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-<path d="M4.94922 8.69531H9.05078" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-<path d="M13.1523 5.41406V10.7734C13.1523 11.375 12.6602 11.8672 12.0586 11.8672H9.05078V5.41406H13.1523Z" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-<path d="M9.05078 8.69531H13.1523" stroke="white" strokeWidth="0.875" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-</svg>
-  );
-}
-
-function IcoDownload() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-<path d="M7.00049 2.48828V9.05078" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
-<path d="M4.53955 6.58984L7.00049 9.05078L9.46143 6.58984" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
-<path d="M13.1528 9.05078V9.87109C13.1528 10.3062 12.98 10.7235 12.6723 11.0312C12.3646 11.3389 11.9473 11.5117 11.5122 11.5117H2.48877C2.05365 11.5117 1.63635 11.3389 1.32867 11.0312C1.021 10.7235 0.848145 10.3062 0.848145 9.87109V9.05078" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
-</svg>
-  );
-}
-
 function csvEscape(s) {
   const t = String(s ?? '');
   if (/[",\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
@@ -225,11 +203,14 @@ export function TickerAnnualReturnsFigma({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const filtersMenuMode = useReturnsChartFiltersMenuMode();
   const resize = useTickerPlotResize(resizeStorageKey ?? null, resizeDefaultHeight);
   const plotPx = resize.plotHeight ?? plotHeight;
   const clipComboId = useId().replace(/:/g, '');
   const clipSummaryId = useId().replace(/:/g, '');
+  const sectionRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const chartFsShellRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const chartCardRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const { isFullscreen: chartFs } = useChartFullscreen(chartFsShellRef);
 
   const [showTable, setShowTable] = useState(false);
 
@@ -477,6 +458,12 @@ export function TickerAnnualReturnsFigma({
     });
   }, [navigate, location.pathname, location.search, periodMode, symbol]);
 
+  const buildExportFilename = useCallback(
+    () => buildTickerChartExportFilename(`${periodMode}-returns`, symbol),
+    [periodMode, symbol]
+  );
+  const chartExportDisabled = loading || !displayRows.length;
+
   const onOpenPeriodPage = useCallback(() => {
     const symPart = String(symbol || '').trim() || DEFAULT_TICKER_ROUTE_SYMBOL;
     const suffix = '/' + encodeURIComponent(symPart);
@@ -493,10 +480,10 @@ export function TickerAnnualReturnsFigma({
     navigate(path + suffix);
   }, [navigate, periodMode, symbol]);
 
-  const annualFigToolbarActions = (
-    <>
-      {enableInlineYearDropdowns && (periodMode === 'annual' || periodMode === 'quarterly' || periodMode === 'monthly') ? (
-        <div className="ticker-annual-figma__range-controls">
+  const annualFigRangeControls = useMemo(() => {
+    if (enableInlineYearDropdowns && (periodMode === 'annual' || periodMode === 'quarterly' || periodMode === 'monthly')) {
+      return (
+        <div className="ticker-annual-figma__range-inline">
           <span className="ticker-annual-figma__range-label">Start</span>
           <ThemedDropdown
             size="sm"
@@ -518,24 +505,89 @@ export function TickerAnnualReturnsFigma({
             labelFallback="End"
           />
         </div>
-      ) : (
-        <div className="ticker-annual-figma__external-controls">{toolbarControls}</div>
-      )}
-      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onViewMore}>
-        View More
-      </button>
-      {showOpenPeriodPageButton ? (
-        <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onOpenPeriodPage}>
-          Open {periodMode === 'quarterly' ? 'Quarterly' : periodMode === 'monthly' ? 'Monthly' : periodMode === 'weekly' ? 'Weekly' : periodMode === 'daily' ? 'Daily' : 'Annual'} Page
-        </button>
-      ) : null}
-      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--primary" onClick={() => setShowTable((v) => !v)}>
-        <IcoTable /> Show data tables
-      </button>
-      <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onDownloadCsv}>
-        <IcoDownload /> Download CSV
-      </button>
-    </>
+      );
+    }
+    if (toolbarControls) {
+      return <div className="ticker-annual-figma__external-controls">{toolbarControls}</div>;
+    }
+    return null;
+  }, [
+    enableInlineYearDropdowns,
+    periodMode,
+    chartStartYear,
+    chartEndYear,
+    dropdownYearOptions,
+    toolbarControls
+  ]);
+
+  const annualFigExtraActions = showOpenPeriodPageButton ? (
+    <button type="button" className="ticker-annual-figma__btn ticker-annual-figma__btn--outline" onClick={onOpenPeriodPage}>
+      Open {periodMode === 'quarterly' ? 'Quarterly' : periodMode === 'monthly' ? 'Monthly' : periodMode === 'weekly' ? 'Weekly' : periodMode === 'daily' ? 'Daily' : 'Annual'} Page
+    </button>
+  ) : null;
+
+  const annualFigTitleBadge = (
+    <div className="flex align-centers">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+        <g clipPath="url(#clip0_609_23954)">
+          <path
+            d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z"
+            stroke="white"
+            strokeWidth="0.875"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z"
+            stroke="white"
+            strokeWidth="0.875"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </g>
+        <defs>
+          <clipPath id="clip0_609_23954">
+            <rect width="14" height="14" fill="white" />
+          </clipPath>
+        </defs>
+      </svg>
+      <span className="ticker-annual-figma__badge uppercase">
+        <ReturnsChartClickableTitle className="ticker-annual-figma__badge uppercase" onClick={onViewMore}>
+          {periodMode === 'quarterly'
+            ? 'Quarterly returns'
+            : periodMode === 'monthly'
+              ? 'Monthly returns'
+              : periodMode === 'weekly'
+                ? 'Weekly returns'
+                : periodMode === 'daily'
+                  ? 'Daily returns'
+                  : 'Annual returns'}
+        </ReturnsChartClickableTitle>{' '}
+        <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualReturns} align="end" />
+      </span>
+    </div>
+  );
+
+  const annualFigToolbarIcons = (
+    <div className="ticker-annual-figma__toolbar-icons">
+      <ReturnsChartToolbar
+        rangeControls={null}
+        showViewMore={false}
+        onToggleTable={() => setShowTable((v) => !v)}
+        showTable={showTable}
+        onDownload={onDownloadCsv}
+        downloadDisabled={!displayRows.length}
+        extraActions={annualFigExtraActions}
+      />
+      <ChartSectionIconActions
+        snapshotRootRef={sectionRef}
+        plotHostRef={chartCardRef}
+        fullscreenTargetRef={chartFsShellRef}
+        buildFilename={buildExportFilename}
+        disabled={chartExportDisabled}
+        exportPreviewAlt={`${periodMode} returns chart for ${symbol}`}
+      />
+    </div>
   );
 
   const comboSvg = useMemo(() => {
@@ -605,6 +657,7 @@ export function TickerAnnualReturnsFigma({
     });
 
     const shouldLabelBar = (r, i) => {
+      if (chartFs) return true;
       if (periodMode === 'monthly') {
         if (n <= 24) return true;
         if (Math.abs(Number(r.totalReturn)) >= 12) return true; // keep only strong moves on dense monthly view
@@ -737,7 +790,7 @@ export function TickerAnnualReturnsFigma({
         {xLabels}
       </svg>
     );
-  }, [clipComboId, displayRows, stats, plotPx, periodMode]);
+  }, [chartFs, clipComboId, displayRows, stats, plotPx, periodMode]);
 
   const monthlyYearLegend = useMemo(() => {
     if (periodMode !== 'monthly' || !displayRows.length) return [];
@@ -930,13 +983,29 @@ export function TickerAnnualReturnsFigma({
     }
     return (
       <div className="ticker-annual-figma">
-        <div className="ticker-annual-figma__section">
-          <div className="ticker-annual-figma__toolbar">
-            <span className="ticker-annual-figma__badge uppercase">{badgeLabelForPeriodMode(periodMode)}</span>
+        <div ref={sectionRef} className="ticker-annual-figma__section">
+          <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--split">
+            <div className="ticker-annual-figma__toolbar-head">
+              <ReturnsChartClickableTitle className="ticker-annual-figma__badge uppercase" onClick={onViewMore}>
+                {badgeLabelForPeriodMode(periodMode)}
+              </ReturnsChartClickableTitle>
+              <div className="ticker-annual-figma__toolbar-icons">
+                <ChartSectionIconActions
+                  snapshotRootRef={sectionRef}
+                  plotHostRef={chartCardRef}
+                  fullscreenTargetRef={chartFsShellRef}
+                  buildFilename={buildExportFilename}
+                  disabled
+                  exportPreviewAlt={`${badgeLabelForPeriodMode(periodMode)} for ${symbol}`}
+                />
+              </div>
+            </div>
           </div>
-          <div className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
-            <p className="ticker-annual-figma__empty">No {badgeLabelForPeriodMode(periodMode).replace(' returns', '').toLowerCase()} return data for {String(symbol).toUpperCase()}.</p>
-            {asOfDate ? <p className="ticker-annual-figma__empty-sub">As of {asOfDate}.</p> : null}
+          <div ref={chartFsShellRef} className="ticker-chart-fs-shell">
+            <div ref={chartCardRef} className="ticker-annual-figma__chart-card ticker-annual-figma__chart-card--empty">
+              <p className="ticker-annual-figma__empty">No {badgeLabelForPeriodMode(periodMode).replace(' returns', '').toLowerCase()} return data for {String(symbol).toUpperCase()}.</p>
+              {asOfDate ? <p className="ticker-annual-figma__empty-sub">As of {asOfDate}.</p> : null}
+            </div>
           </div>
         </div>
       </div>
@@ -946,41 +1015,30 @@ export function TickerAnnualReturnsFigma({
   return (
     <div className="ticker-annual-figma">
       <div
+        ref={sectionRef}
         className={
           'ticker-annual-figma__section' + (resize.enabled ? ' ticker-annual-figma__section--resize' : '')
         }
       >
-        <div className="ticker-annual-figma__toolbar">
-          <div className="flex align-centers"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-<g clipPath="url(#clip0_609_23954)">
-<path d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
-<path d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z" stroke="white" strokeWidth="0.875" strokeLinecap="round" strokeLinejoin="round"/>
-</g>
-<defs>
-<clipPath id="clip0_609_23954">
-<rect width="14" height="14" fill="white"/>
-</clipPath>
-</defs>
-</svg>
-          <span className="ticker-annual-figma__badge uppercase">
-            {periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'}{' '}
-            <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualReturns} align="end" />
-          </span>
+        <div className="ticker-annual-figma__toolbar ticker-annual-figma__toolbar--split">
+          <div className="ticker-annual-figma__toolbar-head">
+            {annualFigTitleBadge}
+            {annualFigToolbarIcons}
           </div>
-          {filtersMenuMode ? (
-            <ReturnsChartFiltersMenu>{annualFigToolbarActions}</ReturnsChartFiltersMenu>
-          ) : (
-            <div className="ticker-annual-figma__actions">{annualFigToolbarActions}</div>
-          )}
+          {annualFigRangeControls ? (
+            <div className="ticker-annual-figma__toolbar-range">{annualFigRangeControls}</div>
+          ) : null}
         </div>
-        <div className="ticker-annual-figma__chart-card">
-          {comboSvg ? (
-            comboSvg
-          ) : (
-            <p className="ticker-annual-figma__empty" style={{ padding: '24px 16px' }}>
-              No annual rows overlap the selected start/end dates. Clear the filter or widen the range.
-            </p>
-          )}
+        <div ref={chartFsShellRef} className="ticker-chart-fs-shell">
+          <div ref={chartCardRef} className="ticker-annual-figma__chart-card">
+            {comboSvg ? (
+              comboSvg
+            ) : (
+              <p className="ticker-annual-figma__empty" style={{ padding: '24px 16px' }}>
+                No annual rows overlap the selected start/end dates. Clear the filter or widen the range.
+              </p>
+            )}
+          </div>
         </div>
         <div className="ticker-annual-figma__legend">
           <div className="ticker-annual-figma__legend-row">
@@ -1072,13 +1130,12 @@ export function TickerAnnualReturnsFigma({
               <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualStats} align="end" />
             </span>
             <div className="ticker-annual-figma__stats-actions">
-              <button
-                type="button"
-                className="ticker-annual-figma__btn ticker-annual-figma__btn--primary"
-                onClick={() => setShowTable((v) => !v)}
-              >
-                <IcoTable /> {showTable ? 'Hide data table' : 'Show data table'}
-              </button>
+              <ReturnsChartToolbar
+                showViewMore={false}
+                showDownload={false}
+                onToggleTable={() => setShowTable((v) => !v)}
+                showTable={showTable}
+              />
             </div>
           </div>
 

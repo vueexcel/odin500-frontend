@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import {fetchJsonCached, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 
 const ROWS_MAIN = [
   { id: 'nasdaq', label: 'Nasdaq 100', symbols: ['QQQ'], tone: 'purple' },
@@ -80,7 +80,7 @@ export function UsEquityMarketsCard() {
     let timer = null;
 
     async function load() {
-      if (!getAuthToken()) {
+      if (!canFetchProtectedApi()) {
         setError('Sign in to load market overview.');
         return;
       }

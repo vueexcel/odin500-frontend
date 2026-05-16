@@ -1,3 +1,5 @@
+const SECTOR_ETF_KEYS = ['XLB', 'XLK', 'XLF', 'XLV', 'XLI', 'XLE', 'XLY', 'XLP', 'XLU', 'XLRE', 'XLC'];
+
 /**
  * Map SPDR sector ETF tickers to TickerDetails `Sector` strings (GICS naming varies).
  * @param {string} etfKey Uppercase ETF key (e.g. XLK).
@@ -28,4 +30,18 @@ export function rowMatchesSectorEtf(etfKey, sectorField) {
   };
   const fn = tests[k];
   return fn ? fn(s) : false;
+}
+
+/**
+ * Resolve a ticker-details `Sector` string to a `/sector-data/:slug` route key (e.g. xlk).
+ * @param {string} sectorField
+ * @returns {string | null}
+ */
+export function sectorFieldToEtfSlug(sectorField) {
+  const sec = String(sectorField || '').trim();
+  if (!sec) return null;
+  for (const key of SECTOR_ETF_KEYS) {
+    if (rowMatchesSectorEtf(key, sec)) return key.toLowerCase();
+  }
+  return null;
 }

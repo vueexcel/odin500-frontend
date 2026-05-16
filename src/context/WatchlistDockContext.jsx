@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useLoginGateOptional } from './LoginGateContext.jsx';
 
 /** @typedef {'watchlist' | 'news' | 'market-movers'} RightRailDockPanel */
 
@@ -20,21 +21,34 @@ export function WatchlistDockProvider({ children }) {
   const [activePanel, setActivePanel] = useState(/** @type {RightRailDockPanel | null} */ (null));
   const location = useLocation();
   const navigate = useNavigate();
+  const loginGate = useLoginGateOptional();
+
+  const gateWatchlist = useCallback(
+    (action) => {
+      if (loginGate) return loginGate.requireLogin(action);
+      if (typeof action === 'function') action();
+      return true;
+    },
+    [loginGate]
+  );
 
   const close = useCallback(() => {
     try {
       sessionStorage.removeItem('ticker_open_watchlist');
+      sessionStorage.removeItem('watchlist_add_symbol');
     } catch {
       /* ignore */
     }
     setActivePanel(null);
   }, []);
 
-  const openWatchlist = useCallback(() => setActivePanel('watchlist'), []);
+  const openWatchlist = useCallback(() => {
+    gateWatchlist(() => setActivePanel('watchlist'));
+  }, [gateWatchlist]);
 
   const toggleWatchlist = useCallback(() => {
-    setActivePanel((p) => (p === 'watchlist' ? null : 'watchlist'));
-  }, []);
+    gateWatchlist(() => setActivePanel((p) => (p === 'watchlist' ? null : 'watchlist')));
+  }, [gateWatchlist]);
 
   const toggleNews = useCallback(() => {
     setActivePanel((p) => (p === 'news' ? null : 'news'));
@@ -45,22 +59,22 @@ export function WatchlistDockProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const onOpen = () => setActivePanel('watchlist');
+    const onOpen = () => gateWatchlist(() => setActivePanel('watchlist'));
     window.addEventListener('ticker:open-watchlist', onOpen);
     return () => window.removeEventListener('ticker:open-watchlist', onOpen);
-  }, []);
+  }, [gateWatchlist]);
 
   useEffect(() => {
     const st = location.state && /** @type {{ openWatchlist?: boolean }} */ (location.state).openWatchlist;
     if (!st) return;
-    setActivePanel('watchlist');
+    gateWatchlist(() => setActivePanel('watchlist'));
     const rest = { ...(location.state || {}) };
     delete rest.openWatchlist;
     navigate(
       { pathname: location.pathname, search: location.search, hash: location.hash },
       { replace: true, state: Object.keys(rest).length ? rest : undefined }
     );
-  }, [location.state, location.pathname, location.search, location.hash, navigate]);
+  }, [location.state, location.pathname, location.search, location.hash, navigate, gateWatchlist]);
 
   const isDockOpen = activePanel !== null;
 

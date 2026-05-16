@@ -2,13 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ThemedDropdown } from './ThemedDropdown.jsx';
 import { ChartInfoTip } from './ChartInfoTip.jsx';
-import { fetchJsonCached, fetchWithAuth, getAuthToken } from '../store/apiStore.js';
+import {fetchJsonCached, fetchWithAuth, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { apiUrl } from '../utils/apiOrigin.js';
 import { NormalizedPerformanceCard } from './NormalizedPerformanceCard.jsx';
 import { SectorTreemap } from './SectorTreemap.jsx';
 import TradingChartLoader from './TradingChartLoader.jsx';
 import { DEFAULT_SELECTED_KEYS, META_BY_KEY, MARKET_SERIES } from './marketSeriesRegistry.js';
-import { returnToSummaryTableHeatColor, summaryTableTextOnFill } from '../utils/heatmapColors.js';
 import { useRightRailDock } from '../context/WatchlistDockContext.jsx';
 import { CHART_INFO_TIPS } from './chartInfoTips.js';
 import {
@@ -52,7 +51,7 @@ function LeftSnapshotStack({
   useEffect(() => {
     let cancel = false;
     async function load() {
-      if (!getAuthToken() || typeof loadOhlcRows !== 'function') return;
+      if (!canFetchProtectedApi() || typeof loadOhlcRows !== 'function') return;
       const { start, end } = tfRange(timeframe || '6M');
       const out = {};
       for (const g of LEFT_GROUPS) {
@@ -158,16 +157,6 @@ return (
   );
 }
 
-/** Index returns table uses `returnToSummaryTableHeatColor` (Figma ramp), not treemap `returnToHeatColor`. */
-function summaryHeatCellStyle(pct) {
-  const v = Number(pct);
-  if (!Number.isFinite(v)) {
-    return { background: '#e2e8f0', color: '#64748b' };
-  }
-  const bg = returnToSummaryTableHeatColor(v, -8, 8);
-  return { backgroundColor: bg, color: summaryTableTextOnFill(bg), fontWeight: 700 };
-}
-
 /** Figma sample values use plain `1.2%` (no `+` on positives). */
 function fmtSummaryPct(v) {
   if (!Number.isFinite(Number(v))) return '—';
@@ -182,7 +171,12 @@ function SummaryReturnsCard({ refreshMs = 0, loadOhlcRows = null }) {
     () => [
       { key: 'SPX', label: 'S&P 500' },
       { key: 'INDU', label: 'Dow Jones' },
-      { key: 'NDX', label: 'Nasdaq-100' }
+      { key: 'NDX', label: 'Nasdaq-100' },
+      { key: 'XLK', label: 'Technology' },
+      { key: 'XLE', label: 'Energy' },
+      { key: 'XLV', label: 'Healthcare' },
+      { key: 'XLI', label: 'Industrials' },
+      
     ],
     []
   );
@@ -199,7 +193,7 @@ function SummaryReturnsCard({ refreshMs = 0, loadOhlcRows = null }) {
   useEffect(() => {
     let cancel = false;
     async function load() {
-      if (!getAuthToken()) return;
+      if (!canFetchProtectedApi()) return;
       setLoading(true);
       setError('');
       const now = new Date();
@@ -245,42 +239,59 @@ function SummaryReturnsCard({ refreshMs = 0, loadOhlcRows = null }) {
   }, [defs, tfs, refreshMs, loadOhlcRows]);
 
   return (
-    <section className="mkt-summary-card mkt-summary-card--figma">
-      <header className="mkt-summary-card__head mkt-summary-card__head--figma">
-        <span className="align-center">Index returns</span> <ChartInfoTip tip={CHART_INFO_TIPS.marketIndexReturns} align="start" />
+    <section className="mkt-watch-card mkt-returns-summary">
+      <header className="mkt-watch-card__head mkt-returns-summary__head">
+        <span className="mkt-watch-card__title mkt-returns-summary__title-row">
+          Index & sector returns
+          <ChartInfoTip tip={CHART_INFO_TIPS.marketIndexReturns} align="start" />
+        </span>
       </header>
-      <div className="mkt-summary-card__table-wrap">
-      <table className="mkt-summary-card__table mkt-summary-card__table--figma">
-        <thead>
-          <tr>
-            <th className="mkt-summary-card__corner" scope="col" aria-hidden="true" />
-            {tfs.map((tf) => (
-              <th key={tf.key} scope="col">{tf.key}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {defs.map((d) => (
-            <tr key={d.key}>
-              <th className="mkt-summary-rowlabel" scope="row">{d.label}</th>
-              {tfs.map((tf) => {
-                const raw = vals?.[d.key]?.[tf.key];
-                const v = Number(raw);
-                const pending = loading && raw === undefined;
-                const style =
-                  !pending && Number.isFinite(v)
-                    ? summaryHeatCellStyle(v)
-                    : { background: '#f1f5f9', color: '#64748b' };
-                return (
-                  <td key={tf.key} className="mkt-summary-heat-cell" style={style}>
-                    {pending ? '…' : Number.isFinite(v) ? fmtSummaryPct(v) : '—'}
-                  </td>
-                );
-              })}
-            </tr>
+      <div className="mkt-watch-card__table">
+        <div className="mkt-watch-card__row mkt-watch-card__row--head mkt-returns-summary__row" role="row">
+          <span className="mkt-returns-summary__h" role="columnheader">
+            Index / sector
+          </span>
+          {tfs.map((tf) => (
+            <span key={tf.key} className="mkt-returns-summary__h mkt-returns-summary__h--num" role="columnheader">
+              {tf.key}
+            </span>
           ))}
-        </tbody>
-      </table>
+        </div>
+        {defs.map((d) => {
+          const ticker = META_BY_KEY[d.key]?.ticker;
+          const routeSym = sanitizeTickerPageInput(ticker || d.key);
+          const tickerTo =
+            routeSym && ticker
+              ? `/ticker/${encodeURIComponent(routeSym)}?ticker=${encodeURIComponent(routeSym)}`
+              : '';
+          const cells = tfs.map((tf) => {
+            const raw = vals?.[d.key]?.[tf.key];
+            const v = Number(raw);
+            const pending = loading && raw === undefined;
+            const text = pending ? '…' : Number.isFinite(v) ? fmtSummaryPct(v) : '—';
+            const tone =
+              !pending && Number.isFinite(v) ? (v > 0 ? 'app-num--up' : v < 0 ? 'app-num--down' : '') : '';
+            return (
+              <span key={tf.key} className={tone ? tone : undefined}>
+                {text}
+              </span>
+            );
+          });
+          if (tickerTo) {
+            return (
+              <Link key={d.key} to={tickerTo} className="mkt-watch-card__row mkt-returns-summary__row" title={`Open ${routeSym}`}>
+                <span>{d.label}</span>
+                {cells}
+              </Link>
+            );
+          }
+          return (
+            <div key={d.key} className="mkt-watch-card__row mkt-returns-summary__row">
+              <span>{d.label}</span>
+              {cells}
+            </div>
+          );
+        })}
       </div>
       {loading ? <div className="mkt-panel-status">Refreshing…</div> : null}
       {error ? <div className="mkt-panel-status mkt-panel-status--err">{error}</div> : null}
@@ -299,7 +310,7 @@ function MarketHeatmapThumbnail({ refreshMs = 0 }) {
   useEffect(() => {
     let cancel = false;
     async function load() {
-      if (!getAuthToken()) {
+      if (!canFetchProtectedApi()) {
         setError('Sign in to load heatmap.');
         setRows([]);
         return;
@@ -407,7 +418,7 @@ function RightWatchlistCard({ refreshMs = 0 }) {
   useEffect(() => {
     let cancel = false;
     async function load() {
-      if (!getAuthToken()) {
+      if (!canFetchProtectedApi()) {
         setRows([]);
         setError('Sign in to load tickers.');
         return;

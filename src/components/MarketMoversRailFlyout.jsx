@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ThemedDropdown } from './ThemedDropdown.jsx';
-import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import {fetchJsonCached, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { DEFAULT_TICKER_ROUTE_SYMBOL, sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
 
 const TOP_N = 10;
@@ -93,7 +93,7 @@ export function MarketMoversRailFlyout({ open, onClose, docked = false }) {
 
   const load = useCallback(async () => {
     if (!open) return;
-    if (!getAuthToken()) {
+    if (!canFetchProtectedApi()) {
       setError('Sign in to load market movers.');
       setPoints([]);
       return;

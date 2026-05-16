@@ -82,21 +82,29 @@ export function AuthFlowShell({ children, backTo = '/login', backAriaLabel = 'Go
                 aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 <span
-                  className={`absolute left-1 top-1 flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ${
+                  className={`pointer-events-none absolute left-1.5 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center ${
+                    isDark ? 'text-slate-500/35' : 'text-slate-700'
+                  }`}
+                  aria-hidden
+                >
+                  <Moon className="h-4 w-4" strokeWidth={2.2} />
+                </span>
+                <span
+                  className={`pointer-events-none absolute right-1.5 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center ${
+                    isDark ? 'text-amber-400' : 'text-slate-400/35'
+                  }`}
+                  aria-hidden
+                >
+                  <Sun className="h-4 w-4" strokeWidth={2.2} />
+                </span>
+                <span
+                  className={`absolute left-1 top-1 z-[2] flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ${
                     isDark
                       ? 'translate-x-0 bg-slate-700 text-slate-100'
                       : 'translate-x-[36px] bg-white text-amber-500 shadow-md'
                   }`}
                 >
                   {isDark ? <Moon className="h-4 w-4" strokeWidth={2.2} /> : <Sun className="h-4 w-4" strokeWidth={2.2} />}
-                </span>
-                <span
-                  className={`pointer-events-none ml-auto flex h-8 w-8 items-center justify-center rounded-full ${
-                    isDark ? 'text-amber-400/50' : 'text-slate-400/70'
-                  }`}
-                  aria-hidden
-                >
-                  {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </span>
               </button>
             </div>

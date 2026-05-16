@@ -3,9 +3,10 @@ import { FigmaDataTable } from '../components/FigmaDataTable.jsx';
 import { FigmaPagination } from '../components/FigmaPagination.jsx';
 import { ThemedDropdown } from '../components/ThemedDropdown.jsx';
 import { TickerSymbolCombobox } from '../components/TickerSymbolCombobox.jsx';
-import { fetchJsonCached, getAuthToken } from '../store/apiStore.js';
+import {fetchJsonCached, getAuthToken, canFetchProtectedApi} from '../store/apiStore.js';
 import { rowDateToTimeKey } from '../utils/chartData.js';
 import { sanitizeTickerPageInput } from '../utils/tickerUrlSync.js';
+import { useGatedCsvDownload } from '../hooks/useGatedCsvDownload.js';
 import { usePageSeo } from '../seo/usePageSeo.js';
 
 const PAGE_SIZE = 50;
@@ -386,7 +387,7 @@ export default function HistoricalDataPage() {
 
   const runQuery = useCallback(async () => {
     const sym = sanitizeTickerPageInput(ticker) || DEFAULT_TICKER;
-    if (!getAuthToken()) {
+    if (!canFetchProtectedApi()) {
       setError('Sign in to load historical data.');
       setRows([]);
       return;
@@ -530,6 +531,8 @@ export default function HistoricalDataPage() {
     URL.revokeObjectURL(url);
   }, [sortedRows, ticker, startDate, endDate, frequency, periodColumnLabel]);
 
+  const onDownloadCsvClick = useGatedCsvDownload(onDownloadCsv);
+
   return (
     <div className="historical-data-page">
       <header className="historical-data__head">
@@ -594,8 +597,9 @@ export default function HistoricalDataPage() {
             <button
               type="button"
               className="ticker-annual-figma__btn ticker-annual-figma__btn--outline"
-              onClick={onDownloadCsv}
+              onClick={onDownloadCsvClick}
               disabled={!sortedRows.length}
+              title="Download CSV"
             >
               <IcoDownload /> Download CSV
             </button>

@@ -4,7 +4,7 @@ import { ChartPanel } from './components/ChartPanel.jsx';
 import { MarketPageFigmaShell } from './components/MarketPageFigmaShell.jsx';
 import { useTickerList } from './hooks/useTickerList.js';
 import { apiUrl } from './utils/apiOrigin.js';
-import { fetchWithAuth, getAuthToken } from './store/apiStore.js';
+import {fetchWithAuth, getAuthToken, canFetchProtectedApi} from './store/apiStore.js';
 import { stableStringify, toDateInput } from './utils/misc.js';
 import {
   mapRowsToCandles,
@@ -158,7 +158,7 @@ export default function App() {
       setStatusMsg('Provide one ticker in Ticker input.', 'error');
       return;
     }
-    if (!getAuthToken()) {
+    if (!canFetchProtectedApi()) {
       setStatusMsg('Sign in to load the chart.', 'error');
       return;
     }
