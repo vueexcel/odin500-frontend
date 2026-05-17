@@ -379,6 +379,92 @@ function pctToneClass(n) {
   return '';
 }
 
+const RS_MAIN_CHART_DEFAULT_H = 360;
+
+/**
+ * Main RS lightweight-charts plot; `plotHeight` injected by TickerChartResizeScope.
+ */
+function RsMainLineChartPlot({
+  plotHeight = RS_MAIN_CHART_DEFAULT_H,
+  chartHostRef,
+  chartRef,
+  loading,
+  error,
+  activeChartKeys,
+  chartMetaByKey,
+  axisBadgeTops,
+  lastChartByKey,
+  updateAxisBadgePositions
+}) {
+  const plotH = Math.round(Number(plotHeight) || RS_MAIN_CHART_DEFAULT_H);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    const host = chartHostRef.current;
+    if (host) {
+      host.style.height = `${plotH}px`;
+      host.style.minHeight = `${plotH}px`;
+    }
+    if (chart) {
+      chart.applyOptions({ height: plotH });
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => updateAxisBadgePositions?.());
+      });
+    }
+  }, [plotH, chartRef, chartHostRef, updateAxisBadgePositions]);
+
+  return (
+    <>
+      {loading ? (
+        <div className="relative-strength-page__chart-skel-overlay">
+          <LightweightChartAreaSkeleton minHeight={plotH} className="relative-strength-page__chart-skel-fill" />
+        </div>
+      ) : null}
+      {error ? <div className="relative-strength-page__state relative-strength-page__state--error">{error}</div> : null}
+      <div className="np-chart-stack">
+        <div
+          ref={chartHostRef}
+          className={
+            'np-chart np-chart--interactive relative-strength-page__chart-host-inner' +
+            (loading ? ' relative-strength-page__chart-host--loading' : '')
+          }
+          style={{ height: plotH, minHeight: plotH }}
+        />
+        {!error ? (
+          <div className="np-chart-axis-tags" aria-hidden="true">
+            {activeChartKeys.map((key) => {
+              const s = chartMetaByKey.get(key);
+              if (!s) return null;
+              const top = axisBadgeTops[key];
+              const bg = s.color;
+              const fg = textColorOnHex(bg);
+              const v = lastChartByKey[key];
+              return (
+                <div
+                  key={key}
+                  className="np-chart-axis-badge"
+                  style={{
+                    top: top == null ? -9999 : top,
+                    opacity: top == null ? 0 : 1,
+                    background: bg,
+                    color: fg
+                  }}
+                >
+                  <span className="np-chart-axis-badge__tick" style={{ borderRightColor: bg }} />
+                  <div className="np-chart-axis-badge__body">
+                    <span className="np-chart-axis-badge__sym">{s.label}</span>
+                    <span className="np-chart-axis-badge__val">{fmtPct(v)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 export default function RelativeStrengthTickerPage() {
   const [searchParams] = useSearchParams();
   const tickerFromQuery = sanitizeTickerPageInput(searchParams.get('ticker') || searchParams.get('symbol') || '');
@@ -855,7 +941,7 @@ export default function RelativeStrengthTickerPage() {
     if (!host) return;
     const chart = createChart(host, {
       width: host.clientWidth,
-      height: 360,
+      height: RS_MAIN_CHART_DEFAULT_H,
       layout: {
         background: { color: getRsChartBgColor(isLight) },
         textColor: isLight ? '#4b5563' : '#9ca3af',
@@ -1358,51 +1444,25 @@ export default function RelativeStrengthTickerPage() {
         </div>
 
         <div className="np-chart-wrap">
-          {loading ? (
-            <div className="relative-strength-page__chart-skel-overlay">
-              <LightweightChartAreaSkeleton minHeight={360} className="relative-strength-page__chart-skel-fill" />
-            </div>
-          ) : null}
-          {error ? <div className="relative-strength-page__state relative-strength-page__state--error">{error}</div> : null}
-          <div className="np-chart-stack">
-            <div
-              ref={chartHostRef}
-              className={
-                'np-chart np-chart--interactive relative-strength-page__chart-host-inner' +
-                (loading ? ' relative-strength-page__chart-host--loading' : '')
-              }
+          <TickerChartResizeScope
+            storageKey="rs-main-line-plot-h"
+            defaultHeight={RS_MAIN_CHART_DEFAULT_H}
+            min={200}
+            max={900}
+            className="relative-strength-page__main-rs-resize-scope"
+          >
+            <RsMainLineChartPlot
+              chartHostRef={chartHostRef}
+              chartRef={chartRef}
+              loading={loading}
+              error={error}
+              activeChartKeys={activeChartKeys}
+              chartMetaByKey={chartMetaByKey}
+              axisBadgeTops={axisBadgeTops}
+              lastChartByKey={lastChartByKey}
+              updateAxisBadgePositions={updateAxisBadgePositions}
             />
-            {!error ? (
-              <div className="np-chart-axis-tags" aria-hidden="true">
-                {activeChartKeys.map((key) => {
-                  const s = chartMetaByKey.get(key);
-                  if (!s) return null;
-                  const top = axisBadgeTops[key];
-                  const bg = s.color;
-                  const fg = textColorOnHex(bg);
-                  const v = lastChartByKey[key];
-                  return (
-                    <div
-                      key={key}
-                      className="np-chart-axis-badge"
-                      style={{
-                        top: top == null ? -9999 : top,
-                        opacity: top == null ? 0 : 1,
-                        background: bg,
-                        color: fg
-                      }}
-                    >
-                      <span className="np-chart-axis-badge__tick" style={{ borderRightColor: bg }} />
-                      <div className="np-chart-axis-badge__body">
-                        <span className="np-chart-axis-badge__sym">{s.label}</span>
-                        <span className="np-chart-axis-badge__val">{fmtPct(v)}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
+          </TickerChartResizeScope>
         </div>
         {showMainRsTable && mainRsLineTableRows.length ? (
           <div className="ticker-annual-figma__table-wrap relative-strength-page__rs-main-table-wrap">

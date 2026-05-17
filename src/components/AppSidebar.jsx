@@ -208,11 +208,72 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
   const isExpandedView = expanded || mobileOpen;
   const location = useLocation();
   const [theme, setTheme] = useState(() => getDocumentTheme());
-  const { profileName, initials, avatarUrl } = useHeaderProfile({
+  const [profileOpen, setProfileOpen] = useState(false);
+  const { loggedIn, profileName, initials, avatarUrl, handleSignOut, goToSignIn } = useHeaderProfile({
     guestLabel: 'Guest',
     signedInFallback: 'Account'
   });
   const accountWrapRef = useRef(null);
+
+  useEffect(() => {
+    const onDown = (e) => {
+      const t = e.target;
+      if (accountWrapRef.current && !accountWrapRef.current.contains(t)) setProfileOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, []);
+
+  const closeProfileMenu = () => setProfileOpen(false);
+
+  const runProfileAction = (action) => {
+    closeProfileMenu();
+    if (mobileOpen && typeof onRequestClose === 'function') onRequestClose();
+    action();
+  };
+
+  const toggleProfileMenu = () => setProfileOpen((v) => !v);
+
+  const profileMenuPop =
+    profileOpen ? (
+      <div className="header-pop header-pop--profile app-sidebar__profile-pop" role="menu" aria-label="Profile menu">
+        <div className="header-pop__profile-top">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" className="header-pop__profile-image" aria-hidden />
+          ) : (
+            <span className="header-pop__profile-icon" aria-hidden>
+              {initials}
+            </span>
+          )}
+          <span className="header-pop__profile-name">{profileName}</span>
+        </div>
+        {loggedIn ? (
+          <>
+            <button
+              type="button"
+              className="header-pop__item"
+              onClick={() => runProfileAction(() => navigate('/about'))}
+            >
+              Your Profile
+            </button>
+            <button type="button" className="header-pop__item" onClick={closeProfileMenu}>
+              Setting
+            </button>
+            <button
+              type="button"
+              className="header-pop__item header-pop__item--danger"
+              onClick={() => runProfileAction(() => handleSignOut())}
+            >
+              Sign out
+            </button>
+          </>
+        ) : (
+          <button type="button" className="header-pop__item" onClick={() => runProfileAction(() => goToSignIn())}>
+            Sign in
+          </button>
+        )}
+      </div>
+    ) : null;
   const tickerPathMatch =
     location.pathname.match(/^\/ticker\/([^/?#]+)$/i) ||
     location.pathname.match(
@@ -264,7 +325,8 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
       className={
         'app-sidebar ' +
         (isExpandedView ? 'app-sidebar--expanded' : 'app-sidebar--collapsed') +
-        (mobileOpen ? ' app-sidebar--mobile-open app-sidebar--expanded' : '')
+        (mobileOpen ? ' app-sidebar--mobile-open app-sidebar--expanded' : '') +
+        (profileOpen ? ' app-sidebar--profile-open' : '')
       }
       aria-label="Main navigation"
     >
@@ -279,21 +341,26 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
           >
             <SidebarToggleGlyph expanded={false} />
           </button>
-          <button
-            type="button"
-            className="app-sidebar__account-btn app-sidebar__account-btn--collapsed"
-            aria-label="Open account page"
-            title="Account"
-            onClick={() => navigate('/accounts')}
-            onMouseEnter={() => prefetchRouteChunks('/accounts')}
-            onFocus={() => prefetchRouteChunks('/accounts')}
-          >
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="header-avatar-image" aria-hidden />
-            ) : (
-              <span className="header-avatar-placeholder">{initials}</span>
-            )}
-          </button>
+          <div className="header-util-wrap" ref={accountWrapRef}>
+            <button
+              type="button"
+              className={
+                'app-sidebar__account-btn app-sidebar__account-btn--collapsed' +
+                (profileOpen ? ' app-sidebar__account-btn--active' : '')
+              }
+              aria-label="Profile"
+              title="Profile"
+              aria-expanded={profileOpen}
+              onClick={toggleProfileMenu}
+            >
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="header-avatar-image" aria-hidden />
+              ) : (
+                <span className="header-avatar-placeholder">{initials}</span>
+              )}
+            </button>
+            {profileMenuPop}
+          </div>
         </div>
       ) : (
         <>
@@ -455,25 +522,27 @@ export function AppSidebar({ expanded, setExpanded, mobileOpen = false, onReques
               <NavRow to="/premium" icon={IconBriefcase} label="Premium" />
             </nav> */}
           </div>
-          <div className="app-sidebar__footer" ref={accountWrapRef}>
-            <button
-              type="button"
-              className="app-sidebar__account-btn"
-              aria-label="Open account page"
-              onClick={() => navigate('/accounts')}
-              onMouseEnter={() => prefetchRouteChunks('/accounts')}
-              onFocus={() => prefetchRouteChunks('/accounts')}
-            >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="" className="header-avatar-image" aria-hidden />
-              ) : (
-                <span className="header-avatar-placeholder">{initials}</span>
-              )}
-              <span className="app-sidebar__account-label">Account</span>
-              <span className="app-sidebar__account-chevron" aria-hidden>
-                <IconChevronRight />
-              </span>
-            </button>
+          <div className="app-sidebar__footer">
+            <div className="header-util-wrap" ref={accountWrapRef}>
+              <button
+                type="button"
+                className={'app-sidebar__account-btn' + (profileOpen ? ' app-sidebar__account-btn--active' : '')}
+                aria-label="Profile"
+                aria-expanded={profileOpen}
+                onClick={toggleProfileMenu}
+              >
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="" className="header-avatar-image" aria-hidden />
+                ) : (
+                  <span className="header-avatar-placeholder">{initials}</span>
+                )}
+                <span className="app-sidebar__account-label">{profileName}</span>
+                <span className="app-sidebar__account-chevron" aria-hidden>
+                  <IconChevronRight />
+                </span>
+              </button>
+              {profileMenuPop}
+            </div>
           </div>
         </>
       )}

@@ -391,8 +391,8 @@ export function NormalizedPerformanceCard({
         attributionLogo: false
       },
       grid: {
-        vertLines: { color: isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(148, 163, 184, 0.12)' },
-        horzLines: { color: isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(148, 163, 184, 0.12)' }
+        vertLines: { color: isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(148, 163, 184, 0.08)' },
+        horzLines: { color: isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(148, 163, 184, 0.08)' }
       },
       rightPriceScale: {
         borderColor: isLight ? 'rgba(15, 23, 42, 0.12)' : 'rgba(148, 163, 184, 0.25)',

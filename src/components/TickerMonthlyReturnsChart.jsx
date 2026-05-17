@@ -487,7 +487,7 @@ export function TickerMonthlyReturnsChart({
               </svg>
               </div>
               <ReturnsChartClickableTitle className="ticker-monthly__title uppercase" onClick={onViewMore}>
-                {periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Monthly returns'}
+                {periodMode === 'weekly' ? 'WEEKLY STATISTICS' : periodMode === 'daily' ? 'DAILY STATISTICS' : 'MONTHLY STATISTICS'}
               </ReturnsChartClickableTitle>
               <DataInfoTip align="end">
                 <p className="ticker-data-tip__p">
@@ -570,7 +570,7 @@ export function TickerMonthlyReturnsChart({
             </svg>
             </div>
             <ReturnsChartClickableTitle className="ticker-monthly__title uppercase" onClick={onViewMore}>
-              {periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Monthly returns'}
+              {periodMode === 'weekly' ? 'WEEKLY STATISTICS' : periodMode === 'daily' ? 'DAILY STATISTICS' : 'MONTHLY STATISTICS'}
             </ReturnsChartClickableTitle>
             <DataInfoTip align="end">
               <p className="ticker-data-tip__p">

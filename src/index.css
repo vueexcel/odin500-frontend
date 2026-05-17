@@ -3637,6 +3637,8 @@ backdrop-filter: blur(12px);
 }
 
 .app-sidebar__footer {
+  position: relative;
+  z-index: 2;
   flex-shrink: 0;
   padding: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -3693,6 +3695,50 @@ backdrop-filter: blur(12px);
   padding: 0;
   border-radius: 999px;
   justify-content: center;
+}
+
+.app-sidebar__footer .header-util-wrap,
+.app-sidebar__collapsed-only .header-util-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.app-sidebar__account-btn--active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-sidebar--expanded .app-sidebar__footer .header-pop.header-pop--profile.app-sidebar__profile-pop {
+  top: auto;
+  bottom: calc(100% + 10px);
+  left: 0;
+  right: 0;
+  width: auto;
+  max-width: 100%;
+}
+
+.app-sidebar--collapsed .app-sidebar__collapsed-only .header-pop.header-pop--profile.app-sidebar__profile-pop {
+  top: auto;
+  bottom: 0;
+  left: 100%;
+  right: auto;
+  margin-left: 10px;
+  width: 220px;
+  min-width: 220px;
+  max-width: min(220px, calc(100vw - 80px));
+}
+
+.app-sidebar--profile-open {
+  overflow: visible;
+}
+
+.app-sidebar--collapsed.app-sidebar--profile-open .app-sidebar__collapsed-only,
+.app-sidebar--collapsed.app-sidebar--profile-open .app-sidebar__collapsed-only .header-util-wrap {
+  overflow: visible;
+}
+
+.app-sidebar--profile-open .app-sidebar__scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Left navigation sidebar — light mode */
@@ -3811,6 +3857,10 @@ backdrop-filter: blur(12px);
 
 [data-theme="light"] .app-sidebar__account-btn:hover {
   background: rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="light"] .app-sidebar__account-btn--active {
+  background: rgba(148, 163, 184, 0.16);
 }
 
 .container {
@@ -8553,21 +8603,48 @@ a.ticker-page__metric-label--link:hover {
 .ticker-page__grid {
   display: grid;
   grid-template-columns: 269px minmax(0, 1fr);
-  grid-template-areas: "aside main";
   gap: 16px;
   align-items: start;
   transition: grid-template-columns 260ms ease;
 }
 
-.ticker-page__aside {
-  grid-area: aside;
-}
-
 .ticker-page__main {
-  grid-area: main;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+}
+
+@media (min-width: 1025px) {
+  .ticker-page__main {
+    display: contents;
+  }
+
+  .ticker-page__aside {
+    grid-column: 1;
+    grid-row: 1 / -1;
+  }
+
+  .ticker-page__main > :not(.ticker-page__aside) {
+    grid-column: 2;
+  }
+
+  .ticker-page__grid--watchlist-open .ticker-page__main {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    grid-area: main;
+  }
+
+  .ticker-page__grid--watchlist-open .ticker-page__aside {
+    grid-column: unset;
+    grid-row: unset;
+    width: 100%;
+  }
+
+  .ticker-page__grid--watchlist-open .ticker-page__main > :not(.ticker-page__aside) {
+    grid-column: unset;
+  }
 }
 
 .ticker-page__grid--watchlist-open {
@@ -8606,16 +8683,40 @@ a.ticker-page__metric-label--link:hover {
   }
 
   .ticker-page__grid {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "main"
-      "aside";
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    grid-template-columns: unset;
+  }
+
+  .ticker-page__main {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ticker-page__aside {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    align-self: stretch;
   }
 
   .ticker-page__grid--watchlist-open {
+    display: grid;
+    grid-template-columns: 1fr;
     grid-template-areas:
       "main"
       "watchlist";
+  }
+
+  .ticker-page__grid--watchlist-open .ticker-page__main {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    grid-area: main;
   }
 
   .ticker-page__main,
@@ -8852,6 +8953,18 @@ a.ticker-page__metric-label--link:hover {
   overscroll-behavior: auto;
   padding-bottom: 4px;
   scrollbar-width: none;
+}
+
+@media (max-width: 1024px) {
+  .ticker-page__aside.ticker-page__aside-stack,
+  .ticker-page__aside.index-page__aside-stack {
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+    overscroll-behavior: auto;
+    padding-bottom: 0;
+  }
 }
 
 .ticker-card {
@@ -10305,6 +10418,7 @@ button.returns-chart-title-btn {
   cursor: pointer;
   display: inline;
   vertical-align: baseline;
+  font-size: 13px;
 }
 
 h3.returns-chart-title-heading {
@@ -16233,11 +16347,28 @@ html[data-theme='light'] .about-legal-item {
     display: none;
   }
 
-  .header-pop--profile,
   .header-pop--news {
     right: 0;
     left: auto;
     width: min(92vw, 360px);
+  }
+
+  .header-pop--profile:not(.app-sidebar__profile-pop) {
+    right: 0;
+    left: auto;
+    width: min(92vw, 360px);
+  }
+
+  .app-sidebar.app-sidebar--mobile-open .header-pop.header-pop--profile.app-sidebar__profile-pop {
+    position: fixed;
+    top: auto;
+    right: auto;
+    left: 10px;
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    width: min(calc(82vw - 20px), 268px);
+    max-width: calc(100vw - 20px);
+    z-index: 1301;
+    transform: none;
   }
 
   .ticker-page {
@@ -18605,6 +18736,19 @@ svg.ticker-quarterly__svg,
 .relative-strength-page__chart-card--np .relative-strength-page__chart-host-inner.np-chart {
   height: 360px;
   min-height: 360px;
+}
+
+.relative-strength-page__main-rs-resize-scope.ticker-chart-resize-scope {
+  margin: 0;
+}
+
+.relative-strength-page__main-rs-resize-scope .relative-strength-page__chart-host-inner.np-chart {
+  height: var(--ticker-resize-plot-h, 360px);
+  min-height: var(--ticker-resize-plot-h, 360px);
+}
+
+.relative-strength-page__main-rs-resize-scope .relative-strength-page__chart-skel-fill {
+  min-height: var(--ticker-resize-plot-h, 360px);
 }
 
 .relative-strength-page__chart-card--np .np-chart-stack {

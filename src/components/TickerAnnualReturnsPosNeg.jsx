@@ -217,7 +217,7 @@ function PosNegToolbarBadgeWithIcon({ periodMode, pn, onClick }) {
         </defs>
       </svg>
       <ReturnsChartClickableTitle className="ticker-annual-figma__badge uppercase" onClick={onClick}>
-        {`${periodMode === 'quarterly' ? 'Quarterly returns' : periodMode === 'monthly' ? 'Monthly returns' : periodMode === 'weekly' ? 'Weekly returns' : periodMode === 'daily' ? 'Daily returns' : 'Annual returns'} — positive & negative ${pn.lower}`}
+        {`${periodMode === 'quarterly' ? 'Quarterly statistics' : periodMode === 'monthly' ? 'Monthly statistics' : periodMode === 'weekly' ? 'Weekly statistics' : periodMode === 'daily' ? 'Daily statistics' : 'Annual statistics'} — positive & negative ${pn.lower}`}
       </ReturnsChartClickableTitle>
     </div>
   );

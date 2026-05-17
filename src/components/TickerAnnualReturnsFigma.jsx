@@ -554,14 +554,14 @@ export function TickerAnnualReturnsFigma({
       <span className="ticker-annual-figma__badge uppercase">
         <ReturnsChartClickableTitle className="ticker-annual-figma__badge uppercase" onClick={onViewMore}>
           {periodMode === 'quarterly'
-            ? 'Quarterly returns'
+            ? 'Quarterly statistics'
             : periodMode === 'monthly'
-              ? 'Monthly returns'
+              ? 'Monthly statistics'
               : periodMode === 'weekly'
-                ? 'Weekly returns'
+                ? 'Weekly statistics'
                 : periodMode === 'daily'
-                  ? 'Daily returns'
-                  : 'Annual returns'}
+                  ? 'Daily statistics'
+                  : 'Annual statistics'}
         </ReturnsChartClickableTitle>{' '}
         <ChartInfoTip tip={CHART_INFO_TIPS.tickerAnnualReturns} align="end" />
       </span>

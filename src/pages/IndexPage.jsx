@@ -681,7 +681,7 @@ export default function IndexPage() {
   }, [isSectorDataRoute, activeSector, slug]);
 
   const topDropdownValue = isSectorDataRoute ? sectorSlugResolved || DEFAULT_SECTOR_ROUTE_SLUG : slug;
-  const topDropdownLabel = isSectorDataRoute ? 'Sector' : 'Index';
+  const topDropdownLabel = isSectorDataRoute ? 'S&P 500 Sectors' : 'Index';
 
   usePageSeo({
     title: isSectorDataRoute
@@ -1413,8 +1413,12 @@ export default function IndexPage() {
 
   const lastRow = sortedChart.length ? sortedChart[sortedChart.length - 1] : null;
   const prevRow = sortedChart.length > 1 ? sortedChart[sortedChart.length - 2] : null;
+  const firstRow = sortedChart.length ? sortedChart[0] : null;
   const lastClose = lastRow ? pickNum(lastRow, ['Close', 'close']) : null;
   const prevClose = prevRow ? pickNum(prevRow, ['Close', 'close']) : null;
+  const firstClose = firstRow ? pickNum(firstRow, ['Close', 'close']) : null;
+  const chartRangeChgPct = periodReturnFromRows(sortedChart, () => true);
+  const chartRangeChgAbs = lastClose != null && firstClose != null ? lastClose - firstClose : null;
   const dayChg =
     lastClose != null && prevClose != null && prevClose !== 0 ? ((lastClose - prevClose) / prevClose) * 100 : null;
   const dayAbs = lastClose != null && prevClose != null ? lastClose - prevClose : null;
@@ -1846,14 +1850,14 @@ export default function IndexPage() {
                   <div className="ticker-chart-legend__quote-pills">
                     <span className="ticker-chart-legend__sym">{displaySym}</span>
                     <span className="ticker-chart-legend__name">{activeMeta.label}</span>
-                    <span className="ticker-chart-legend__price">{formatPx(headerClose)} USD</span>
-                    {headerChgAbs != null && Number.isFinite(headerChgAbs) ? (
-                      <span className={'ticker-chart-legend__chg ' + pctClass(headerChgAbs)}>
-                        {(headerChgAbs >= 0 ? '+' : '') + formatPx(headerChgAbs)}
+                    <span className="ticker-chart-legend__price">{formatPx(lastClose)} USD</span>
+                    {chartRangeChgAbs != null && Number.isFinite(chartRangeChgAbs) ? (
+                      <span className={'ticker-chart-legend__chg ' + pctClass(chartRangeChgAbs)}>
+                        {(chartRangeChgAbs >= 0 ? '+' : '') + formatPx(chartRangeChgAbs)}
                       </span>
                     ) : null}
-                    {headerChgPct != null && Number.isFinite(headerChgPct) ? (
-                      <span className={'ticker-chart-legend__chg ' + pctClass(headerChgPct)}>{formatPct(headerChgPct)}</span>
+                    {chartRangeChgPct != null && Number.isFinite(chartRangeChgPct) ? (
+                      <span className={'ticker-chart-legend__chg ' + pctClass(chartRangeChgPct)}>{formatPct(chartRangeChgPct)}</span>
                     ) : null}
                   </div>
                 </div>
@@ -1935,200 +1939,7 @@ export default function IndexPage() {
             </div>
           </section>
 
-          <section className="ticker-card ticker-card--news" aria-labelledby="index-news-h">
-            <div className="ticker-subh-with-tip ticker-subh-with-tip--in-card ticker-rs-selector-head">
-              <div className="ticker-rs-selector-head__left">
-                <div className="flex shrink-0 align-centers">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden className="ticker-news-head__ico">
-                    <path d="M0 0h24v24H0z" fill="none" />
-                    <path
-                      fill="currentColor"
-                      d="M5.616 20q-.691 0-1.153-.462T4 18.384V5.616q0-.691.463-1.153T5.616 4h9.961L20 8.423v9.962q0 .69-.462 1.153T18.384 20zm0-1h12.769q.269 0 .442-.173t.173-.442V9h-4V5H5.616q-.27 0-.443.173T5 5.616v12.769q0 .269.173.442t.443.173M7.5 16h9v-1h-9zm0-7H12V8H7.5zm0 3.5h9v-1h-9zM5 5v4zv14z"
-                    />
-                  </svg>
-                </div>
-                <div className="ticker-subh-left">
-                  <ReturnsChartClickableHeading
-                    id="index-news-h"
-                    className="ticker-subh ticker-subh--flex"
-                    onClick={onOpenNewsPage}
-                  >
-                    News
-                  </ReturnsChartClickableHeading>
-                  <DataInfoTip align="start">
-                    <p className="ticker-data-tip__p">
-                      Headlines for <strong>{displaySym}</strong> from the live feed. Click <strong>News</strong> to open the full
-                      news page with this ticker pre-selected.
-                    </p>
-                  </DataInfoTip>
-                </div>
-              </div>
-            </div>
-            {newsBusy ? <p className="ticker-page__news-sample-note">Loading ticker news…</p> : null}
-            {!newsBusy && newsError ? <p className="ticker-page__news-sample-note">{newsError}</p> : null}
-            {!newsBusy && !newsError && !liveNews.length ? (
-              <p className="ticker-page__news-sample-note">No ticker headlines yet.</p>
-            ) : null}
-            <ul className="ticker-news-list">
-              {newsPageItems.map((n) => (
-                <li key={n.id} className="ticker-news-list__li">
-                  <a
-                    className="ticker-news-list__a"
-                    href={n.url || '#index-news-h'}
-                    onClick={(e) => {
-                      if (!n.url) e.preventDefault();
-                    }}
-                    target={n.url ? '_blank' : undefined}
-                    rel={n.url ? 'noopener noreferrer' : undefined}
-                  >
-                    {n.title}
-                  </a>
-                  <span className="ticker-news-list__meta">
-                    {n.source}
-                    <br />
-                    {n.time}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {liveNews.length > NEWS_PAGE_SIZE ? (
-              <NewsSectionPagination
-                page={newsPageSafe}
-                totalPages={newsTotalPages}
-                onPageChange={setNewsPage}
-                ariaLabel="News pagination"
-              />
-            ) : null}
-          </section>
-
-          <TickerAnnualReturnsFigma
-            symbol={displaySym}
-            annualReturns={annualReturnsForChart}
-            asOfDate={asOfDate}
-            resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
-            resizeDefaultHeight={260}
-            enableInlineYearDropdowns
-            defaultStartYear={2017}
-            defaultEndYear={2026}
-            loading={metaBusy}
-            hideStatsSection
-          />
-          <TickerAnnualReturnsFigma
-            symbol={displaySym}
-            annualReturns={quarterlyReturnsForChart}
-            asOfDate={asOfDate}
-            resizeStorageKey={RESIZE_KEY_QUARTERLY_FIGMA}
-            resizeDefaultHeight={260}
-            periodMode="quarterly"
-            enableInlineYearDropdowns
-            defaultStartYear={2023}
-            defaultEndYear={2026}
-            loading={metaBusy}
-            hideStatsSection
-          />
-          <TickerMonthlyReturnsChart
-            symbol={displaySym}
-            monthlyReturns={monthlyReturnsRaw}
-            asOfDate={asOfDate}
-            resizeStorageKey={RESIZE_KEY_MONTHLY_RETURNS}
-            resizeDefaultHeight={278}
-            suppressChartDateFilter
-            useThemedYearDropdown
-            defaultToLatestYear
-            loading={metaBusy}
-          />
-          <section className="ticker-card ticker-card--rs-benchmark" aria-labelledby="index-rs-selector-h">
-            <div className="ticker-subh-with-tip ticker-subh-with-tip--in-card ticker-rs-selector-head">
-              <div className="ticker-rs-selector-head__left">
-                <div className="flex shrink-0 align-centers">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                    <g clipPath="url(#clip0_index_rs_icon)">
-                      <path
-                        d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z"
-                        stroke="white"
-                        strokeWidth="0.875"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z"
-                        stroke="white"
-                        strokeWidth="0.875"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </g>
-                    <defs>
-                      <clipPath id="clip0_index_rs_icon">
-                        <rect width="14" height="14" fill="white" />
-                      </clipPath>
-                    </defs>
-                  </svg>
-                </div>
-                <div className="ticker-subh-left">
-                  <ReturnsChartClickableHeading
-                    id="index-rs-selector-h"
-                    className="ticker-subh ticker-subh--flex"
-                    onClick={onOpenRelativeStrengthPage}
-                  >
-                    Relative Strength selector
-                  </ReturnsChartClickableHeading>
-                  <DataInfoTip align="start">
-                    <p className="ticker-data-tip__p">
-                      Choose two indices; table and bars show return% difference (left minus right).
-                    </p>
-                  </DataInfoTip>
-                </div>
-              </div>
-              <div className="ticker-rs-selector-head__right">
-                <ReturnsChartToolbar
-                  className="ticker-rs-selector-head__toolbar"
-                  rangeControls={
-                    <div className="ticker-rs-controls ticker-rs-controls--inline">
-                      <ThemedDropdown
-                        wideLabel
-                        style={{ minWidth: 0, maxWidth: '100%' }}
-                        value={relativeLeftKey}
-                        options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
-                        onChange={setRelativeLeftKey}
-                        title="Relative strength left"
-                        ariaLabelPrefix="Left index"
-                        labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeLeftKey)?.label ?? ''}
-                      />
-                      <ThemedDropdown
-                        wideLabel
-                        style={{ minWidth: 0, maxWidth: '100%' }}
-                        value={relativeRightKey}
-                        options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
-                        onChange={setRelativeRightKey}
-                        title="Relative strength right"
-                        ariaLabelPrefix="Right index"
-                        labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeRightKey)?.label ?? 'S&P 500'}
-                      />
-                    </div>
-                  }
-                  onViewMore={onOpenRelativeStrengthPage}
-                  showViewMore={false}
-                  showTableToggle={false}
-                  showDownload={false}
-                  extraActions={
-                    relativeBusy ? (
-                      <span className="ticker-page__loading-pill">Loading relative strength…</span>
-                    ) : null
-                  }
-                />
-              </div>
-            </div>
-            <TickerSection16Section17
-              rows={section16Rows}
-              compareRows={section17CompareRows}
-              relativeStrengthTitle={`Relative Strength vs ${relativeRightLabel}`}
-              relativeStrengthHeader={`Relative Strength (${relativeLeftLabel} - ${relativeRightLabel})`}
-            />
-          </section>
-        </div>
-
-        <aside className="ticker-page__aside index-page__aside-stack">
+          <aside className="ticker-page__aside index-page__aside-stack">
           {/* <section className="ticker-card ticker-card--signal" aria-labelledby="index-odin-signal-h">
             <div className="ticker-signal-head">
               <span className="ticker-signal-logo" aria-hidden />
@@ -2361,7 +2172,202 @@ export default function IndexPage() {
               </div>
             </div>
           </section>
-        </aside>
+          </aside>
+
+          <section className="ticker-card ticker-card--news" aria-labelledby="index-news-h">
+            <div className="ticker-subh-with-tip ticker-subh-with-tip--in-card ticker-rs-selector-head">
+              <div className="ticker-rs-selector-head__left">
+                <div className="flex shrink-0 align-centers">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden className="ticker-news-head__ico">
+                    <path d="M0 0h24v24H0z" fill="none" />
+                    <path
+                      fill="currentColor"
+                      d="M5.616 20q-.691 0-1.153-.462T4 18.384V5.616q0-.691.463-1.153T5.616 4h9.961L20 8.423v9.962q0 .69-.462 1.153T18.384 20zm0-1h12.769q.269 0 .442-.173t.173-.442V9h-4V5H5.616q-.27 0-.443.173T5 5.616v12.769q0 .269.173.442t.443.173M7.5 16h9v-1h-9zm0-7H12V8H7.5zm0 3.5h9v-1h-9zM5 5v4zv14z"
+                    />
+                  </svg>
+                </div>
+                <div className="ticker-subh-left">
+                  <ReturnsChartClickableHeading
+                    id="index-news-h"
+                    className="ticker-subh ticker-subh--flex"
+                    onClick={onOpenNewsPage}
+                  >
+                    News
+                  </ReturnsChartClickableHeading>
+                  <DataInfoTip align="start">
+                    <p className="ticker-data-tip__p">
+                      Headlines for <strong>{displaySym}</strong> from the live feed. Click <strong>News</strong> to open the full
+                      news page with this ticker pre-selected.
+                    </p>
+                  </DataInfoTip>
+                </div>
+              </div>
+            </div>
+            {newsBusy ? <p className="ticker-page__news-sample-note">Loading ticker news…</p> : null}
+            {!newsBusy && newsError ? <p className="ticker-page__news-sample-note">{newsError}</p> : null}
+            {!newsBusy && !newsError && !liveNews.length ? (
+              <p className="ticker-page__news-sample-note">No ticker headlines yet.</p>
+            ) : null}
+            <ul className="ticker-news-list">
+              {newsPageItems.map((n) => (
+                <li key={n.id} className="ticker-news-list__li">
+                  <a
+                    className="ticker-news-list__a"
+                    href={n.url || '#index-news-h'}
+                    onClick={(e) => {
+                      if (!n.url) e.preventDefault();
+                    }}
+                    target={n.url ? '_blank' : undefined}
+                    rel={n.url ? 'noopener noreferrer' : undefined}
+                  >
+                    {n.title}
+                  </a>
+                  <span className="ticker-news-list__meta">
+                    {n.source}
+                    <br />
+                    {n.time}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {liveNews.length > NEWS_PAGE_SIZE ? (
+              <NewsSectionPagination
+                page={newsPageSafe}
+                totalPages={newsTotalPages}
+                onPageChange={setNewsPage}
+                ariaLabel="News pagination"
+              />
+            ) : null}
+          </section>
+
+          <TickerAnnualReturnsFigma
+            symbol={displaySym}
+            annualReturns={annualReturnsForChart}
+            asOfDate={asOfDate}
+            resizeStorageKey={RESIZE_KEY_ANNUAL_FIGMA}
+            resizeDefaultHeight={260}
+            enableInlineYearDropdowns
+            defaultStartYear={2017}
+            defaultEndYear={2026}
+            loading={metaBusy}
+            hideStatsSection
+          />
+          <TickerAnnualReturnsFigma
+            symbol={displaySym}
+            annualReturns={quarterlyReturnsForChart}
+            asOfDate={asOfDate}
+            resizeStorageKey={RESIZE_KEY_QUARTERLY_FIGMA}
+            resizeDefaultHeight={260}
+            periodMode="quarterly"
+            enableInlineYearDropdowns
+            defaultStartYear={2023}
+            defaultEndYear={2026}
+            loading={metaBusy}
+            hideStatsSection
+          />
+          <TickerMonthlyReturnsChart
+            symbol={displaySym}
+            monthlyReturns={monthlyReturnsRaw}
+            asOfDate={asOfDate}
+            resizeStorageKey={RESIZE_KEY_MONTHLY_RETURNS}
+            resizeDefaultHeight={278}
+            suppressChartDateFilter
+            useThemedYearDropdown
+            defaultToLatestYear
+            loading={metaBusy}
+          />
+          <section className="ticker-card ticker-card--rs-benchmark" aria-labelledby="index-rs-selector-h">
+            <div className="ticker-subh-with-tip ticker-subh-with-tip--in-card ticker-rs-selector-head">
+              <div className="ticker-rs-selector-head__left">
+                <div className="flex shrink-0 align-centers">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <g clipPath="url(#clip0_index_rs_icon)">
+                      <path
+                        d="M7.82031 1.25781V6.17969H12.7422C12.7422 4.87433 12.2236 3.62243 11.3006 2.6994C10.3776 1.77637 9.12567 1.25781 7.82031 1.25781Z"
+                        stroke="white"
+                        strokeWidth="0.875"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M6.17969 2.89844C5.20623 2.89844 4.25464 3.1871 3.44524 3.72792C2.63584 4.26875 2.005 5.03744 1.63247 5.93679C1.25995 6.83615 1.16248 7.82577 1.35239 8.78052C1.5423 9.73527 2.01106 10.6123 2.6994 11.3006C3.38774 11.9889 4.26473 12.4577 5.21948 12.6476C6.17423 12.8375 7.16386 12.7401 8.06321 12.3675C8.96257 11.995 9.73126 11.3642 10.2721 10.5548C10.8129 9.74536 11.1016 8.79377 11.1016 7.82031H6.17969V2.89844Z"
+                        stroke="white"
+                        strokeWidth="0.875"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </g>
+                    <defs>
+                      <clipPath id="clip0_index_rs_icon">
+                        <rect width="14" height="14" fill="white" />
+                      </clipPath>
+                    </defs>
+                  </svg>
+                </div>
+                <div className="ticker-subh-left">
+                  <ReturnsChartClickableHeading
+                    id="index-rs-selector-h"
+                    className="ticker-subh ticker-subh--flex"
+                    onClick={onOpenRelativeStrengthPage}
+                  >
+                    Relative Strength selector
+                  </ReturnsChartClickableHeading>
+                  <DataInfoTip align="start">
+                    <p className="ticker-data-tip__p">
+                      Choose two indices; table and bars show return% difference (left minus right).
+                    </p>
+                  </DataInfoTip>
+                </div>
+              </div>
+              <div className="ticker-rs-selector-head__right">
+                <ReturnsChartToolbar
+                  className="ticker-rs-selector-head__toolbar"
+                  rangeControls={
+                    <div className="ticker-rs-controls ticker-rs-controls--inline">
+                      <ThemedDropdown
+                        wideLabel
+                        style={{ minWidth: 0, maxWidth: '100%' }}
+                        value={relativeLeftKey}
+                        options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
+                        onChange={setRelativeLeftKey}
+                        title="Relative strength left"
+                        ariaLabelPrefix="Left index"
+                        labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeLeftKey)?.label ?? ''}
+                      />
+                      <ThemedDropdown
+                        wideLabel
+                        style={{ minWidth: 0, maxWidth: '100%' }}
+                        value={relativeRightKey}
+                        options={RELATIVE_STRENGTH_DROPDOWN_OPTIONS}
+                        onChange={setRelativeRightKey}
+                        title="Relative strength right"
+                        ariaLabelPrefix="Right index"
+                        labelFallback={RELATIVE_STRENGTH_OPTIONS.find((o) => o.key === relativeRightKey)?.label ?? 'S&P 500'}
+                      />
+                    </div>
+                  }
+                  onViewMore={onOpenRelativeStrengthPage}
+                  showViewMore={false}
+                  showTableToggle={false}
+                  showDownload={false}
+                  extraActions={
+                    relativeBusy ? (
+                      <span className="ticker-page__loading-pill">Loading relative strength…</span>
+                    ) : null
+                  }
+                />
+              </div>
+            </div>
+            <TickerSection16Section17
+              rows={section16Rows}
+              compareRows={section17CompareRows}
+              relativeStrengthTitle={`Relative Strength vs ${relativeRightLabel}`}
+              relativeStrengthHeader={`Relative Strength (${relativeLeftLabel} - ${relativeRightLabel})`}
+            />
+          </section>
+        </div>
+
+        
       </div>
       <ChartSnapshotExportModal
         open={chartExportModalOpen}
